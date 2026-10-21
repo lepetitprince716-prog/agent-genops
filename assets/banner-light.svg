@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Agent GenOps</title>
+  <desc id="desc">Agent-first methods for running, debugging and deploying local generative models. The agent platform is the control plane; render boxes and cloud services are execution backends.</desc>
+  <style>
+    .bg{fill:#FAFAF7}
+    .ink{fill:#1F2328}
+    .mut{fill:#57606A}
+    .acc{fill:#E8590C}
+    .teal{fill:#0F766E}
+    .tacc{fill:#FFF1E6}
+    .tteal{fill:#E7F5F2}
+    .ln{stroke:#D0D7DE}
+    .sacc{stroke:#E8590C}
+    .steal{stroke:#0F766E}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  </style>
+  <defs>
+    <marker id="ha" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+    <marker id="ht" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="320"/>
+
+  <!-- left: title block -->
+  <rect class="acc" x="64" y="48" width="32" height="4" rx="2"/>
+  <text class="sans ink" x="64" y="112" font-size="56" font-weight="700" letter-spacing="-1">Agent GenOps</text>
+  <text class="sans mut" x="64" y="152" font-size="20">Agent-first methods for running, debugging</text>
+  <text class="sans mut" x="64" y="180" font-size="20">and deploying local generative models</text>
+
+  <!-- right: two-plane schematic -->
+  <rect class="tacc sacc" x="848" y="32" width="368" height="72" rx="10" stroke-width="1"/>
+  <text class="mono acc" x="864" y="50" font-size="11">control plane</text>
+  <g fill="none" stroke-width="1">
+    <line class="sacc" x1="936" y1="74" x2="952" y2="74"/>
+    <line class="sacc" x1="1024" y1="74" x2="1040" y2="74"/>
+    <line class="sacc" x1="1112" y1="74" x2="1128" y2="74"/>
+  </g>
+  <g stroke-width="1">
+    <rect class="bg sacc" x="864" y="60" width="72" height="28" rx="8"/>
+    <rect class="bg sacc" x="952" y="60" width="72" height="28" rx="8"/>
+    <rect class="bg sacc" x="1040" y="60" width="72" height="28" rx="8"/>
+    <rect class="bg sacc" x="1128" y="60" width="72" height="28" rx="8"/>
+  </g>
+  <g class="sans ink" font-size="11" text-anchor="middle">
+    <text x="900" y="78">root</text>
+    <text x="988" y="78">subagents</text>
+    <text x="1076" y="78">workers</text>
+    <text x="1164" y="78">tracker</text>
+  </g>
+
+  <g fill="none" stroke-width="1">
+    <line class="sacc" x1="906" y1="106" x2="906" y2="134" marker-end="url(#ha)"/>
+    <line class="steal" x1="918" y1="134" x2="918" y2="106" marker-end="url(#ht)"/>
+    <line class="sacc" x1="1026" y1="106" x2="1026" y2="134" marker-end="url(#ha)"/>
+    <line class="steal" x1="1038" y1="134" x2="1038" y2="106" marker-end="url(#ht)"/>
+    <line class="sacc" x1="1146" y1="106" x2="1146" y2="134" marker-end="url(#ha)"/>
+    <line class="steal" x1="1158" y1="134" x2="1158" y2="106" marker-end="url(#ht)"/>
+  </g>
+
+  <rect class="tteal steal" x="848" y="136" width="368" height="72" rx="10" stroke-width="1"/>
+  <text class="mono teal" x="864" y="154" font-size="11">execution plane</text>
+  <g stroke-width="1">
+    <rect class="bg steal" x="864" y="164" width="96" height="28" rx="8"/>
+    <rect class="bg steal" x="984" y="164" width="96" height="28" rx="8"/>
+    <rect class="bg steal" x="1104" y="164" width="96" height="28" rx="8"/>
+  </g>
+  <g class="sans ink" font-size="11" text-anchor="middle">
+    <text x="912" y="182">Box A</text>
+    <text x="1032" y="182">Box B</text>
+    <text x="1152" y="182">cloud</text>
+  </g>
+
+  <!-- footer: one monospace line -->
+  <line class="ln" x1="64" y1="240" x2="1216" y2="240" stroke-width="1"/>
+  <text class="mono" x="64" y="276" font-size="13" xml:space="preserve"><tspan class="acc">control plane:</tspan><tspan class="ink"> agents · skills · MCP · tracker</tspan><tspan class="mut">   →   </tspan><tspan class="teal">backends:</tspan><tspan class="ink"> ComfyUI · NovelAI · Midjourney · Civitai · GPT Image</tspan></text>
+</svg>

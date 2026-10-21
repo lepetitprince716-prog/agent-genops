@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">The operating loop</title>
+  <desc id="desc">Nine steps: Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean. A return arrow from Clean back to Intake is labelled next order.</desc>
+  <style>
+    .bg{fill:#0D1117}
+    .ink{fill:#E6EDF3}
+    .mut{fill:#8B949E}
+    .acc{fill:#FF8A3D}
+    .teal{fill:#2DD4BF}
+    .tacc{fill:#2A1B10}
+    .tteal{fill:#0E2724}
+    .ln{stroke:#30363D}
+    .sacc{stroke:#FF8A3D}
+    .steal{stroke:#2DD4BF}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  </style>
+  <defs>
+    <marker id="ha" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+    <marker id="ht" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="340"/>
+
+  <!-- connectors -->
+  <g fill="none" stroke-width="1.5">
+    <line class="sacc" x1="244" y1="112" x2="260" y2="112" marker-end="url(#ha)"/>
+    <line class="sacc" x1="476" y1="112" x2="492" y2="112" marker-end="url(#ha)"/>
+    <line class="sacc" x1="708" y1="112" x2="724" y2="112" marker-end="url(#ha)"/>
+    <path class="sacc" d="M832,162 V184 H136 V206" stroke-linejoin="round" marker-end="url(#ha)"/>
+    <line class="sacc" x1="244" y1="256" x2="260" y2="256" marker-end="url(#ha)"/>
+    <line class="sacc" x1="476" y1="256" x2="492" y2="256" marker-end="url(#ha)"/>
+    <line class="sacc" x1="708" y1="256" x2="724" y2="256" marker-end="url(#ha)"/>
+    <line class="sacc" x1="940" y1="256" x2="956" y2="256" marker-end="url(#ha)"/>
+    <path class="steal" d="M1064,206 V32 H136 V62" stroke-linejoin="round" marker-end="url(#ht)"/>
+  </g>
+  <text class="mono teal" x="1080" y="116" font-size="13">next order</text>
+
+  <!-- row 1 -->
+  <g stroke-width="1">
+    <rect class="bg ln" x="32" y="64" width="208" height="96" rx="10"/>
+    <rect class="bg ln" x="264" y="64" width="208" height="96" rx="10"/>
+    <rect class="bg ln" x="496" y="64" width="208" height="96" rx="10"/>
+    <rect class="tacc sacc" x="728" y="64" width="208" height="96" rx="10"/>
+  </g>
+  <!-- row 2 -->
+  <g stroke-width="1">
+    <rect class="tacc sacc" x="32" y="208" width="208" height="96" rx="10"/>
+    <rect class="tacc sacc" x="264" y="208" width="208" height="96" rx="10"/>
+    <rect class="tteal steal" x="496" y="208" width="208" height="96" rx="10"/>
+    <rect class="tteal steal" x="728" y="208" width="208" height="96" rx="10"/>
+    <rect class="tteal steal" x="960" y="208" width="208" height="96" rx="10"/>
+  </g>
+
+  <g class="mono acc" font-size="12">
+    <text x="52" y="94">01</text>
+    <text x="284" y="94">02</text>
+    <text x="516" y="94">03</text>
+    <text x="748" y="94">04</text>
+    <text x="52" y="238">05</text>
+    <text x="284" y="238">06</text>
+    <text x="516" y="238">07</text>
+    <text x="748" y="238">08</text>
+    <text x="980" y="238">09</text>
+  </g>
+  <g class="sans ink" font-size="16" font-weight="700">
+    <text x="80" y="94">Intake</text>
+    <text x="312" y="94">Inventory</text>
+    <text x="544" y="94">Plan</text>
+    <text x="776" y="94">Probe</text>
+    <text x="80" y="238">Smoke</text>
+    <text x="312" y="238">Run</text>
+    <text x="544" y="238">Verify</text>
+    <text x="776" y="238">Record</text>
+    <text x="1008" y="238">Clean</text>
+  </g>
+  <g class="sans mut" font-size="14">
+    <text x="52" y="122">what must this step</text>
+    <text x="52" y="142">prove?</text>
+    <text x="284" y="122">what already exists?</text>
+    <text x="516" y="122">print, don't run</text>
+    <text x="748" y="122">box idle? else HOLD</text>
+    <text x="52" y="266">1 image: time,</text>
+    <text x="52" y="286">path, names</text>
+    <text x="284" y="266">isolated outputs</text>
+    <text x="516" y="266">artifacts, not</text>
+    <text x="516" y="286">exit codes</text>
+    <text x="748" y="266">ledger · memory ·</text>
+    <text x="748" y="286">model card</text>
+    <text x="980" y="266">delete tests,</text>
+    <text x="980" y="286">trash on box</text>
+  </g>
+</svg>

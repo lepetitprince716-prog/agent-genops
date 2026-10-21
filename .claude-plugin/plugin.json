@@ -1,0 +1,12 @@
+{
+  "name": "agent-genops",
+  "version": "0.1.0",
+  "description": "Agent-first methods for running, debugging and deploying local generative models: one skill with references for model bring-up, debugging, render discipline, A/B testing, inventory, providers and dispatch.",
+  "author": {
+    "name": "lepetitprince716-prog"
+  },
+  "homepage": "https://github.com/lepetitprince716-prog/agent-genops",
+  "repository": "https://github.com/lepetitprince716-prog/agent-genops",
+  "license": "MIT",
+  "keywords": ["comfyui", "image-generation", "agents", "skills", "novelai", "midjourney", "civitai"]
+}

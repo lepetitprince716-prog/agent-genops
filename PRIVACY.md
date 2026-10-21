@@ -1,0 +1,87 @@
+# Privacy
+
+English | [中文](#中文)
+
+This repository is public, and so is every commit in its history. It holds methods, templates
+and generic tools. It never holds anything that identifies a person, a machine or a network.
+
+## What never goes in
+
+- IP and MAC addresses, hostnames, tunnel names, domains of private services, private ports.
+- Emails, usernames, account handles other than the repo's own, home-directory paths.
+- API keys, tokens, cookies, passwords, credential file locations, anything token-shaped.
+- Names of private repositories, private tools that reveal infrastructure, personal characters.
+- Generated images and videos. They carry the full workflow in their metadata (prompts, paths,
+  model files), and they may show things that should stay private.
+- Model weights, datasets, ledgers, logs and screenshots of private systems.
+- Health or personal details about anyone.
+
+Content that must stay private lives in separate private repositories with their own gates.
+Code that is generic by nature (a scanner, a template, an A/B harness with no hostnames) may
+move here, after the scan below passes.
+
+## How the guard works
+
+[`tools/privacy_scan.py`](tools/privacy_scan.py) is a standard-library Python scanner. It never
+prints a matched value; it prints the rule that fired and where.
+
+- Built-in rules in [`tools/privacy_rules.json`](tools/privacy_rules.json) cover LAN and other
+  IP addresses, home paths, Windows user paths, emails, token shapes, MAC addresses, tunnel and
+  LAN hostnames, embedded generation metadata in images, and undecodable binaries.
+- Your own patterns go in `~/.config/agent-genops/private_rules.json` (same format). That file
+  stays on your machine. Set `AGENT_GENOPS_REQUIRE_PRIVATE=1` if your hooks should refuse to run
+  without it.
+- Git hooks: `pre-commit` checks your commit identity and the staged files, `commit-msg` checks
+  the message, `pre-push` checks every blob and commit in history. Turn them on once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- CI runs the same scanner with the built-in rules on every push and pull request.
+- Commit with a GitHub noreply address; the identity check rejects anything else.
+
+Run it by hand at any time:
+
+```bash
+python3 tools/privacy_scan.py --tracked --history
+```
+
+## If something leaks
+
+Assume a pushed secret is already copied. Revoke or rotate it first, then remove it from the
+tree, then decide with the owner whether history needs rewriting. Record the incident with
+[`templates/incident-rule.md`](templates/incident-rule.md) and add a rule so the scanner catches
+the same shape next time.
+
+---
+
+## 中文
+
+这个仓库是公开的，提交历史也一样公开。这里只放方法、模板和通用工具，不放任何能认出一个人、一台机器或一个网络的东西。
+
+### 绝不放进来的内容
+
+- IP 和 MAC 地址、主机名、隧道名、私有服务的域名、私有端口。
+- 邮箱、用户名、除本仓库账号以外的账号名、用户目录路径。
+- API key、token、cookie、密码、凭据文件位置，以及一切长得像密钥的字符串。
+- 私有仓库的名字、会暴露基础设施的私有工具名、私人角色。
+- 生成的图片和视频。它们的元数据里带着完整的工作流（提示词、路径、模型文件名），画面本身也可能有不该公开的东西。
+- 模型权重、数据集、账本、日志，以及私有系统的截图。
+- 任何人的健康或个人细节。
+
+必须保密的内容放在单独的私有仓库里，由那边自己的闸门把关。天生通用的代码（扫描器、模板、不含主机名的 A/B 测试工具）可以搬过来，前提是先通过下面的扫描。
+
+### 防护怎么工作
+
+[`tools/privacy_scan.py`](tools/privacy_scan.py) 是一个只用标准库的 Python 扫描器。它从不打印命中的内容，只报告是哪条规则、在哪个位置。
+
+- 内置规则在 [`tools/privacy_rules.json`](tools/privacy_rules.json)，覆盖局域网和其他 IP 地址、用户目录路径、Windows 用户路径、邮箱、密钥形态、MAC 地址、隧道和局域网主机名、图片里嵌的生成参数，以及无法解码的二进制文件。
+- 你自己的规则写在 `~/.config/agent-genops/private_rules.json`（格式相同），只留在你的机器上。如果希望没有这个文件时 hook 直接拒绝运行，设置 `AGENT_GENOPS_REQUIRE_PRIVATE=1`。
+- git hook：`pre-commit` 检查提交身份和暂存文件，`commit-msg` 检查提交信息，`pre-push` 检查历史里的每个文件和每次提交。每个克隆打开一次即可（命令见上文英文部分）。
+- CI 在每次 push 和 pull request 时用内置规则跑同一个扫描器。
+- 提交时请用 GitHub 的 noreply 邮箱，身份检查会拒绝其他地址。
+
+### 万一泄露了
+
+推送出去的密钥，默认已经被人拷走了。先吊销或更换，再从文件里删掉，然后和仓库主人商量要不要改写历史。用 [`templates/incident-rule.md`](templates/incident-rule.md) 记下这次事故，并补一条规则，让扫描器下次能抓住同样的形态。

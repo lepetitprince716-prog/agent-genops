@@ -1,0 +1,82 @@
+{
+  "schema": "agent-genops.run-order/v1",
+  "order_id": "YYYY-MM-DD-short-topic",
+  "created": "YYYY-MM-DDTHH:MM:SSZ",
+  "driver": "root session or worker name",
+  "intent": {
+    "name": "probe | variants | draft | final",
+    "verifies": "one sentence: what this batch has to decide",
+    "engine_tier": "base-pass | quality-stack"
+  },
+  "box": {
+    "target": "auto | box-a | box-b",
+    "probe_before_dispatch": true,
+    "hold_exit_code": 3,
+    "owner_approval_needed": false
+  },
+  "count": 8,
+  "seeds": {
+    "mode": "list | start-increment",
+    "values": [1001, 1002, 1003, 1004],
+    "start": 1001,
+    "increment": 1
+  },
+  "model": {
+    "family": "anima | illustrious | noobai | qwen-image | other",
+    "canonical_name": "exact string from the box index",
+    "blocks": 28,
+    "index_status_checked": "YYYY-MM-DDTHH:MM:SSZ"
+  },
+  "loras": [
+    {
+      "canonical_name": "exact string from the box index",
+      "strength": 0.8,
+      "blocks": 28,
+      "remapped": false
+    }
+  ],
+  "prompt": {
+    "positive": "placeholder",
+    "negative_add": "placeholder, appended to the recipe negative",
+    "width": 896,
+    "height": 1152,
+    "steps": 30,
+    "cfg": 4.5,
+    "sampler": "placeholder",
+    "scheduler": "placeholder"
+  },
+  "output": {
+    "dir": "outputs/<driving-model>/<line>/<order_id>/",
+    "must_be_empty": true,
+    "isolation": "render && keep, one destination per image",
+    "filename_collision_checked": false,
+    "sidecar": true
+  },
+  "smoke": {
+    "required": true,
+    "seconds_per_image": null,
+    "projected_total_minutes": null,
+    "report_if_over_minutes": 30,
+    "check_file": "smoke-check.md"
+  },
+  "acceptance": [
+    "delivered count equals requested count, or the shortfall is reported",
+    "every reported path was opened before reporting",
+    "one gallery batch registered and its link handed over",
+    "verdicts read back: love, yes, no, comments, pending"
+  ],
+  "cleanup": {
+    "default": "delete test renders on both sides after the verdict",
+    "keep": [],
+    "controller": "system trash",
+    "remote": "same-disk <drive>:\\_trash_YYYYMMDD\\<relative path> plus restore map",
+    "remote_locations": ["ComfyUI output", "ComfyUI input", "ComfyUI temp"],
+    "never_touch": ["datasets", "training checkpoints", "converted LoRAs", "model files"],
+    "leftovers_file": "CLEANUP.txt in this order directory"
+  },
+  "vram": {
+    "release": "lease | free-now",
+    "full_unload_after": false
+  },
+  "notes": ""
+}

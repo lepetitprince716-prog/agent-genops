@@ -1,0 +1,173 @@
+# Fleet registry template (Agent GenOps)
+#
+# One entry per machine and one per ComfyUI instance. Agents read this before routing work.
+# Placeholder values only. Keep real hostnames, addresses, ports other than ComfyUI's
+# default, usernames and credential locations in private config, never in this file.
+#
+# Every fact carries the date it was checked. A fact older than your own review window
+# is "stale": re-probe before relying on it.
+
+schema: agent-genops/fleet/v1
+updated: YYYY-MM-DD
+
+machines:
+  - name: controller            # public role name, not a hostname
+    role: controller            # controller | render | worker | batch
+    renders: false              # the controller runs agents and renders nothing
+    os: macos                   # macos | windows | linux
+    cpu: "<cpu model>"
+    ram_gb: 0
+    gpu: null
+    runs:
+      - root-session
+      - subagents
+      - external-workers
+      - web-app
+      - review-pages
+    checked: YYYY-MM-DD
+
+  - name: box-a
+    role: render
+    renders: true
+    os: windows
+    cpu: "<cpu model>"
+    ram_gb: 0
+    gpu:
+      model: "<gpu model>"
+      vram_gb: 0
+      driver_branch: "<driver branch>"
+    shared_with_human: true     # a person also uses this GPU (gaming, desktop work)
+    human_reserved_vram_mib: 0  # what their foreground apps hold permanently
+    lines:                      # lines this box may run
+      - quality
+      - training
+      - sidecar-lines
+    pinned_lines: []            # lines that can only run here (model or detector exists only here)
+    preauthorised_changes: []   # e.g. [] means every config change needs a human yes
+    needs_human_yes:
+      - launch-flags
+      - runtime-upgrade
+      - delete-non-test-data
+    sleeps_when_idle: false
+    outbound_blocks:            # hosts this box cannot reach, with the date checked
+      - host: "<model host or package index>"
+        checked: YYYY-MM-DD
+    reach:
+      order: [lan, tunnel, vpn] # words only; addresses live in private config
+      via: managed-wrapper      # managed-wrapper | direct (direct is not recommended)
+    health_probe: comfyui-queue # comfyui-queue | system-stats | ssh ; never icmp
+    checked: YYYY-MM-DD
+
+  - name: box-b
+    role: worker
+    renders: true
+    os: windows
+    cpu: "<cpu model>"
+    ram_gb: 0
+    pagefile_gb: 0
+    gpu:
+      model: "<gpu model>"
+      vram_gb: 0
+      driver_branch: "<driver branch>"
+    shared_with_human: false
+    human_reserved_vram_mib: 0
+    lines:
+      - drafts
+      - tests
+      - ab-arms
+      - datasets
+      - training
+    pinned_lines: []
+    preauthorised_changes:      # tuning agents may do without asking
+      - vram-mode
+      - precision
+      - attention-backend
+      - resident-models
+      - launch-flags
+    needs_human_yes:
+      - delete-non-test-data
+    sleeps_when_idle: true
+    outbound_blocks: []
+    reach:
+      order: [lan, tunnel, vpn]
+      via: managed-wrapper
+    health_probe: comfyui-queue
+    checked: YYYY-MM-DD
+
+  - name: linux-node
+    role: batch
+    renders: false              # not part of the image lines
+    os: linux
+    cpu: "<cpu model>"
+    ram_gb: 0
+    gpu:
+      model: "<gpu model>"
+      vram_gb: 0
+    lines:
+      - batch-jobs
+      - model-services
+    admission: "<rule, e.g. small CPU jobs only while a model service runs>"
+    reach:
+      order: [lan, vpn]
+      via: managed-wrapper
+    checked: YYYY-MM-DD
+
+comfyui_instances:
+  - machine: box-a
+    name: main
+    version: "0.0.0"
+    since: YYYY-MM-DD
+    port: 8188                  # ComfyUI default; keep any other port in private config
+    listen: lan                 # lan | loopback
+    started_by: service         # service | scheduled-task | manual
+    autostart_verified: false   # true only after a real reboot
+    launch_flags: []            # e.g. attention backend, fp16 accumulation, reserved VRAM
+    torch: "<torch build>"
+    rollback:
+      previous_version: "0.0.0"
+      db_migrated: false        # if true, restore the database backup before rolling back
+      backup_taken: YYYY-MM-DD
+    busy_threshold_free_vram_pct: 0  # measured with models resident, not on an empty GPU
+    checked: YYYY-MM-DD
+
+  - machine: box-a
+    name: sidecar-example
+    version: "0.0.0"
+    since: YYYY-MM-DD
+    listen: loopback            # reach it by running a script on the host itself
+    normally: stopped           # stopped | running
+    serves_line: "<model line>"
+    vram_gb: 0
+    venv_layered_on_production: false  # if true, upgrading production changes this instance
+    free_main_instance_first: true     # shares the GPU with the main instance
+    checked: YYYY-MM-DD
+
+  - machine: box-b
+    name: main
+    version: "0.0.0"
+    since: YYYY-MM-DD
+    port: 8188
+    listen: lan
+    started_by: scheduled-task
+    autostart_verified: false
+    launch_flags: []
+    torch: "<torch build>"
+    rollback:
+      previous_version: "0.0.0"
+      db_migrated: false
+      backup_taken: YYYY-MM-DD
+    busy_threshold_free_vram_pct: 0
+    checked: YYYY-MM-DD
+
+routing:
+  auto:
+    prefer: box-a               # probe this box first
+    fallback: box-b             # use when the preferred box is busy, unreachable, or the human is using it
+    busy_when:
+      - queue_not_empty
+      - free_vram_below_threshold
+      - unreachable
+  never_while_human_active:
+    - model-upscale-4x          # large intermediates run a shared GPU out of memory
+  vram_release: lease           # lease (idle reaper frees after an idle period) | per-render
+  lease_idle_seconds: 300

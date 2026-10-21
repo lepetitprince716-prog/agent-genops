@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="684" viewBox="0 0 1200 684" role="img" aria-labelledby="title desc">
+  <title id="title">Agent GenOps architecture</title>
+  <desc id="desc">Three bands. Control plane: the agent platform on the Controller, with a root session, tiered subagents, external workers, skills, an MCP server, a task tracker, memory and gates. Thin entry points: intent router, JSON job briefs, MCP groups, browser-pane operator. Execution plane: two ComfyUI boxes, loopback sidecars and cloud services. Commands flow down; outputs, logs and receipts flow up and are verified by the root.</desc>
+  <style>
+    .bg{fill:#0D1117}
+    .ink{fill:#E6EDF3}
+    .mut{fill:#8B949E}
+    .acc{fill:#FF8A3D}
+    .teal{fill:#2DD4BF}
+    .tacc{fill:#2A1B10}
+    .tteal{fill:#0E2724}
+    .ln{stroke:#30363D}
+    .sacc{stroke:#FF8A3D}
+    .steal{stroke:#2DD4BF}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  </style>
+  <defs>
+    <marker id="ha" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+    <marker id="ht" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,0 L8,4 L0,8 Z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="684"/>
+
+  <!-- band 1: control plane -->
+  <rect class="tacc sacc" x="32" y="32" width="1136" height="200" rx="12" stroke-width="1"/>
+  <text class="sans" x="56" y="60" font-size="14" xml:space="preserve"><tspan class="ink" font-weight="700">Control plane</tspan><tspan class="mut">  ·  agent platform (runs on the Controller)</tspan></text>
+
+  <rect class="bg ln" x="56" y="80" width="336" height="72" rx="10" stroke-width="1"/>
+  <rect class="bg sacc" x="416" y="80" width="368" height="72" rx="10" stroke-width="1.5"/>
+  <rect class="bg ln" x="808" y="80" width="336" height="72" rx="10" stroke-width="1"/>
+  <g class="sans ink" font-size="15" font-weight="700">
+    <text x="72" y="108">Subagents</text>
+    <text x="432" y="108">Root session</text>
+    <text x="824" y="108">External workers via herdr</text>
+  </g>
+  <g class="sans mut" font-size="13">
+    <text x="72" y="132">Haiku · Sonnet · Opus tiers</text>
+    <text x="432" y="132">plans · dispatches · verifies · records</text>
+    <text x="824" y="132">Cursor · DeepSeek · OpenCode Go</text>
+  </g>
+  <g fill="none" stroke-width="1">
+    <line class="sacc" x1="414" y1="116" x2="394" y2="116" marker-end="url(#ha)"/>
+    <line class="sacc" x1="786" y1="116" x2="806" y2="116" marker-end="url(#ha)"/>
+  </g>
+
+  <g stroke-width="1">
+    <rect class="bg ln" x="56" y="176" width="192" height="32" rx="8"/>
+    <rect class="bg ln" x="280" y="176" width="192" height="32" rx="8"/>
+    <rect class="bg ln" x="504" y="176" width="192" height="32" rx="8"/>
+    <rect class="bg ln" x="728" y="176" width="192" height="32" rx="8"/>
+    <rect class="bg ln" x="952" y="176" width="192" height="32" rx="8"/>
+  </g>
+  <g class="sans ink" font-size="13" text-anchor="middle">
+    <text x="152" y="197">Skills</text>
+    <text x="376" y="197">MCP server</text>
+    <text x="600" y="197">Task tracker</text>
+    <text x="824" y="197">Memory + STATE</text>
+    <text x="1048" y="197">Hooks + gates</text>
+  </g>
+
+  <!-- gutter 1 -->
+  <g fill="none" stroke-width="1.5">
+    <line class="sacc" x1="560" y1="236" x2="560" y2="300" marker-end="url(#ha)"/>
+    <line class="steal" x1="640" y1="300" x2="640" y2="236" marker-end="url(#ht)"/>
+  </g>
+  <text class="mono acc" x="548" y="272" font-size="12" text-anchor="end">commands</text>
+  <text class="mono teal" x="652" y="272" font-size="12">→ verified by the root → gallery · ledgers · memory</text>
+
+  <!-- band 2: thin entry points -->
+  <rect class="bg ln" x="32" y="304" width="1136" height="112" rx="12" stroke-width="1"/>
+  <text class="sans" x="56" y="332" font-size="14" xml:space="preserve"><tspan class="ink" font-weight="700">Thin entry points</tspan><tspan class="mut">  ·  how the root reaches the backends</tspan></text>
+  <g stroke-width="1">
+    <rect class="bg ln" x="56" y="352" width="304" height="40" rx="8"/>
+    <rect class="bg ln" x="376" y="352" width="200" height="40" rx="8"/>
+    <rect class="bg ln" x="592" y="352" width="312" height="40" rx="8"/>
+    <rect class="bg ln" x="920" y="352" width="224" height="40" rx="8"/>
+  </g>
+  <g class="sans ink" font-size="13" text-anchor="middle">
+    <text x="208" y="377">Intent router (print first, --run)</text>
+    <text x="476" y="377">JSON job briefs</text>
+    <text x="748" y="377">MCP groups: generate · canvas · raw</text>
+    <text x="1032" y="377">Browser-pane operator</text>
+  </g>
+
+  <!-- gutter 2 -->
+  <g fill="none" stroke-width="1.5">
+    <line class="sacc" x1="560" y1="420" x2="560" y2="484" marker-end="url(#ha)"/>
+    <line class="steal" x1="640" y1="484" x2="640" y2="420" marker-end="url(#ht)"/>
+  </g>
+  <text class="mono acc" x="548" y="456" font-size="12" text-anchor="end">commands</text>
+  <text class="mono teal" x="652" y="456" font-size="12">outputs · logs · receipts</text>
+
+  <!-- band 3: execution plane -->
+  <rect class="tteal steal" x="32" y="488" width="1136" height="164" rx="12" stroke-width="1"/>
+  <text class="sans" x="56" y="516" font-size="14" xml:space="preserve"><tspan class="ink" font-weight="700">Execution plane</tspan><tspan class="mut">  ·  backends</tspan></text>
+
+  <g stroke-width="1">
+    <rect class="bg ln" x="56" y="536" width="256" height="92" rx="10"/>
+    <rect class="bg ln" x="328" y="536" width="256" height="92" rx="10"/>
+    <rect class="bg ln" x="600" y="536" width="288" height="92" rx="10" stroke-dasharray="4 4"/>
+    <rect class="bg ln" x="904" y="536" width="240" height="92" rx="10"/>
+  </g>
+  <g class="sans ink" font-size="15" font-weight="700">
+    <text x="72" y="564">Box A</text>
+    <text x="344" y="564">Box B</text>
+    <text x="616" y="564">Sidecars</text>
+    <text x="920" y="564">Cloud</text>
+  </g>
+  <g class="sans mut" font-size="13">
+    <text x="72" y="588">RTX 5080 16 GB · ComfyUI</text>
+    <text x="72" y="608">quality line, LoRA training</text>
+    <text x="344" y="588">RTX 4060 Ti 16 GB · ComfyUI</text>
+    <text x="344" y="608">drafts, tests, datasets</text>
+    <text x="616" y="588">loopback-only ComfyUI instances</text>
+    <text x="616" y="608">for Qwen-Image, FLUX, FIBO</text>
+    <text x="920" y="588">NovelAI · Midjourney</text>
+    <text x="920" y="608">Civitai · GPT Image</text>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+{
+  "name": "agent-genops",
+  "owner": {
+    "name": "lepetitprince716-prog"
+  },
+  "description": "The agent-genops skill: agent-first methods for running, debugging and deploying local generative models.",
+  "plugins": [
+    {
+      "name": "agent-genops",
+      "source": "./",
+      "description": "Agent-first methods for running, debugging and deploying local generative models."
+    }
+  ]
+}
