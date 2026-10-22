@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc" xml:lang="en">
+  <title id="title">Agent GenOps</title>
+  <desc id="desc">Agent GenOps: agent-first methods for running, debugging and deploying local generative models.</desc>
+  <style>
+    .bg{fill:#FAFAF7}
+    .ink{fill:#1F2328}
+    .mut{fill:#57606A}
+    .acc{fill:#E8590C}
+    .acct{fill:#C2410C}
+    .teal{fill:#0F766E}
+    .tacc{fill:#FFF1E6}
+    .tteal{fill:#E7F5F2}
+    .ln{stroke:#D0D7DE}
+    .sacc{stroke:#E8590C}
+    .steal{stroke:#0F766E}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace}
+    .serif{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', serif}
+  </style>
+  <rect class="bg ln" x="2" y="2" width="1196" height="896" rx="40" stroke-width="4"/>
+  <text class="serif ink" x="100" y="306" font-size="264" letter-spacing="-4">Agent</text>
+  <text class="serif acc" x="100" y="566" font-size="264" letter-spacing="-4" font-style="italic">GenOps</text>
+  <rect class="acc" x="96" y="683" width="96" height="10"/>
+  <line class="ln" x1="224" y1="688" x2="984" y2="688" stroke-width="4"/>
+  <polygon class="acc" points="1000,682 1084,682 1104,666 1020,666"/>
+  <polygon class="teal" points="1000,710 1084,710 1104,694 1020,694"/>
+  <text class="mono mut" x="96" y="776" font-size="56" letter-spacing="0.5">agent-first field notes</text>
+</svg>

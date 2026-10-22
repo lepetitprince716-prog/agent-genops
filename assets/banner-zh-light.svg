@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="560" viewBox="0 0 1760 560" role="img" aria-labelledby="title desc" xml:lang="zh-CN">
+  <title id="title">Agent GenOps</title>
+  <desc id="desc">Agent GenOps：以 agent 平台为中心的本地生成模型调试、部署与出图方法。</desc>
+  <style>
+    .bg{fill:#FAFAF7}
+    .ink{fill:#1F2328}
+    .mut{fill:#57606A}
+    .acc{fill:#E8590C}
+    .acct{fill:#C2410C}
+    .teal{fill:#0F766E}
+    .tacc{fill:#FFF1E6}
+    .tteal{fill:#E7F5F2}
+    .ln{stroke:#D0D7DE}
+    .sacc{stroke:#E8590C}
+    .steal{stroke:#0F766E}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace}
+    .serif{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', serif}
+  </style>
+  <rect class="bg ln" x="1" y="1" width="1758" height="558" rx="24" stroke-width="2"/>
+  <text class="serif ink" x="132" y="280" font-size="208" letter-spacing="-3">Agent <tspan class="acc" font-style="italic">GenOps</tspan></text>
+  <rect class="acc" x="128" y="417" width="72" height="6"/>
+  <text class="sans mut" x="224" y="429" font-size="30" letter-spacing="1">以 agent 为中心的实战笔记</text>
+  <line class="ln" x1="704" y1="420" x2="1520" y2="420" stroke-width="2"/>
+  <polygon class="acc" points="1552,416 1620,416 1632,406 1564,406"/>
+  <polygon class="teal" points="1552,434 1620,434 1632,424 1564,424"/>
+</svg>

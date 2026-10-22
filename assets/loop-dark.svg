@@ -1,97 +1,77 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">The operating loop</title>
-  <desc id="desc">Nine steps: Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean. A return arrow from Clean back to Intake is labelled next order.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="920" viewBox="0 0 1760 920" role="img" aria-labelledby="title desc" xml:lang="en">
+  <title id="title">Agent GenOps loop</title>
+  <desc id="desc">Agent GenOps loop: nine steps in order: Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean. A return path leads from Clean back to Intake.</desc>
   <style>
     .bg{fill:#0D1117}
     .ink{fill:#E6EDF3}
     .mut{fill:#8B949E}
     .acc{fill:#FF8A3D}
+    .acct{fill:#FF8A3D}
     .teal{fill:#2DD4BF}
     .tacc{fill:#2A1B10}
     .tteal{fill:#0E2724}
     .ln{stroke:#30363D}
     .sacc{stroke:#FF8A3D}
     .steal{stroke:#2DD4BF}
-    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace}
+    .serif{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', serif}
   </style>
+  <rect class="bg ln" x="1" y="1" width="1758" height="918" rx="24" stroke-width="2"/>
   <defs>
-    <marker id="ha" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
-      <path class="acc" d="M0,0 L8,4 L0,8 Z"/>
+    <marker id="ha" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,2 L16,8 L0,14 Z"/>
     </marker>
-    <marker id="ht" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
-      <path class="teal" d="M0,0 L8,4 L0,8 Z"/>
+    <marker id="ht" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,2 L16,8 L0,14 Z"/>
     </marker>
   </defs>
-
-  <rect class="bg" x="0" y="0" width="1200" height="340"/>
-
-  <!-- connectors -->
-  <g fill="none" stroke-width="1.5">
-    <line class="sacc" x1="244" y1="112" x2="260" y2="112" marker-end="url(#ha)"/>
-    <line class="sacc" x1="476" y1="112" x2="492" y2="112" marker-end="url(#ha)"/>
-    <line class="sacc" x1="708" y1="112" x2="724" y2="112" marker-end="url(#ha)"/>
-    <path class="sacc" d="M832,162 V184 H136 V206" stroke-linejoin="round" marker-end="url(#ha)"/>
-    <line class="sacc" x1="244" y1="256" x2="260" y2="256" marker-end="url(#ha)"/>
-    <line class="sacc" x1="476" y1="256" x2="492" y2="256" marker-end="url(#ha)"/>
-    <line class="sacc" x1="708" y1="256" x2="724" y2="256" marker-end="url(#ha)"/>
-    <line class="sacc" x1="940" y1="256" x2="956" y2="256" marker-end="url(#ha)"/>
-    <path class="steal" d="M1064,206 V32 H136 V62" stroke-linejoin="round" marker-end="url(#ht)"/>
+  <g fill="none" stroke-width="3" stroke-linejoin="round">
+    <line class="sacc" x1="548" y1="248" x2="612" y2="248" marker-end="url(#ha)"/>
+    <line class="sacc" x1="1068" y1="248" x2="1132" y2="248" marker-end="url(#ha)"/>
+    <path class="sacc" d="M1360,340 V380 H320 V420" marker-end="url(#ha)"/>
+    <line class="sacc" x1="548" y1="512" x2="612" y2="512" marker-end="url(#ha)"/>
+    <line class="sacc" x1="1068" y1="512" x2="1132" y2="512" marker-end="url(#ha)"/>
+    <path class="sacc" d="M1360,604 V644 H320 V684" marker-end="url(#ha)"/>
+    <line class="sacc" x1="548" y1="776" x2="612" y2="776" marker-end="url(#ha)"/>
+    <line class="sacc" x1="1068" y1="776" x2="1132" y2="776" marker-end="url(#ha)"/>
+    <path class="steal" d="M1588,776 H1664 V96 H320 V156" marker-end="url(#ht)"/>
   </g>
-  <text class="mono teal" x="1080" y="116" font-size="13">next order</text>
-
-  <!-- row 1 -->
-  <g stroke-width="1">
-    <rect class="bg ln" x="32" y="64" width="208" height="96" rx="10"/>
-    <rect class="bg ln" x="264" y="64" width="208" height="96" rx="10"/>
-    <rect class="bg ln" x="496" y="64" width="208" height="96" rx="10"/>
-    <rect class="tacc sacc" x="728" y="64" width="208" height="96" rx="10"/>
-  </g>
-  <!-- row 2 -->
-  <g stroke-width="1">
-    <rect class="tacc sacc" x="32" y="208" width="208" height="96" rx="10"/>
-    <rect class="tacc sacc" x="264" y="208" width="208" height="96" rx="10"/>
-    <rect class="tteal steal" x="496" y="208" width="208" height="96" rx="10"/>
-    <rect class="tteal steal" x="728" y="208" width="208" height="96" rx="10"/>
-    <rect class="tteal steal" x="960" y="208" width="208" height="96" rx="10"/>
-  </g>
-
-  <g class="mono acc" font-size="12">
-    <text x="52" y="94">01</text>
-    <text x="284" y="94">02</text>
-    <text x="516" y="94">03</text>
-    <text x="748" y="94">04</text>
-    <text x="52" y="238">05</text>
-    <text x="284" y="238">06</text>
-    <text x="516" y="238">07</text>
-    <text x="748" y="238">08</text>
-    <text x="980" y="238">09</text>
-  </g>
-  <g class="sans ink" font-size="16" font-weight="700">
-    <text x="80" y="94">Intake</text>
-    <text x="312" y="94">Inventory</text>
-    <text x="544" y="94">Plan</text>
-    <text x="776" y="94">Probe</text>
-    <text x="80" y="238">Smoke</text>
-    <text x="312" y="238">Run</text>
-    <text x="544" y="238">Verify</text>
-    <text x="776" y="238">Record</text>
-    <text x="1008" y="238">Clean</text>
-  </g>
-  <g class="sans mut" font-size="14">
-    <text x="52" y="122">what must this step</text>
-    <text x="52" y="142">prove?</text>
-    <text x="284" y="122">what already exists?</text>
-    <text x="516" y="122">print, don't run</text>
-    <text x="748" y="122">box idle? else HOLD</text>
-    <text x="52" y="266">1 image: time,</text>
-    <text x="52" y="286">path, names</text>
-    <text x="284" y="266">isolated outputs</text>
-    <text x="516" y="266">artifacts, not</text>
-    <text x="516" y="286">exit codes</text>
-    <text x="748" y="266">ledger · memory ·</text>
-    <text x="748" y="286">model card</text>
-    <text x="980" y="266">delete tests,</text>
-    <text x="980" y="286">trash on box</text>
-  </g>
+  <text class="mono teal" x="1640" y="76" font-size="31" text-anchor="end">back to Intake</text>
+  <rect class="bg ln" x="96" y="160" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="132" y="236" font-size="31">01</text>
+  <text class="serif ink" x="196" y="236" font-size="44">Intake</text>
+  <text class="sans mut" x="196" y="290" font-size="31">what must it prove?</text>
+  <rect class="bg ln" x="616" y="160" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="652" y="236" font-size="31">02</text>
+  <text class="serif ink" x="716" y="236" font-size="44">Inventory</text>
+  <text class="sans mut" x="716" y="290" font-size="31">what already exists?</text>
+  <rect class="bg ln" x="1136" y="160" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="1172" y="236" font-size="31">03</text>
+  <text class="serif ink" x="1236" y="236" font-size="44">Plan</text>
+  <text class="sans mut" x="1236" y="290" font-size="31">print, don't run</text>
+  <rect class="bg ln" x="96" y="424" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="132" y="500" font-size="31">04</text>
+  <text class="serif ink" x="196" y="500" font-size="44">Probe</text>
+  <text class="sans mut" x="196" y="554" font-size="31">idle? else HOLD</text>
+  <rect class="bg ln" x="616" y="424" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="652" y="500" font-size="31">05</text>
+  <text class="serif ink" x="716" y="500" font-size="44">Smoke</text>
+  <text class="sans mut" x="716" y="554" font-size="31">one image first</text>
+  <rect class="bg ln" x="1136" y="424" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="1172" y="500" font-size="31">06</text>
+  <text class="serif ink" x="1236" y="500" font-size="44">Run</text>
+  <text class="sans mut" x="1236" y="554" font-size="31">isolated outputs</text>
+  <rect class="bg ln" x="96" y="688" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="132" y="764" font-size="31">07</text>
+  <text class="serif ink" x="196" y="764" font-size="44">Verify</text>
+  <text class="sans mut" x="196" y="818" font-size="31">open the artifacts</text>
+  <rect class="bg ln" x="616" y="688" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="652" y="764" font-size="31">08</text>
+  <text class="serif ink" x="716" y="764" font-size="44">Record</text>
+  <text class="sans mut" x="716" y="818" font-size="31">ledger · memory</text>
+  <rect class="bg ln" x="1136" y="688" width="448" height="176" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="1172" y="764" font-size="31">09</text>
+  <text class="serif ink" x="1236" y="764" font-size="44">Clean</text>
+  <text class="sans mut" x="1236" y="818" font-size="31">delete test renders</text>
 </svg>

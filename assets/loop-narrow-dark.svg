@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="686" height="1632" viewBox="0 0 686 1632" role="img" aria-labelledby="title desc" xml:lang="en">
+  <title id="title">Agent GenOps loop</title>
+  <desc id="desc">Agent GenOps loop: nine steps in order: Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean. A return path leads from Clean back to Intake.</desc>
+  <style>
+    .bg{fill:#0D1117}
+    .ink{fill:#E6EDF3}
+    .mut{fill:#8B949E}
+    .acc{fill:#FF8A3D}
+    .acct{fill:#FF8A3D}
+    .teal{fill:#2DD4BF}
+    .tacc{fill:#2A1B10}
+    .tteal{fill:#0E2724}
+    .ln{stroke:#30363D}
+    .sacc{stroke:#FF8A3D}
+    .steal{stroke:#2DD4BF}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace}
+    .serif{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', serif}
+  </style>
+  <rect class="bg ln" x="1" y="1" width="684" height="1630" rx="24" stroke-width="2"/>
+  <defs>
+    <marker id="ha" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,2 L16,8 L0,14 Z"/>
+    </marker>
+    <marker id="ht" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,2 L16,8 L0,14 Z"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke-width="3" stroke-linejoin="round">
+    <line class="sacc" x1="307" y1="244" x2="307" y2="276" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="412" x2="307" y2="444" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="580" x2="307" y2="612" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="748" x2="307" y2="780" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="916" x2="307" y2="948" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="1084" x2="307" y2="1116" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="1252" x2="307" y2="1284" marker-end="url(#ha)"/>
+    <line class="sacc" x1="307" y1="1420" x2="307" y2="1452" marker-end="url(#ha)"/>
+    <path class="steal" d="M578,1520 H618 V76 H307 V108" marker-end="url(#ht)"/>
+  </g>
+  <text class="mono teal" x="618" y="56" font-size="31" text-anchor="end">back to Intake</text>
+  <rect class="bg ln" x="40" y="112" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="168" font-size="31">01</text>
+  <text class="serif ink" x="132" y="168" font-size="44">Intake</text>
+  <text class="sans mut" x="132" y="212" font-size="31">what must it prove?</text>
+  <rect class="bg ln" x="40" y="280" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="336" font-size="31">02</text>
+  <text class="serif ink" x="132" y="336" font-size="44">Inventory</text>
+  <text class="sans mut" x="132" y="380" font-size="31">what already exists?</text>
+  <rect class="bg ln" x="40" y="448" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="504" font-size="31">03</text>
+  <text class="serif ink" x="132" y="504" font-size="44">Plan</text>
+  <text class="sans mut" x="132" y="548" font-size="31">print, don't run</text>
+  <rect class="bg ln" x="40" y="616" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="672" font-size="31">04</text>
+  <text class="serif ink" x="132" y="672" font-size="44">Probe</text>
+  <text class="sans mut" x="132" y="716" font-size="31">idle? else HOLD</text>
+  <rect class="bg ln" x="40" y="784" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="840" font-size="31">05</text>
+  <text class="serif ink" x="132" y="840" font-size="44">Smoke</text>
+  <text class="sans mut" x="132" y="884" font-size="31">one image first</text>
+  <rect class="bg ln" x="40" y="952" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="1008" font-size="31">06</text>
+  <text class="serif ink" x="132" y="1008" font-size="44">Run</text>
+  <text class="sans mut" x="132" y="1052" font-size="31">isolated outputs</text>
+  <rect class="bg ln" x="40" y="1120" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="1176" font-size="31">07</text>
+  <text class="serif ink" x="132" y="1176" font-size="44">Verify</text>
+  <text class="sans mut" x="132" y="1220" font-size="31">open the artifacts</text>
+  <rect class="bg ln" x="40" y="1288" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="1344" font-size="31">08</text>
+  <text class="serif ink" x="132" y="1344" font-size="44">Record</text>
+  <text class="sans mut" x="132" y="1388" font-size="31">ledger · memory</text>
+  <rect class="bg ln" x="40" y="1456" width="534" height="128" rx="16" stroke-width="2"/>
+  <text class="mono acct" x="68" y="1512" font-size="31">09</text>
+  <text class="serif ink" x="132" y="1512" font-size="44">Clean</text>
+  <text class="sans mut" x="132" y="1556" font-size="31">delete test renders</text>
+</svg>

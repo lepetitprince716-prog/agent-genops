@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="686" height="1644" viewBox="0 0 686 1644" role="img" aria-labelledby="title desc" xml:lang="en">
+  <title id="title">Agent GenOps architecture</title>
+  <desc id="desc">Agent GenOps architecture in three bands. Control plane on the Controller: root session, subagents, external workers, skills, MCP server, task tracker, memory and STATE, hooks and gates. Thin entry points: intent router, JSON job briefs, MCP groups, browser-pane operator. Execution plane: Box A, Box B, sidecars, cloud. Commands go down, results come up.</desc>
+  <style>
+    .bg{fill:#0D1117}
+    .ink{fill:#E6EDF3}
+    .mut{fill:#8B949E}
+    .acc{fill:#FF8A3D}
+    .acct{fill:#FF8A3D}
+    .teal{fill:#2DD4BF}
+    .tacc{fill:#2A1B10}
+    .tteal{fill:#0E2724}
+    .ln{stroke:#30363D}
+    .sacc{stroke:#FF8A3D}
+    .steal{stroke:#2DD4BF}
+    .sans{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace}
+    .serif{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', serif}
+  </style>
+  <rect class="bg ln" x="1" y="1" width="684" height="1642" rx="24" stroke-width="2"/>
+  <defs>
+    <marker id="ha" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="acc" d="M0,2 L16,8 L0,14 Z"/>
+    </marker>
+    <marker id="ht" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="teal" d="M0,2 L16,8 L0,14 Z"/>
+    </marker>
+  </defs>
+  <rect class="tacc sacc" x="32" y="32" width="622" height="732" rx="20" stroke-width="2"/>
+  <text class="serif ink" x="60" y="104" font-size="46">Control plane</text>
+  <text class="mono mut" x="60" y="150" font-size="31">on the Controller</text>
+  <rect class="bg sacc" x="60" y="180" width="566" height="96" rx="16" stroke-width="3"/>
+  <text class="sans ink" x="343" y="240.24" font-size="34" text-anchor="middle" font-weight="700">Root session</text>
+  <rect class="bg ln" x="108" y="304" width="518" height="80" rx="16" stroke-width="2"/>
+  <text class="sans ink" x="367" y="356.24" font-size="34" text-anchor="middle" font-weight="700">Subagents</text>
+  <rect class="bg ln" x="108" y="404" width="518" height="80" rx="16" stroke-width="2"/>
+  <text class="sans ink" x="367" y="456.24" font-size="34" text-anchor="middle" font-weight="700">External workers</text>
+  <g fill="none" stroke-width="3" stroke-linejoin="round">
+    <path class="sacc" d="M84,278 V344 H104" marker-end="url(#ha)"/>
+    <path class="sacc" d="M84,344 V444 H104" marker-end="url(#ha)"/>
+  </g>
+  <rect class="acc" x="60" y="533" width="8" height="8"/>
+  <text class="mono mut" x="88" y="548" font-size="31">skills</text>
+  <rect class="acc" x="60" y="579" width="8" height="8"/>
+  <text class="mono mut" x="88" y="594" font-size="31">MCP server</text>
+  <rect class="acc" x="60" y="625" width="8" height="8"/>
+  <text class="mono mut" x="88" y="640" font-size="31">task tracker</text>
+  <rect class="acc" x="60" y="671" width="8" height="8"/>
+  <text class="mono mut" x="88" y="686" font-size="31">memory + STATE</text>
+  <rect class="acc" x="60" y="717" width="8" height="8"/>
+  <text class="mono mut" x="88" y="732" font-size="31">hooks + gates</text>
+  <g fill="none" stroke-width="3">
+    <line class="sacc" x1="313" y1="768" x2="313" y2="856" marker-end="url(#ha)"/>
+    <line class="steal" x1="373" y1="856" x2="373" y2="768" marker-end="url(#ht)"/>
+  </g>
+  <text class="mono acct" x="289" y="822" font-size="31" text-anchor="end">commands</text>
+  <text class="mono teal" x="397" y="822" font-size="31">results</text>
+  <rect class="bg ln" x="32" y="860" width="622" height="308" rx="20" stroke-width="2"/>
+  <text class="serif ink" x="60" y="932" font-size="46">Thin entry points</text>
+  <rect class="mut" x="60" y="979" width="8" height="8"/>
+  <text class="mono mut" x="88" y="994" font-size="31">intent router</text>
+  <rect class="mut" x="60" y="1025" width="8" height="8"/>
+  <text class="mono mut" x="88" y="1040" font-size="31">JSON job briefs</text>
+  <rect class="mut" x="60" y="1071" width="8" height="8"/>
+  <text class="mono mut" x="88" y="1086" font-size="31">MCP groups</text>
+  <rect class="mut" x="60" y="1117" width="8" height="8"/>
+  <text class="mono mut" x="88" y="1132" font-size="31">browser-pane operator</text>
+  <g fill="none" stroke-width="3">
+    <line class="sacc" x1="313" y1="1172" x2="313" y2="1260" marker-end="url(#ha)"/>
+    <line class="steal" x1="373" y1="1260" x2="373" y2="1172" marker-end="url(#ht)"/>
+  </g>
+  <rect class="tteal steal" x="32" y="1264" width="622" height="348" rx="20" stroke-width="2"/>
+  <text class="serif ink" x="60" y="1336" font-size="46">Execution plane</text>
+  <rect class="bg ln" x="60" y="1376" width="271" height="88" rx="16" stroke-width="2"/>
+  <text class="sans ink" x="195.5" y="1432.24" font-size="34" text-anchor="middle" font-weight="700">Box A</text>
+  <rect class="bg ln" x="355" y="1376" width="271" height="88" rx="16" stroke-width="2"/>
+  <text class="sans ink" x="490.5" y="1432.24" font-size="34" text-anchor="middle" font-weight="700">Box B</text>
+  <rect class="bg steal" x="60" y="1484" width="271" height="88" rx="16" stroke-width="2" stroke-dasharray="8 8"/>
+  <text class="sans ink" x="195.5" y="1540.24" font-size="34" text-anchor="middle" font-weight="700">Sidecars</text>
+  <rect class="bg ln" x="355" y="1484" width="271" height="88" rx="16" stroke-width="2"/>
+  <text class="sans ink" x="490.5" y="1540.24" font-size="34" text-anchor="middle" font-weight="700">Cloud</text>
+</svg>

@@ -1,10 +1,18 @@
-English | [中文](README.zh-CN.md)
-
 <p align="center">
   <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/banner-narrow-dark.svg">
+    <source media="(max-width: 600px)" srcset="assets/banner-narrow-light.svg">
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-    <img alt="Agent GenOps: agent-first methods for running, debugging and deploying local generative models" src="assets/banner-light.svg" width="100%">
+    <img alt="Agent GenOps: agent-first methods for running, debugging and deploying local generative models" src="assets/banner-light.svg" width="880">
   </picture>
+</p>
+
+<p align="center"><b>Agent-first methods for running, debugging and deploying local generative models</b></p>
+
+<p align="center">
+  <b>English</b> · <a href="README.zh-CN.md">中文</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
 </p>
 
 <p align="center">
@@ -12,8 +20,6 @@ English | [中文](README.zh-CN.md)
   <a href="README.zh-CN.md"><img alt="Docs in English and Chinese" src="https://img.shields.io/badge/docs-EN%20%7C%20%E4%B8%AD%E6%96%87-e8590c"></a>
   <img alt="Status: field notes, October 2026" src="https://img.shields.io/badge/status-field%20notes%2C%202026--10-0f766e">
 </p>
-
-# Agent GenOps
 
 How I run, debug and deploy local image and video models with coding agents. The agents plan
 the work, dispatch it, check the results and keep the records. ComfyUI and the cloud services
@@ -24,13 +30,35 @@ agents and two consumer GPUs that render, and it keeps the numbers, dates and in
 shaped each rule. The [skill](skills/agent-genops/) in this repo lets an agent load the same
 method.
 
+## Five ideas behind the 24 rules
+
+1. Agents plan, dispatch, verify and record. ComfyUI and the cloud services only render.
+2. The live machine and the artifact on disk are the truth. Documents, exit codes and
+   self-reports are claims.
+3. GPU time, paid credits and the owner's attention are the scarce resources.
+4. Machines eliminate candidates. Taste is decided by a person.
+5. Write down what was measured, what was assumed and what is still unverified. Keep the
+   lesson, delete the test images.
+
+The [24 rules](docs/en/00-philosophy.md) come in six groups:
+[Where the work lives](docs/en/00-philosophy.md#1-where-the-work-lives) (rules 1–4) ·
+[Truth and evidence](docs/en/00-philosophy.md#2-truth-and-evidence) (5–8) ·
+[Scarce resources](docs/en/00-philosophy.md#3-scarce-resources) (9–13) ·
+[Agents and dispatch](docs/en/00-philosophy.md#4-agents-and-dispatch) (14–17) ·
+[Memory and honesty](docs/en/00-philosophy.md#5-memory-and-honesty) (18–21) ·
+[Creative work](docs/en/00-philosophy.md#6-creative-work) (22–24).
+
 ## The idea
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-    <img alt="Control plane (root session, subagents, external workers, skills, MCP server, task tracker, memory, gates) above thin entry points, above the execution plane (two ComfyUI render boxes, loopback sidecars, cloud services)" src="assets/architecture-light.svg" width="100%">
-  </picture>
+  <a href="assets/architecture-light.svg">
+    <picture>
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/architecture-narrow-dark.svg">
+      <source media="(max-width: 600px)" srcset="assets/architecture-narrow-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+      <img alt="Control plane on the Controller (root session, subagents, external workers, skills, MCP server, task tracker, memory, hooks and gates) above thin entry points, above the execution plane (two ComfyUI render boxes, loopback sidecars, cloud services). Commands go down, results come up." src="assets/architecture-light.svg" width="880">
+    </picture>
+  </a>
 </p>
 
 Most agent tooling for image generation lives inside ComfyUI or sits next to it as a bridge.
@@ -50,10 +78,14 @@ says where this approach differs.
 ## The loop
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/loop-dark.svg">
-    <img alt="Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean, then back to Intake" src="assets/loop-light.svg" width="100%">
-  </picture>
+  <a href="assets/loop-light.svg">
+    <picture>
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/loop-narrow-dark.svg">
+      <source media="(max-width: 600px)" srcset="assets/loop-narrow-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/loop-dark.svg">
+      <img alt="Intake, Inventory, Plan, Probe, Smoke, Run, Verify, Record, Clean, then back to Intake" src="assets/loop-light.svg" width="880">
+    </picture>
+  </a>
 </p>
 
 Every job, from one test image to bringing up a new model, goes through the same steps:
@@ -91,20 +123,6 @@ Also in the repo: [templates/](templates/) (task packet, model card, A/B write-u
 handoff, memory entry, subagent definitions) and [tools/](tools/) (the privacy scanner this
 repo runs on itself).
 
-## Reference setup
-
-| Machine | Hardware | Role |
-|---|---|---|
-| Controller | MacBook Air, Apple M5 (10 cores), 24 GB | Runs the agents. Renders nothing. |
-| Box A | Windows, NVIDIA RTX 5080 16 GB, AMD Ryzen 7 9800X3D, about 48 GB RAM | Quality line and LoRA training. Also the owner's gaming PC, so agents yield to it. Sleeps when idle since 2026-10-13. |
-| Box B | Windows, NVIDIA RTX 4060 Ti 16 GB, 32 GB RAM | Drafts, tests and datasets. Sleeps when idle. |
-| Linux node | NVIDIA DGX Spark pair (head plus one worker) | Batch jobs and model services |
-
-Agent side: Claude Code with an Opus 5.5 root session and Haiku, Sonnet and Opus subagents;
-[herdr](https://github.com/herdrdev/herdr) for external workers (Cursor Composer 2.5,
-DeepSeek); [bd (beads)](https://github.com/gastownhall/beads) for task tracking. Render side:
-ComfyUI 0.42.1 on both boxes, plus loopback-only sidecar instances for newer models.
-
 ## Use the skill
 
 The skill is one folder, [`skills/agent-genops/`](skills/agent-genops/): a `SKILL.md` and a
@@ -117,6 +135,9 @@ plugin:
 /plugin marketplace add lepetitprince716-prog/agent-genops
 /plugin install agent-genops@agent-genops
 ```
+
+<details>
+<summary>Other agents and local copies</summary>
 
 For other agents, or to keep a local copy, clone the repo and link the folder to wherever your
 agent loads skills from.
@@ -140,6 +161,8 @@ The skill holds the method only. Your machines, entry points and commands go in
 `~/.config/agent-genops/LOCAL.md`, which the skill reads when it exists and which never enters
 this repo. [templates/fleet.example.yaml](templates/fleet.example.yaml) shows what to record.
 
+</details>
+
 ## Dispatch at a glance
 
 | Job | Goes to |
@@ -154,6 +177,20 @@ this repo. [templates/fleet.example.yaml](templates/fleet.example.yaml) shows wh
 | Parallel lanes on other vendors' models | herdr workers (Cursor Composer, DeepSeek) |
 
 Work that is one chain of steps stays in the root session. See [Dispatch](docs/en/03-dispatch.md).
+
+## Reference setup
+
+| Machine | Hardware | Role |
+|---|---|---|
+| Controller | MacBook Air, Apple M5 (10 cores), 24 GB | Runs the agents. Renders nothing. |
+| Box A | Windows, NVIDIA RTX 5080 16 GB, AMD Ryzen 7 9800X3D, about 48 GB RAM | Quality line and LoRA training. Also the owner's gaming PC, so agents yield to it. Sleeps when idle since 2026-10-13. |
+| Box B | Windows, NVIDIA RTX 4060 Ti 16 GB, 32 GB RAM | Drafts, tests and datasets. Sleeps when idle. |
+| Linux node | NVIDIA DGX Spark pair (head plus one worker) | Batch jobs and model services |
+
+Agent side: Claude Code with an Opus 5.5 root session and Haiku, Sonnet and Opus subagents;
+[herdr](https://github.com/herdrdev/herdr) for external workers (Cursor Composer 2.5,
+DeepSeek); [bd (beads)](https://github.com/gastownhall/beads) for task tracking. Render side:
+ComfyUI 0.42.1 on both boxes, plus loopback-only sidecar instances for newer models.
 
 ## Keeping this repo clean
 

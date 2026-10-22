@@ -1,10 +1,18 @@
-[English](README.md) | 中文
-
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-    <img alt="Agent GenOps：以 agent 平台为中心的本地生成模型调试、部署与出图方法" src="assets/banner-light.svg" width="100%">
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/banner-zh-narrow-dark.svg">
+    <source media="(max-width: 600px)" srcset="assets/banner-zh-narrow-light.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-zh-dark.svg">
+    <img alt="Agent GenOps：以 agent 平台为中心的本地生成模型调试、部署与出图方法" src="assets/banner-zh-light.svg" width="880">
   </picture>
+</p>
+
+<p align="center"><b>以 agent 平台为中心的本地生成模型调试、部署与出图方法</b></p>
+
+<p align="center">
+  <a href="README.md">English</a> · <b>中文</b>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="#仓库里有什么">文档</a> · <a href="#使用-skill">Skill</a> · <a href="templates/">模板</a> · <a href="tools/">工具</a>
 </p>
 
 <p align="center">
@@ -13,19 +21,37 @@
   <img alt="Status: field notes, October 2026" src="https://img.shields.io/badge/status-field%20notes%2C%202026--10-0f766e">
 </p>
 
-# Agent GenOps
-
 这是我用编码 agent 跑、调、部署本地图像和视频模型的方法。agent 负责规划、派工、验收和记录；ComfyUI 和云服务（NovelAI、Midjourney、Civitai、GPT Image）只负责出图。
 
 它是一套工作方法，不是一个库。内容来自一套真实的环境：一台笔记本跑 agent，两张消费级显卡出图。每条规则背后的数字、日期和事故都留着。仓库里的 [skill](skills/agent-genops/) 可以让 agent 直接加载这套方法。
 
+## 24 条规则背后的五个想法
+
+1. agent 负责规划、派工、验收和记录；ComfyUI 和云服务只负责出图。
+2. 真相是正在运行的机器和落在磁盘上的产物。文档、退出码、worker 的自述都只是说法。
+3. GPU 时间、付费额度和人的注意力是最稀缺的三样东西。
+4. 机器负责淘汰，审美由人来定。
+5. 写清哪些是实测、哪些是假设、哪些还没核实。教训留下，测试图删掉。
+
+[24 条规则](docs/zh/00-philosophy.md)分成六组：
+[一、工作放在哪里](docs/zh/00-philosophy.md#一工作放在哪里)（第 1–4 条）·
+[二、真相与证据](docs/zh/00-philosophy.md#二真相与证据)（5–8）·
+[三、稀缺资源](docs/zh/00-philosophy.md#三稀缺资源)（9–13）·
+[四、agent 与派工](docs/zh/00-philosophy.md#四agent-与派工)（14–17）·
+[五、记忆与诚实](docs/zh/00-philosophy.md#五记忆与诚实)（18–21）·
+[六、创作](docs/zh/00-philosophy.md#六创作)（22–24）。
+
 ## 核心想法
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-    <img alt="控制面（主会话、subagent、外部 worker、skill、MCP 服务、任务库、记忆、闸门）在上，中间是很薄的入口层，下面是执行面（两台 ComfyUI 渲染机、只监听本机的旁路实例、云服务）" src="assets/architecture-light.svg" width="100%">
-  </picture>
+  <a href="assets/architecture-zh-light.svg">
+    <picture>
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/architecture-zh-narrow-dark.svg">
+      <source media="(max-width: 600px)" srcset="assets/architecture-zh-narrow-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-zh-dark.svg">
+      <img alt="控制面在控制机上（主会话、subagent、外部 worker、skill、MCP 服务、任务库、记忆、hook 与闸门），中间是很薄的入口层，下面是执行面（两台 ComfyUI 渲染机、只监听本机的旁路实例、云服务）。命令向下，结果向上" src="assets/architecture-zh-light.svg" width="880">
+    </picture>
+  </a>
 </p>
 
 现在大多数做图像生成的 agent 工具，要么长在 ComfyUI 里面，要么作为桥接挂在它旁边。这个仓库把 agent 放在所有后端的上面：规划、派工、预算、验收、记忆都在 agent 平台上完成；ComfyUI 渲染机也好，云服务也好，都只是可以替换的执行器。
@@ -41,10 +67,14 @@
 ## 每个任务走的流程
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/loop-dark.svg">
-    <img alt="受理、盘点、计划、探测、smoke、运行、验收、记录、清理，然后回到受理" src="assets/loop-light.svg" width="100%">
-  </picture>
+  <a href="assets/loop-zh-light.svg">
+    <picture>
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="assets/loop-zh-narrow-dark.svg">
+      <source media="(max-width: 600px)" srcset="assets/loop-zh-narrow-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/loop-zh-dark.svg">
+      <img alt="受理、盘点、计划、探测、smoke、运行、验收、记录、清理，然后回到受理" src="assets/loop-zh-light.svg" width="880">
+    </picture>
+  </a>
 </p>
 
 不管是一张测试图，还是上线一个新模型，都走同样的步骤：
@@ -80,17 +110,6 @@
 
 另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具）。
 
-## 参考环境
-
-| 机器 | 硬件 | 用途 |
-|---|---|---|
-| 控制机 | MacBook Air，Apple M5（10 核），24 GB | 跑 agent，不出图 |
-| Box A | Windows，NVIDIA RTX 5080 16 GB，AMD Ryzen 7 9800X3D，约 48 GB 内存 | 质量线和 LoRA 训练。它也是仓库主人的游戏电脑，agent 要让路。2026-10-13 起空闲时也会睡眠 |
-| Box B | Windows，NVIDIA RTX 4060 Ti 16 GB，32 GB 内存 | 草稿、测试、数据集。空闲时会睡眠 |
-| Linux 节点 | 一对 NVIDIA DGX Spark（一台主节点加一台工作节点） | 批处理作业和模型服务 |
-
-agent 这边：Claude Code，主会话用 Opus 5.5，subagent 用 Haiku、Sonnet、Opus；外部 worker 通过 [herdr](https://github.com/herdrdev/herdr) 调度（Cursor Composer 2.5、DeepSeek）；任务管理用 [bd（beads）](https://github.com/gastownhall/beads)。出图这边：两台机器都是 ComfyUI 0.42.1，新模型另开只监听本机的旁路实例。
-
 ## 使用 skill
 
 skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一份 `SKILL.md`，加一个按需打开的 `references/` 目录。
@@ -101,6 +120,9 @@ skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一
 /plugin marketplace add lepetitprince716-prog/agent-genops
 /plugin install agent-genops@agent-genops
 ```
+
+<details>
+<summary>其他 agent 与本地副本</summary>
 
 用别的 agent，或者想留一份本地副本，就克隆仓库，把这个文件夹链接到你的 agent 读取 skill 的位置。
 
@@ -121,6 +143,8 @@ ln -s "$PWD/agent-genops/skills/agent-genops" ~/.claude/skills/agent-genops
 
 skill 里只有方法。你自己的机器、入口和命令写在 `~/.config/agent-genops/LOCAL.md`，skill 发现它存在就会读，它永远不进这个仓库。要记哪些内容，可以参考 [templates/fleet.example.yaml](templates/fleet.example.yaml)。
 
+</details>
+
 ## 派工速查
 
 | 活 | 交给谁 |
@@ -135,6 +159,17 @@ skill 里只有方法。你自己的机器、入口和命令写在 `~/.config/ag
 | 用其他厂商模型跑并行任务 | herdr worker（Cursor Composer、DeepSeek） |
 
 一条线做到底的活留在主会话里。详见[派工](docs/zh/03-dispatch.md)。
+
+## 参考环境
+
+| 机器 | 硬件 | 用途 |
+|---|---|---|
+| 控制机 | MacBook Air，Apple M5（10 核），24 GB | 跑 agent，不出图 |
+| Box A | Windows，NVIDIA RTX 5080 16 GB，AMD Ryzen 7 9800X3D，约 48 GB 内存 | 质量线和 LoRA 训练。它也是仓库主人的游戏电脑，agent 要让路。2026-10-13 起空闲时也会睡眠 |
+| Box B | Windows，NVIDIA RTX 4060 Ti 16 GB，32 GB 内存 | 草稿、测试、数据集。空闲时会睡眠 |
+| Linux 节点 | 一对 NVIDIA DGX Spark（一台主节点加一台工作节点） | 批处理作业和模型服务 |
+
+agent 这边：Claude Code，主会话用 Opus 5.5，subagent 用 Haiku、Sonnet、Opus；外部 worker 通过 [herdr](https://github.com/herdrdev/herdr) 调度（Cursor Composer 2.5、DeepSeek）；任务管理用 [bd（beads）](https://github.com/gastownhall/beads)。出图这边：两台机器都是 ComfyUI 0.42.1，新模型另开只监听本机的旁路实例。
 
 ## 保持仓库干净
 
