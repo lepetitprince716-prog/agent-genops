@@ -8,10 +8,10 @@ Rules are scoped per family. Never carry a rule across families. The one excepti
 ## Every prompt: remove the AI look
 
 1. Make five decisions before writing: moment (an action half done), light (one physical source and where it falls), camera (distance plus angle), style (one voice), colour (muted base plus one accent on a named object). Fill gaps yourself; show the five in one line.
-2. Name the reflex answer (the picture you would draw without thinking). At least two decisions must differ from it.
-3. No quality tags, no look attractors (`bokeh`, `glowing`, `lens flare`, `sparkles`, `cinematic lighting`, `hyperrealistic`, `shiny skin`, `perfect face`, `vibrant colors`). Add `no text`; negative `signature, watermark, artist name` where negatives work.
+2. Name the reflex answer (the picture you would draw without thinking). At least two decisions must differ from it. Then tell the scene in one real-world sentence (who, where, why); if it does not hold up, change it. Hang the accent and the light on things already in the scene, never on an added prop.
+3. No quality tags, no look attractors (`bokeh`, `glowing`, `lens flare`, `sparkles`, `cinematic lighting`, `hyperrealistic`, `shiny skin`, `perfect face`, `vibrant colors`). Add `no text`; negative `signature, watermark, artist name` where negatives work. Every noun gets drawn, sometimes several times, and so does the object a verb implies: colour goes on something already present (a yellow scarf, not `one yellow umbrella outside the window`, which drew open umbrellas indoors), and an action is written as which body part touches what (`pressing her palm against the window glass`, not `wiping fog off the window`, which drew a handkerchief and steam).
 4. Lint against the rules file before rendering: zero errors, one written reason per kept warning.
-5. After rendering, crop at full size and check eight signals: composition, light, colour, surface, selection, structure, text, moment.
+5. After rendering, crop at full size and check eight signals plus plausibility: composition, light, colour, surface, selection, structure, text, moment, and whether the scene makes sense in the real world. An umbrella open indoors, a prop from nowhere or an action that does not match its object is a hard fail, on par with a structural error.
 6. A hit changes the decision that caused it. Re-roll at most once, then deliver and name what remains. Structural errors go to repair.
 
 Full text and reasons: `docs/en/10-prompting-and-review.md` § "Removing the AI look".

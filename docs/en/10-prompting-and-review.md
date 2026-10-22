@@ -11,7 +11,7 @@ scoped per family and measured on our own boxes; agents judge facts, the owner j
 >   have their own syntax, and a rule that helps one is noise or harm in another.
 > - Every prompt, in any family, first gets five decisions (moment, sourced light, camera, one
 >   style voice, muted colour with one accent), a lint before rendering, and a cropped check of
->   the output against eight AI-look signals.
+>   the output against eight AI-look signals plus a plausibility check.
 > - When another model writes prompts, a house rulebook travels with the packet: target-model
 >   facts, banned tags, syntax, a strict JSON output schema, and no example prompts.
 > - A temperament card per checkpoint records priors and levers so nobody re-derives them.
@@ -141,13 +141,25 @@ the camera, soft light from nowhere, oversaturated colour, detail spread evenly 
    Then name the reflex answer, the picture you would draw without thinking. Do not draw it: at
    least two of the five decisions must differ from it. Why: the reflex answer is the
    distribution mode by another name.
+
+   Last, test plausibility: tell the scene in one real-world sentence (who, where, why they are
+   doing this). If the sentence does not hold up, change the scene. Hang the accent and the light
+   on things already there (the cup in a hand, a scarf, the streetlight outside), never on a prop
+   added for colour or light.
 2. **Keep attractor tokens out.** Quality tags (`masterpiece`, `best quality`, `absurdres`, `8k`,
    the `score_*` family) and look attractors (`bokeh`, `glowing`, `lens flare`, `sparkles`,
    `cinematic` / `dramatic` / `volumetric lighting`, `hyperrealistic`, `shiny skin`,
    `perfect face`, `vibrant colors`). Add `no text` to the positive and
    `signature, watermark, artist name` to the negative where negatives work. Give detail only to
    the spot the eye lands on first. Words the owner typed stay; mention once that they attract
-   the look.
+   the look. Every noun gets drawn, sometimes several times over, and so does the object a verb
+   implies: write colour on something already present, say where outside things are, and write
+   an action as which body part touches what. Why: on 2026-10-22 an accent written as
+   `one yellow umbrella outside the window` drew open patio umbrellas inside a cafe on all three
+   seeds, and `wiping fog off the window with her sleeve` drew a handkerchief held to the mouth
+   plus a cloud of steam. A yellow scarf and `pressing her palm against the window glass` removed
+   the umbrellas, the handkerchief and the steam cloud on the same seeds; one faint wisp of haze
+   remained on one seed.
 3. **Lint before rendering.** Keep the token lists and the five decisions as data in one rules
    file and check every prompt against it: zero errors before a render, and one written reason
    for each warning you keep. Natural-language families can share one lint line; syntax rules
@@ -155,13 +167,15 @@ the camera, soft light from nowhere, oversaturated colour, detail spread evenly 
    copied from a fast-lane runbook failed two error rules (no camera decision, no light source)
    the first time it was linted. A lint that passes says only that nothing looks AI at a
    glance; it says nothing about taste.
-4. **Check the output against eight signals, cropped at full size.** Composition (centred,
+4. **Check the output against eight signals and plausibility, cropped at full size.** Composition (centred,
    frontal, posed?), light (can you tell where it comes from, do the shadows agree?), colour
    (oversaturated, glowing, hazy, or the model's default grade?), surface (plastic skin,
    oversharpened, melting lines?), selection (detail spread evenly, nowhere for the eye to
    rest?), structure (hands, hair ends, accessories, extra ears or limbs?), text (signature,
-   watermark, fake letters?), and the moment (with the prompt hidden, what is this picture
-   about?).
+   watermark, fake letters?), the moment (with the prompt hidden, what is this picture
+   about?), and plausibility (does the scene make sense in the real world?). An umbrella open
+   indoors, a prop from nowhere, an action that does not match its object, or a comic result is a
+   hard fail, on par with a structural error.
 5. **Fix the cause, re-roll once.** A hit changes the one decision that caused it (another light,
    another camera, a token removed), not more adjectives. Re-roll at most once by default, then
    deliver and say which signals remain. Structural errors go to a repair pass, not a re-roll.
