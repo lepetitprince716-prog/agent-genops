@@ -9,6 +9,9 @@ scoped per family and measured on our own boxes; agents judge facts, the owner j
 > **TL;DR**
 > - Prompt rules do not travel between families. Anima, NovelAI, Qwen-Image and Midjourney each
 >   have their own syntax, and a rule that helps one is noise or harm in another.
+> - Every prompt, in any family, first gets five decisions (moment, sourced light, camera, one
+>   style voice, muted colour with one accent), a lint before rendering, and a cropped check of
+>   the output against eight AI-look signals.
 > - When another model writes prompts, a house rulebook travels with the packet: target-model
 >   facts, banned tags, syntax, a strict JSON output schema, and no example prompts.
 > - A temperament card per checkpoint records priors and levers so nobody re-derives them.
@@ -116,6 +119,56 @@ constraint, or "measured on this line, date". Only the last one is a fact here.
    "in her thirties, mature face" fixed it (2026-10-15).
 8. **Seed floor for A/B: 3.8/255 mean pixel difference on V8.2 reruns, 8.6/255 on Niji 7.**
    Effects smaller than that are noise.
+
+## Removing the AI look (every prompt)
+
+The per-family rules above are syntax. This step sits before them and applies to every family,
+because the cause is the same everywhere: a vague request gives the model no decisions, so it
+falls back to the mode of its training data. That mode is the AI look: a centred bust looking at
+the camera, soft light from nowhere, oversaturated colour, detail spread evenly over the frame.
+
+1. **Make five decisions before writing the prompt.** Fill whatever the request leaves open
+   yourself instead of asking, and show the five in one line so the owner can correct them.
+
+   | Decision | Write it as | Does not count |
+   |---|---|---|
+   | Moment | One thing happening right now, an action half done | standing, smiling, looking at the camera |
+   | Light | One physical source (lamp, window, sky, fire) and where it falls on the subject | soft light, nice light, cinematic lighting |
+   | Camera | Distance plus angle; the gaze may leave the camera | centred bust plus eye contact; a tiny figure in a wide shot |
+   | Style | One voice: an artist string, an `@artist` tag, a style LoRA, or one named medium | more than three artists; medium modifier words standing in for an artist |
+   | Colour | A muted base plus exactly one accent, placed on a named object | vibrant, colourful, saturation everywhere |
+
+   Then name the reflex answer, the picture you would draw without thinking. Do not draw it: at
+   least two of the five decisions must differ from it. Why: the reflex answer is the
+   distribution mode by another name.
+2. **Keep attractor tokens out.** Quality tags (`masterpiece`, `best quality`, `absurdres`, `8k`,
+   the `score_*` family) and look attractors (`bokeh`, `glowing`, `lens flare`, `sparkles`,
+   `cinematic` / `dramatic` / `volumetric lighting`, `hyperrealistic`, `shiny skin`,
+   `perfect face`, `vibrant colors`). Add `no text` to the positive and
+   `signature, watermark, artist name` to the negative where negatives work. Give detail only to
+   the spot the eye lands on first. Words the owner typed stay; mention once that they attract
+   the look.
+3. **Lint before rendering.** Keep the token lists and the five decisions as data in one rules
+   file and check every prompt against it: zero errors before a render, and one written reason
+   for each warning you keep. Natural-language families can share one lint line; syntax rules
+   for another family do not apply to them. Why: a stock `1girl, solo, ...` template that agents
+   copied from a fast-lane runbook failed two error rules (no camera decision, no light source)
+   the first time it was linted. A lint that passes says only that nothing looks AI at a
+   glance; it says nothing about taste.
+4. **Check the output against eight signals, cropped at full size.** Composition (centred,
+   frontal, posed?), light (can you tell where it comes from, do the shadows agree?), colour
+   (oversaturated, glowing, hazy, or the model's default grade?), surface (plastic skin,
+   oversharpened, melting lines?), selection (detail spread evenly, nowhere for the eye to
+   rest?), structure (hands, hair ends, accessories, extra ears or limbs?), text (signature,
+   watermark, fake letters?), and the moment (with the prompt hidden, what is this picture
+   about?).
+5. **Fix the cause, re-roll once.** A hit changes the one decision that caused it (another light,
+   another camera, a token removed), not more adjectives. Re-roll at most once by default, then
+   deliver and say which signals remain. Structural errors go to a repair pass, not a re-roll.
+   Why: piling on descriptors moves the prompt further from a decision.
+
+This is the light, per-image version. A full round of concept cards, a taste ledger and
+distillation is the heavy version; use it when a direction is being explored, not for one image.
 
 ## Delegated prompt writing
 
