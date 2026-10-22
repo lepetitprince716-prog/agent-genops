@@ -102,6 +102,15 @@ Every job, from one test image to bringing up a new model, goes through the same
 
 ## What is inside
 
+Where to start: read [Philosophy](docs/en/00-philosophy.md) first, then the row that fits your
+setup.
+
+| Your setup | Then read |
+|---|---|
+| One GPU in the machine you work on | [Render discipline](docs/en/06-render-discipline.md), [Debugging](docs/en/05-debugging.md), [Model bring-up](docs/en/04-model-bringup.md), [Performance](docs/en/07-performance.md) |
+| Cloud services only | [Providers](docs/en/09-providers.md), [Prompting and review](docs/en/10-prompting-and-review.md), [Inventory](docs/en/08-inventory.md) |
+| Several machines and several agents | [Architecture](docs/en/01-architecture.md), [Environment](docs/en/02-environment.md), [Dispatch](docs/en/03-dispatch.md), [Continuity](docs/en/12-continuity.md) |
+
 | Page | What it answers |
 |---|---|
 | [Philosophy](docs/en/00-philosophy.md) | The 24 working rules and why each one exists |
@@ -119,9 +128,15 @@ Every job, from one test image to bringing up a new model, goes through the same
 | [Continuity](docs/en/12-continuity.md) | Memory files, state snapshots, handoffs, the task tracker |
 | [Lessons](docs/en/13-lessons.md) | Dated incidents and the rules they produced |
 
+The pages name the author's own scripts (an intent router, a model index, ledgers) as examples.
+They do not ship with this repo. The roles table in [SKILL.md](skills/agent-genops/SKILL.md) says
+what each one has to do and what a plain ComfyUI can stand in with;
+[templates/LOCAL.example.md](templates/LOCAL.example.md) is where you write down your own.
+Unfamiliar terms are in the [glossary](skills/agent-genops/references/glossary.md).
+
 Also in the repo: [templates/](templates/) (task packet, model card, A/B write-up, run order,
-handoff, memory entry, subagent definitions) and [tools/](tools/) (the privacy scanner this
-repo runs on itself).
+handoff, memory entry, LOCAL.md, subagent definitions) and [tools/](tools/) (the privacy scanner
+this repo runs on itself).
 
 ## Use the skill
 
@@ -136,18 +151,27 @@ plugin:
 /plugin install agent-genops@agent-genops
 ```
 
+After installing:
+
+1. Run `/reload-plugins` if the install asks for it, or start a new session. Then ask the agent
+   which skills it has; `agent-genops` should be in the list.
+2. Copy [templates/LOCAL.example.md](templates/LOCAL.example.md) to
+   `~/.config/agent-genops/LOCAL.md` and fill in what plays each role on your machine. The file
+   stays on your machine.
+3. Optional: copy the files in [templates/agents/](templates/agents/) to `~/.claude/agents/` for
+   the subagent tiers the skill dispatches to. The plugin does not install them.
+4. Try it: "Use agent-genops to plan one smoke render on my ComfyUI at http://127.0.0.1:8188."
+
 <details>
 <summary>Other agents and local copies</summary>
 
-For other agents, or to keep a local copy, clone the repo and link the folder to wherever your
-agent loads skills from.
+For other agents, or to keep a local copy, clone the repo and link the skill folder to wherever
+your agent loads skills from. The commands use Claude Code's folder; swap in yours from the table.
 
 ```bash
-git clone https://github.com/lepetitprince716-prog/agent-genops.git
-```
-
-```bash
-ln -s "$PWD/agent-genops/skills/agent-genops" ~/.claude/skills/agent-genops
+git clone https://github.com/lepetitprince716-prog/agent-genops.git ~/agent-genops
+mkdir -p ~/.claude/skills
+ln -s ~/agent-genops/skills/agent-genops ~/.claude/skills/agent-genops
 ```
 
 | Agent | Skill folder |
@@ -157,9 +181,8 @@ ln -s "$PWD/agent-genops/skills/agent-genops" ~/.claude/skills/agent-genops
 | Cursor | `~/.cursor/skills/` or `~/.agents/skills/` |
 | Grok Build | `~/.grok/skills/` (or `.grok/skills/` in a project) |
 
-The skill holds the method only. Your machines, entry points and commands go in
-`~/.config/agent-genops/LOCAL.md`, which the skill reads when it exists and which never enters
-this repo. [templates/fleet.example.yaml](templates/fleet.example.yaml) shows what to record.
+The templates stay in the clone, so put the clone's path in LOCAL.md. Start a new session after
+linking and check that the agent lists the skill.
 
 </details>
 
@@ -177,6 +200,8 @@ this repo. [templates/fleet.example.yaml](templates/fleet.example.yaml) shows wh
 | Parallel lanes on other vendors' models | herdr workers (Cursor Composer, DeepSeek) |
 
 Work that is one chain of steps stays in the root session. See [Dispatch](docs/en/03-dispatch.md).
+The tier names are the subagent definitions in [templates/agents/](templates/agents/); with
+another agent, map them to your cheapest, default and strongest model.
 
 ## Reference setup
 

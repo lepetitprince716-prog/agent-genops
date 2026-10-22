@@ -5,9 +5,9 @@ Read when: writing PowerShell or cmd for a Windows box, starting or restarting a
 
 ## Transport
 
-- Use the project's managed SSH / copy wrappers and its remote PowerShell runner. Never bare ssh from a managed session.
-- Short non-PowerShell command (`ver`, `sc query`, `taskkill`): one cmd one-liner through the SSH wrapper.
-- Any PowerShell, however short: write a `.ps1` file, send it through the runner. Never `ssh ... powershell -Command "..."`.
+- If the setup has managed SSH and copy wrappers and a remote PowerShell runner, use them, and never bare ssh from a managed session. Without them, plain ssh and scp do; the rules below still apply.
+- Short non-PowerShell command (`ver`, `sc query`, `taskkill`): one cmd one-liner over ssh.
+- Any PowerShell, however short: write a `.ps1` file and send it through the runner (without one, copy it over and run it with `powershell -File`). Never `ssh ... powershell -Command "..."`.
   - cmd.exe is the default remote shell and parses first.
   - UTF-8 into PowerShell 5.1 stdin is lossy.
   - cmd command line limit: 8191 characters.

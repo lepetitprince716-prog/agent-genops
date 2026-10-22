@@ -5,6 +5,10 @@ Read when: about to call anything outside the Controller, touch a credential, sp
 
 ## Egress
 
+These rules apply where the setup enforces managed network wrappers, one approved entry point per
+protocol. Without them, keep the principle (one network path, no routing around a denial), use
+plain ssh and curl, and follow the secret rules below.
+
 - Use the managed wrapper for the protocol. One wrapper per protocol; nothing else reaches the network.
 - One wrapper command per shell call. Wrapper is the first token.
 - Put nothing before it: no `cd`, no assignment, no `&&`, no loop. Run those in a separate call.
@@ -87,17 +91,10 @@ Structure:
 - Isolation tests assert outputs resolve inside the restricted subtree, not only that config loaded.
 - Public CI: no secrets, no self-hosted runners, actions pinned to full commit SHAs.
 
-## Privacy guard (this repo)
+## Editing the agent-genops repository
 
-1. After cloning, run once: `git config core.hooksPath .githooks`. This enables pre-commit, commit-msg and pre-push hooks.
-2. Optional private patterns go in `~/.config/agent-genops/private_rules.json`. Never add that file to the repo.
-3. Before any push, run: `python3 tools/privacy_scan.py --tracked --history`.
-4. CI runs the same scan.
-
-Stop conditions:
-
-- Scan reports a finding: do not push. Fix the file; if the finding is in history, report to the owner. Do not rewrite history on your own.
-- Hooks not active (`git config core.hooksPath` does not print `.githooks`): enable them before committing.
+Only when changing agent-genops itself: follow its `CONTRIBUTING.md` (hooks on, a noreply
+identity, the privacy scan before a pull request).
 
 ## Report
 

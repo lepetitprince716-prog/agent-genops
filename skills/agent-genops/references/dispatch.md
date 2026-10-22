@@ -29,6 +29,9 @@ model and effort, use exactly that; if no definition exists, copy a sibling defi
 | Review a draft plan before leaving plan mode | plan-reviewer |
 | Verify claims before a commit or a user-facing summary | fact-checker |
 
+The tier names are the agent files in the repo's `templates/agents/`. With another agent, map them
+to your cheapest, default and strongest model.
+
 Never:
 - Haiku: coding chains, design, debugging, security-adjacent work, web research.
 - Any worker: calling the advisor tool, delegating further.
@@ -48,7 +51,9 @@ Never:
 - pi effort: `low` run-and-report, extract, reformat; `medium` default; `high` debugging, multi-file
   reasoning, design review. Never `xhigh` or `max` for DeepSeek. Unset means max.
 - DeepSeek peak (as of 2026-09-27): weekdays 01:00-04:00 and 06:00-10:00 UTC. Check before each spawn.
-- Never launch a worker CLI from the session's own shell. Use the multiplexer service.
+- If the session's shell is sandboxed, never launch a worker CLI from it: the worker dies in a
+  nested sandbox (exit 71 in the reference setup). Use a multiplexer that runs workers outside the
+  sandbox; with none, run the lane in the root.
 - Long job: spawn without wait, then `wait`; a `timeout` status is normal, call `wait` again unchanged.
 - After changing a running worker's instructions, read the pane and check its real file activity a
   minute later. "Submitted" may mean "queued".

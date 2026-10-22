@@ -68,7 +68,10 @@ WHY_NOT_UTF8 = "file is not valid UTF-8, so it cannot be scanned"
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
-WHY_IDENTITY = "email is not on the allowed_emails list; use a GitHub noreply address"
+WHY_IDENTITY = (
+    "email is not on the allowed_emails list; set your GitHub noreply address (Settings > Emails): "
+    "git config user.email '<id>+<name>@users.noreply.github.com'"
+)
 
 
 class ScanError(Exception):

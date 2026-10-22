@@ -12,13 +12,36 @@ job from a canvas tool.
 
 ## Start here
 
-1. If `~/.config/agent-genops/LOCAL.md` exists, read it first. It maps the roles in this skill
-   (intent router, MCP server, boxes, ledgers, gallery, task tracker, worker launcher) to this
-   machine's real commands. Its facts beat the defaults below.
-2. If it does not exist, find the project's own entry points (an intent router CLI, an MCP
-   server, a script catalogue, runbooks) before writing anything. Do not invent commands.
+1. If `~/.config/agent-genops/LOCAL.md` exists, read it first. It says what plays each role
+   below on this machine, where the repo clone is, and the budgets. Its facts beat the defaults
+   in this skill. Its template is `templates/LOCAL.example.md` in the repo.
+2. Command names in the references (a router's `--probe`, a model index's `refresh` and
+   `lookup`, `--keep-into`) come from the author's setup. They stand for roles; none of them
+   ship with this skill. Without LOCAL.md, find the project's own entry points (an intent router
+   CLI, an MCP server, a script catalogue, runbooks), then use the fallbacks below. Do not invent
+   commands.
 3. Treat every state note you read (memory, STATE files, handoffs) as a dated snapshot. Check
    it against git or the live machine before you rely on it.
+4. For an unfamiliar term, read `references/glossary.md`.
+
+## Roles the references assume
+
+| Role | What the references expect | Fallback with a plain ComfyUI |
+|---|---|---|
+| Intent router | One CLI that prints the plan, probes (exit 3 = HOLD) and runs | Submit the graph with `POST /prompt`; read the result with `GET /history/<prompt_id>` |
+| Box probe | Reachable, models and nodes present, queue idle, owner not using it | `GET /queue` shows no running or pending job; `GET /system_stats` shows free VRAM; ask the owner |
+| Model index | `status`, `refresh` and `lookup` over models and LoRAs | `GET /object_info`: each loader's inputs list the files it can load |
+| MCP server | Box status, model lists and graph submit as agent tools | Not needed; the HTTP calls above cover it |
+| Output isolation | Each job's images moved into the job's own folder as soon as they land | Copy outputs by prompt ID into a per-job folder before the next job |
+| Ledgers | One row per paid image, per verdict, per run | A CSV or JSONL file per ledger |
+| Review page | Shows a batch and collects the owner's verdicts | A contact sheet or any gallery |
+| Task tracker | Claim, hand over, close | Any tracker; a TODO file for a single session |
+| Worker launcher | Starts other vendors' CLIs outside the session sandbox | None needed: run the lane in the root |
+| Network wrappers | One managed entry point per protocol | Plain ssh and curl; the secret rules still apply |
+
+Controller and render box are roles; one machine may hold both. The templates named in the
+references (`templates/...`) live in the repo, not in this folder: in the clone that LOCAL.md
+names, or at https://github.com/lepetitprince716-prog/agent-genops/tree/main/templates.
 
 ## The loop (every job)
 
@@ -39,8 +62,9 @@ job from a canvas tool.
 - One smoke image before any batch of three or more.
 - Pick the engine by what the step must prove: base pass for probes, quality stack for finals.
 - An exit code, a receipt or a worker's report is a claim. The file on disk is the evidence.
-- Paid renders: quote first, stay inside the standing caps, write a ledger row per image, pass
-  the resume flag, reconcile afterwards. A cap is a ceiling, not a target.
+- Paid renders: quote first, stay inside the caps in LOCAL.md (no caps there: ask the owner),
+  write a ledger row per image, pass the resume flag, reconcile afterwards. A cap is a ceiling,
+  not a target.
 - Scalar aesthetic scores filter, they never rank. Review agents rank, they never crown.
 - Measure before tuning. A/B uses an explicit off arm, at least three seeds and warm runs.
   Change the biggest lever first. Quality tiers are judged by the owner.
@@ -84,13 +108,18 @@ of the root's context. Give each job to the lowest tier whose failure you can st
 | Claims about code, tests, libraries before commit or report | Fact checker |
 | Parallel lanes on other vendors' models | Terminal-multiplexer workers |
 
+The tier names match the subagent definitions in the repo's `templates/agents/`. This plugin has
+no `agents/` directory, so installing it does not install them: copy them to your agent directory
+(Claude Code: `~/.claude/agents/`), or map each tier to your agent's cheapest, default and
+strongest model. Terminal-multiplexer workers are optional; without one, run the lane in the root.
+
 Every packet states: objective, owned paths, context paths, non-goals, allowed commands,
 acceptance checks, and where to write a short result. Workers never delegate further.
 
 ## Stop and ask the owner
 
 - Anything irreversible or visible outside this machine: deleting originals, publishing,
-  posting, pushing to a protected branch, spending beyond the standing budget.
+  posting, pushing to a protected branch, spending beyond the caps in LOCAL.md.
 - Taste verdicts, quality tiers, and direction forks.
 - GPU work on the owner's personal machine while they are using it.
 - Accepting a gated model licence or logging in to a service.

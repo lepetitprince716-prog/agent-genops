@@ -91,6 +91,14 @@
 
 ## 仓库里有什么
 
+从哪里开始：先读[理念](docs/zh/00-philosophy.md)，再按你的环境选一行往下读。
+
+| 你的环境 | 接着读 |
+|---|---|
+| 一张显卡，就装在你干活的这台电脑上 | [出图纪律](docs/zh/06-render-discipline.md)、[调试](docs/zh/05-debugging.md)、[模型上线](docs/zh/04-model-bringup.md)、[性能](docs/zh/07-performance.md) |
+| 只用云服务 | [服务分工](docs/zh/09-providers.md)、[提示词与评审](docs/zh/10-prompting-and-review.md)、[库存管理](docs/zh/08-inventory.md) |
+| 多台机器、多个 agent | [架构](docs/zh/01-architecture.md)、[环境](docs/zh/02-environment.md)、[派工](docs/zh/03-dispatch.md)、[记忆与交接](docs/zh/12-continuity.md) |
+
 | 页面 | 回答什么问题 |
 |---|---|
 | [理念](docs/zh/00-philosophy.md) | 24 条工作规则，以及每条为什么存在 |
@@ -108,7 +116,9 @@
 | [记忆与交接](docs/zh/12-continuity.md) | 记忆文件、状态快照、交接、任务库 |
 | [教训](docs/zh/13-lessons.md) | 带日期的事故，以及由此定下的规则 |
 
-另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具）。
+各页提到的脚本（意图路由、模型索引、账本等）是作者自己的，只当例子，这个仓库里没有。每个角色要做到什么、只有 ComfyUI 时拿什么顶替，写在 [SKILL.md](skills/agent-genops/SKILL.md) 的角色表里；你自己的对应关系填进 [templates/LOCAL.example.md](templates/LOCAL.example.md)。看不懂的词查[术语表](skills/agent-genops/references/glossary.md#中文)。
+
+另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、LOCAL.md、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具）。
 
 ## 使用 skill
 
@@ -121,17 +131,22 @@ skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一
 /plugin install agent-genops@agent-genops
 ```
 
+装好之后：
+
+1. 安装提示需要的话运行 `/reload-plugins`，或者开一个新会话。然后问 agent 它有哪些 skill，列表里应该有 `agent-genops`。
+2. 把 [templates/LOCAL.example.md](templates/LOCAL.example.md) 复制到 `~/.config/agent-genops/LOCAL.md`，填上你的机器上由什么担任各个角色。这个文件只留在你的机器上。
+3. 可选：把 [templates/agents/](templates/agents/) 里的文件复制到 `~/.claude/agents/`，skill 派工用的几档 subagent 就有了。插件不会自动安装它们。
+4. 试一句：「用 agent-genops 给我 http://127.0.0.1:8188 上的 ComfyUI 规划一次 smoke 出图。」
+
 <details>
 <summary>其他 agent 与本地副本</summary>
 
-用别的 agent，或者想留一份本地副本，就克隆仓库，把这个文件夹链接到你的 agent 读取 skill 的位置。
+用别的 agent，或者想留一份本地副本，就克隆仓库，把 skill 文件夹链接到你的 agent 读取 skill 的位置。下面的命令用的是 Claude Code 的目录，换成表里你的 agent 的目录即可。
 
 ```bash
-git clone https://github.com/lepetitprince716-prog/agent-genops.git
-```
-
-```bash
-ln -s "$PWD/agent-genops/skills/agent-genops" ~/.claude/skills/agent-genops
+git clone https://github.com/lepetitprince716-prog/agent-genops.git ~/agent-genops
+mkdir -p ~/.claude/skills
+ln -s ~/agent-genops/skills/agent-genops ~/.claude/skills/agent-genops
 ```
 
 | agent | skill 目录 |
@@ -141,7 +156,7 @@ ln -s "$PWD/agent-genops/skills/agent-genops" ~/.claude/skills/agent-genops
 | Cursor | `~/.cursor/skills/` 或 `~/.agents/skills/` |
 | Grok Build | `~/.grok/skills/`（或项目里的 `.grok/skills/`） |
 
-skill 里只有方法。你自己的机器、入口和命令写在 `~/.config/agent-genops/LOCAL.md`，skill 发现它存在就会读，它永远不进这个仓库。要记哪些内容，可以参考 [templates/fleet.example.yaml](templates/fleet.example.yaml)。
+模板留在克隆里，所以要把克隆的路径写进 LOCAL.md。链接好之后开一个新会话，确认 agent 能列出这个 skill。
 
 </details>
 
@@ -158,7 +173,7 @@ skill 里只有方法。你自己的机器、入口和命令写在 `~/.config/ag
 | 提交前核对关于代码、测试、库的说法 | fact checker |
 | 用其他厂商模型跑并行任务 | herdr worker（Cursor Composer、DeepSeek） |
 
-一条线做到底的活留在主会话里。详见[派工](docs/zh/03-dispatch.md)。
+一条线做到底的活留在主会话里。详见[派工](docs/zh/03-dispatch.md)。这些档位名对应 [templates/agents/](templates/agents/) 里的 subagent 定义；用别的 agent 时，换成你手上最便宜、默认和最强的模型。
 
 ## 参考环境
 

@@ -15,11 +15,13 @@ Copy a template, fill the angle-bracket placeholders, delete what does not apply
 | [ab-test.md](ab-test.md) | Writing up a speed or quality comparison | [Performance](../docs/en/07-performance.md) |
 | [prompt-rulebook.md](prompt-rulebook.md) | Sending prompt-writing work to another model | [Prompting and review](../docs/en/10-prompting-and-review.md) |
 | [incident-rule.md](incident-rule.md) | Turning something that went wrong into a rule | [Lessons](../docs/en/13-lessons.md) |
-| [fleet.example.yaml](fleet.example.yaml) | Describing your own machines and entry points for the skill | [Environment](../docs/en/02-environment.md) |
+| [LOCAL.example.md](LOCAL.example.md) | Telling the skill what plays each role on your machine; copy it to `~/.config/agent-genops/LOCAL.md` | [Use the skill](../README.md#use-the-skill) |
+| [fleet.example.yaml](fleet.example.yaml) | Describing your machines and ComfyUI instances in detail; LOCAL.md points to it | [Environment](../docs/en/02-environment.md) |
 | [agents/](agents/) | Claude Code subagent definitions for the tier ladder | [Dispatch](../docs/en/03-dispatch.md) |
 
-The subagent definitions go in `~/.claude/agents/` (or `.claude/agents/` in a project). Check the
-`model` field against the models your account can use before copying them.
+The subagent definitions go in `~/.claude/agents/` (or `.claude/agents/` in a project). The plugin
+does not install them. Check the `model` field against the models your account can use before
+copying them.
 
 ---
 
@@ -38,7 +40,8 @@ The subagent definitions go in `~/.claude/agents/` (or `.claude/agents/` in a pr
 | [ab-test.md](ab-test.md) | 写速度或质量对比的记录 | [性能](../docs/zh/07-performance.md) |
 | [prompt-rulebook.md](prompt-rulebook.md) | 把写提示词的活交给别的模型 | [提示词与评审](../docs/zh/10-prompting-and-review.md) |
 | [incident-rule.md](incident-rule.md) | 把一次出错变成一条规则 | [教训](../docs/zh/13-lessons.md) |
-| [fleet.example.yaml](fleet.example.yaml) | 给 skill 描述你自己的机器和入口 | [环境](../docs/zh/02-environment.md) |
+| [LOCAL.example.md](LOCAL.example.md) | 告诉 skill 你的机器上由什么来担任各个角色；复制到 `~/.config/agent-genops/LOCAL.md` | [使用 skill](../README.zh-CN.md#使用-skill) |
+| [fleet.example.yaml](fleet.example.yaml) | 详细描述你的机器和 ComfyUI 实例；LOCAL.md 会指向它 | [环境](../docs/zh/02-environment.md) |
 | [agents/](agents/) | 按分档写好的 Claude Code subagent 定义 | [派工](../docs/zh/03-dispatch.md) |
 
-subagent 定义放进 `~/.claude/agents/`（或项目里的 `.claude/agents/`）。复制之前，先确认 `model` 字段写的模型你的账号能用。
+subagent 定义放进 `~/.claude/agents/`（或项目里的 `.claude/agents/`），插件不会自动安装它们。复制之前，先确认 `model` 字段写的模型你的账号能用。

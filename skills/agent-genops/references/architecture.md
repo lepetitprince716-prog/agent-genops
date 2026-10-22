@@ -12,7 +12,8 @@ Read when: you are about to render, add a tool or script, touch a box, or route 
 
 - Plan, dispatch, verify and record in the control plane.
 - Treat every execution backend as swappable. Put backend specifics in its engine or runbook, not in the root's reasoning.
-- Never render on the Controller.
+- Never render on the Controller. Controller and render box are roles: on a single machine that
+  holds both, probe before every render and keep agent work from competing with a running job.
 
 ## Layers (top to bottom)
 
@@ -78,7 +79,7 @@ When adding a stable script: docstring, one index line, one registry entry.
 | Both eligible, Box A busy (low free VRAM, queue not empty, unreachable, owner gaming) | Box B |
 | Test render, smoke, A/B arm, dataset | Box B, no per-batch ask (if your owner has authorised it) |
 | Sidecar line | run a script on the sidecar's host that calls its loopback |
-| Anything on the Controller | refuse |
+| Anything on a Controller that is not also a render box | refuse |
 
 - Busy thresholds assume resident models. Do not use empty-GPU numbers.
 - Do not free VRAM after each render. Let the lease and idle reaper release it.
@@ -87,7 +88,7 @@ When adding a stable script: docstring, one index line, one registry entry.
 ## Reachability
 
 - Route order: LAN, then tunnel, then mesh VPN. Use the route picker's choice; do not hard-code a host.
-- Go through managed wrappers only. One wrapper per command.
+- Where managed wrappers exist, go through them only, one wrapper per command (see `safety.md`).
 - Pass the resolved full URL to request helpers, never a box alias.
 - Health: probe the ComfyUI queue endpoint. Do not use ping. Do not rely on system-stats alone.
 - Do not run route status or refresh from the sandbox; it writes DOWN into the cache.

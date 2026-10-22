@@ -19,9 +19,8 @@ The root plans, dispatches, verifies and records. It does not hand off work it c
 tool calls.
 
 1. **Work the root can finish in a few tool calls stays in the root.**
-   Why: Anthropic's measurement, cited in my standing policy: on single-chain work, the same
-   model at lower effort beat an added worker every time. A worker costs a packet, a cold start and
-   an acceptance pass.
+   Why: a worker costs a packet, a cold start and an acceptance pass, and it starts without the
+   root's context. On single-chain work that cost buys nothing.
 2. **Delegate for two reasons only: to fan out independent lanes, or to keep a large read out of the root's context.**
    Why: standing rule since 2026-07-26 (threshold-style delegation). The root's context is the
    scarcest resource in a long session.
@@ -87,9 +86,10 @@ vendors. Claude models never go through it: they run only as subagents of the ro
 12. **Check DeepSeek peak hours before every spawn and switch to OpenCode Go in peak.**
     Why: the vendor's pricing page (read 2026-09-27) lists weekday peaks at 01:00-04:00 and
     06:00-10:00 UTC, with the price doubled.
-13. **Never start a worker CLI from the coding session's own shell.**
+13. **If the coding session's shell is sandboxed, never start a worker CLI from it.**
     Why: on 2026-08-04 a worker launched that way died with a nested-sandbox exit 71. The multiplexer
-    service runs workers outside the session sandbox.
+    service runs workers outside the session sandbox. With no sandbox this failure does not apply;
+    with a sandbox and no multiplexer, run the lane in the root.
 14. **After changing a running worker's instructions, check its real file activity a minute later.**
     Why: on 2026-09-20 three corrections sat queued in a pane and never reached the agent. About 4 GB
     were downloaded for nothing. "Submitted" can mean "queued".
