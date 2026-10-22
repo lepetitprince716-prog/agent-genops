@@ -7,7 +7,7 @@ Read when: about to render 3 or more images, start or stop a queue, release VRAM
 
 - Batch of 3 or more: render 1 smoke with the exact batch command first. No exceptions.
 - Smoke time x count > 30 min: report the total and wait for a go before starting.
-- One render, one destination. Move each output (image plus sidecar, as a group) before the next render starts.
+- One render, one destination. Move each output (image plus metadata JSON, as a group) before the next render starts.
 - Assume engine filenames collide (same seed, same LoRA) unless the engine proves a unique suffix.
 - Every run writes to a new, empty directory. Refuse a non-empty one. Two queues never share a result dir.
 - Probe the box before dispatch. HOLD (probe exit code 3) = do not dispatch.
@@ -29,7 +29,7 @@ Do not assume the quality-stack recipe is current; read the project state file.
 
 1. Run the batch command with count 1.
 2. Record wall time per image (warm; drop a cold first run if the model had to load).
-3. Record every path written: image, sidecar, result JSON, any post-processing copy.
+3. Record every path written: image, metadata JSON, result JSON, any post-processing copy.
 4. Check the filename rule: would a second image with the same seed or LoRA overwrite this one?
 5. Compute total = time per image x count. Write it into the order.
 6. Total > 30 min: stop and report.

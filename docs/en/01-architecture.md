@@ -21,21 +21,21 @@ why the ComfyUI canvas is something agents read but never queue from.
 | Part | Role in this setup |
 |---|---|
 | Root session | One Claude Code session per task. Plans, dispatches, checks every worker result against the disk, writes the record. |
-| Subagents | Claude models at fixed tiers (Haiku 5.5, Sonnet 5.5, Opus 5.5) launched by the root for bounded work. See `03-dispatch.md`. |
+| Subagents | Claude models at fixed tiers (Haiku 5.5, Sonnet 5.5, Opus 5.5) launched by the root for bounded work. See [`03-dispatch.md`](03-dispatch.md). |
 | External workers | Other vendors' agents driven through herdr: Cursor Composer 2.5 by default, DeepSeek off-peak, OpenCode Go at peak hours. Claude models never go through the multiplexer. |
 | Skills | Runbooks an agent loads on demand: how to reach a box, how to run a line, how to hand off. |
 | MCP servers | Typed tool surfaces over the execution plane. One server for ComfyUI work; a separate standalone server for NovelAI. |
 | Task tracker | bd (beads). Answers "what, who took it, waiting on whom" across sessions. |
-| Memory files | One fact per file plus an index, with dates. Snapshots are marked as snapshots. See `12-continuity.md`. |
-| Hooks and gates | Root-owned hooks, a file gate, a shell gate, managed network wrappers. See `11-safety-and-privacy.md`. |
+| Memory files | One fact per file plus an index, with dates. Snapshots are marked as snapshots. See [`12-continuity.md`](12-continuity.md). |
+| Hooks and gates | Root-owned hooks, a file gate, a shell gate, managed network wrappers. See [`11-safety-and-privacy.md`](11-safety-and-privacy.md). |
 
 **Execution plane.** Everything that turns a plan into pixels or bytes.
 
 | Part | What it is |
 |---|---|
-| Render boxes | Two Windows desktops running ComfyUI. Agents submit API-format graphs over HTTP and fetch outputs. See `02-environment.md`. |
+| Render boxes | Two Windows desktops running ComfyUI. Agents submit API-format graphs over HTTP and fetch outputs. See [`02-environment.md`](02-environment.md). |
 | Sidecar instances | Extra ComfyUI instances on Box A that listen on loopback only, each pinned to its own ComfyUI version for one model line. Normally stopped. |
-| Cloud services | NovelAI and Civitai through their APIs, under budgets and ledgers. See `09-providers.md`. |
+| Cloud services | NovelAI and Civitai through their APIs, under budgets and ledgers. See [`09-providers.md`](09-providers.md). |
 | Browser-pane operators | A subagent that drives a site with no public API (Midjourney, ChatGPT web for GPT Image) in the app's built-in browser, one exact prompt at a time. |
 | Linux node | An NVIDIA DGX Spark pair used for batch jobs and model services. Not part of the image lines here. |
 
@@ -70,7 +70,7 @@ flowchart TD
         Cloud["Cloud APIs / browser pane"]
     end
 
-    Evidence["Evidence: manifests, sidecars, jobs DB, review ledgers"]
+    Evidence["Evidence: manifests, metadata JSON, jobs DB, review ledgers"]
 
     Root --> Sub
     Skills -.-> Root
@@ -101,7 +101,7 @@ Read it top to bottom:
 3. **Engines** are one per model family or line. They own the graph, the recipe and the per-box quirks.
 4. **Transport** is the only code that talks to a box: HTTP to ComfyUI, and a remote PowerShell runner for anything on the Windows side.
 5. **Boxes** run what they are given. Their live state is probed every time; documents never claim a box is online.
-6. **Evidence** sits beside all of it: a per-run result manifest, sidecar JSON per image, the jobs database, review ledgers. A file existing is not acceptance.
+6. **Evidence** sits beside all of it: a per-run result manifest, metadata JSON per image, the jobs database, review ledgers. A file existing is not acceptance.
 
 Queued work takes a slightly different entry. A JSON job brief goes through one validation layer
 shared by the web app and a one-JSON-in CLI (`gen_job.py`), lands in a persistent queue with an
@@ -129,13 +129,13 @@ server's own tool listing, not from prose.
 ## Rules
 
 1. **The control plane renders nothing.**
-   Why: standing rule. The Controller is a 24 GB laptop that runs the agents; GPU work goes to the boxes.
+   Why: owner's decision. The Controller is a 24 GB laptop that runs the agents; GPU work goes to the boxes.
 
 2. **Every caller goes through one router; no entry surface duplicates a recipe.**
-   Why: standing rule from the project architecture (2026-08-28).
+   Why: owner's decision, part of the project architecture (2026-08-28).
 
 3. **Print first; execute only with `--run`.**
-   Why: standing rule. The printed command is what the root compares against the brief before spending GPU time.
+   Why: owner's decision. The printed command is what the root compares against the brief before spending GPU time.
 
 4. **Probe live state before every run; a valid plan does not prove the box is free.**
    Why: Box A is the owner's gaming PC. Resource plans are advisory; `--run` re-probes idle state and queue.
@@ -144,19 +144,19 @@ server's own tool listing, not from prose.
    Why: 2026-09-16. Three MCP servers with different interpreters each needed per-agent config, so none was registered anywhere. The tools worked; nobody could call them.
 
 6. **Canvas tools never queue; a human presses Queue.**
-   Why: standing rule. The queued path is where the idle check, the VRAM lease, the smoke-first rule and the evidence manifest live. A graph queued from the canvas skips all of them. The canvas also holds cached values that can be stale against the box's live model list, so names are validated before any submit.
+   Why: owner's decision. The queued path is where the idle check, the VRAM lease, the smoke-first rule and the evidence manifest live. A graph queued from the canvas skips all of them. The canvas also holds cached values that can be stale against the box's live model list, so names are validated before any submit.
 
 7. **Queue failure is visible; it never falls back to direct execution silently.**
-   Why: standing rule since the queue was wired in (2026-08-28): the facade never falls back silently, and direct execution needs an explicit opt-in.
+   Why: owner's decision since the queue was wired in (2026-08-28): the facade never falls back silently, and direct execution needs an explicit opt-in.
 
 8. **Subprocess anything that writes to stdout when stdout is the MCP wire.**
    Why: on stdio, a client library that prints or calls `SystemExit` corrupts the protocol. Generation shells out, and `comfy_run` moves the driver's log into a result field.
 
 9. **Look up a script in the catalogue before writing one; borrow by copying.**
-   Why: standing rule (2026-06-25). See the next section.
+   Why: owner's decision (2026-06-25). See the next section.
 
 10. **Keep specialist lines as separate adapters; do not build a universal media framework.**
-    Why: standing rule. Prompt dialects, runtimes and costs differ per line; a generic layer would hide exactly the differences that matter.
+    Why: owner's decision. Prompt dialects, runtimes and costs differ per line; a generic layer would hide exactly the differences that matter.
 
 ## The script catalogue
 
@@ -206,9 +206,9 @@ cross-session budgets applied to generation work.
 
 ## See also
 
-- `00-philosophy.md`: the principles behind the split.
-- `02-environment.md`: the machines and what runs where.
-- `03-dispatch.md`: subagent tiers and external workers.
-- `06-render-discipline.md`: smoke first, isolation, the lease.
-- `08-inventory.md`: the script catalogue and the model index.
-- `11-safety-and-privacy.md`: gates and managed egress.
+- [`00-philosophy.md`](00-philosophy.md): the principles behind the split.
+- [`02-environment.md`](02-environment.md): the machines and what runs where.
+- [`03-dispatch.md`](03-dispatch.md): subagent tiers and external workers.
+- [`06-render-discipline.md`](06-render-discipline.md): smoke first, isolation, the lease.
+- [`08-inventory.md`](08-inventory.md): the script catalogue and the model index.
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md): gates and managed egress.

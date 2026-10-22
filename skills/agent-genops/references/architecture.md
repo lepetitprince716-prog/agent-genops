@@ -23,7 +23,7 @@ Read when: you are about to render, add a tool or script, touch a box, or route 
 4. Engines: one per model family or line. Own graph, recipe, per-box quirks.
 5. Transport: the only code that talks to a box (HTTP to ComfyUI; remote PowerShell runner on Windows).
 6. Boxes: run what they are given. Probe live every time.
-7. Evidence: result manifest per run, sidecar JSON per image, jobs DB, review ledgers.
+7. Evidence: result manifest per run, metadata JSON per image, jobs DB, review ledgers.
 
 Specialist adapters (cloud APIs, instruction edits, video, exact-recipe replay) sit beside the router and call engines or transport directly. Do not fold them into the router.
 

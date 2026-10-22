@@ -28,7 +28,7 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
    whether two images in the batch can get the same filename.
 2. **Multiply the smoke time by the count and write the total into the order; report any batch over 30 minutes before starting it.**
    Why: the 2026-09-16 round would have shown 3.5 minutes per image times dozens of images before
-   it started. The 30-minute line is a standing rule from that incident.
+   it started. The 30-minute line came from that incident.
 3. **Choose the engine by what the step has to verify.**
    Why: style, composition and pose probes need a single base pass (tens of seconds per image; the
    Anima fast line runs about 2.1 to 2.5 s warm on Box A). The quality stack (upscale plus detailers)
@@ -49,7 +49,7 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
 
 6. **Move every render to its own destination as soon as it lands, before the next render starts.**
    Why: engines name files by their own rules. Reuse the isolation helpers the repo already has (a
-   `--keep-into DIR` flag that moves the PNG and its sidecar as a group with a `__vN` no-clobber
+   `--keep-into DIR` flag that moves the PNG and its metadata JSON as a group with a `__vN` no-clobber
    suffix); the command shape is `render && keep`. Do not write a new one.
 7. **Assume filenames collide unless the engine proves otherwise.**
    Why: one generator names output by LoRA name plus seed. On 2026-09-16 five prompt-only arms shared
@@ -59,7 +59,7 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
    Why: rounds must never mix. App jobs also write a per-run manifest of produced files and never scan
    the whole output tree, which keeps parallel runs from claiming each other's images.
 9. **Two queues never point at the same result directory.**
-   Why: standing rule from the 2026-09-16 batch-render rule.
+   Why: part of the 2026-09-16 batch-render rule.
 
 ### Queues and processes
 
@@ -84,7 +84,7 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
     Box B when Box A is busy (low free VRAM, a non-empty queue, unreachable). That replaced an
     unconditional "Box B first" rule from 2026-07-18.
 15. **When I am running my own work on Box A, wait for three consecutive idle probes before starting a queue.**
-    Why: standing rule. A single idle reading between two of my jobs is not a free box.
+    Why: owner's decision. A single idle reading between two of my jobs is not a free box.
 16. **No model-based 4x upscale while I may be gaming; use a higher native resolution in one pass instead.**
     Why: the intermediate image of an ESRGAN-class 4x upscale runs the shared 16 GB card out of
     memory. Desktop apps squeezing VRAM also caused silent driver crashes on Box A; the reserve was
@@ -127,7 +127,7 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
     be a permanent delete. The folder keeps the original relative path; a restore map file lists
     every move; I delete the trash folder myself. The controller side uses the system trash.
 24. **If remote cleanup cannot happen now, write the leftovers into a CLEANUP file in the order directory.**
-    Why: standing rule. The file is cleared at wrap-up together with the order.
+    Why: owner's decision. The file is cleared at wrap-up together with the order.
 25. **Clean output subfolders only; never datasets, training checkpoints, converted LoRAs or models.**
     Why: standing boundary. Training validation keeps only the few best images (best-epoch A/B pairs)
     in the repo's analysis folder (2026-07-20).
@@ -152,9 +152,9 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
 ## Procedure: a batch on a shared box
 
 1. Write the order: intent, box, count, seeds, model, LoRAs, output dir, acceptance, cleanup
-   (template: `../../templates/run-order.json`).
+   (template: [`templates/run-order.json`](../../templates/run-order.json)).
 2. Probe the box. HOLD: wait or switch boxes, and say which.
-3. Run one smoke with the batch command. Fill in `../../templates/smoke-check.md`.
+3. Run one smoke with the batch command. Fill in [`templates/smoke-check.md`](../../templates/smoke-check.md).
 4. Compute total time. Over 30 minutes: report and wait for a go.
 5. Launch the queue as `render && keep` per item, each into a fresh directory.
 6. To stop: kill the process group, list processes, confirm nothing is left.
@@ -182,14 +182,14 @@ rules below come from one bad probe round on 2026-09-16; see "Real cases".
 ## Tried and dropped
 
 - Unconditional routing to Box B first (2026-07-18): replaced by probing Box A first.
-- POST /free after every run (2026-06-27 to 2026-09-17): replaced by leases and the reaper.
+- POST /free after every run (2026-06-27 to 2026-09-22): replaced by leases and the reaper, built on 2026-09-17 and made the rule on 2026-09-22.
 - Full free as the default release: dropped after the 2026-09-01 wedge; re-test pending on 0.42.1.
 - Recycle Bin on remote boxes: permanent delete in practice.
 - Media delivery through a send-file tool or base64 widget: chip only, or over the size cap.
 
 ## See also
 
-- `04-model-bringup.md`: smoke and eval when adopting a model.
-- `07-performance.md`: timing method, warm runs, variance.
-- `08-inventory.md`: where outputs, archives and ledgers live.
-- `03-dispatch.md`: how a render runner is briefed and accepted.
+- [`04-model-bringup.md`](04-model-bringup.md): smoke and eval when adopting a model.
+- [`07-performance.md`](07-performance.md): timing method, warm runs, variance.
+- [`08-inventory.md`](08-inventory.md): where outputs, archives and ledgers live.
+- [`03-dispatch.md`](03-dispatch.md): how a render runner is briefed and accepted.

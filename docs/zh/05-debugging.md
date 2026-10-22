@@ -25,7 +25,7 @@
 | 升级 ComfyUI 后同 seed 像素变了 | 正常漂移（Anima 0.27.1→0.42.1 PSNR 28–37 dB），或者真回归 | 并排实例同 seed A/B；构图不变就是漂移 |
 | 回滚后旧运行时起不来 | 0.42.1 迁移了界面数据库 | 恢复升级前备份的数据库 |
 | 只有量化模型在 VAE 解码时 OOM | 量化后的 DiT 没法部分卸载 | 解码前显式卸模型、清缓存 |
-| 服务死掉，没有 traceback，事件日志有驱动重置 | 桌面程序吃穿了 `--reserve-vram 1.0` | 改成 `--reserve-vram 2.5` |
+| 服务死掉，没有 traceback，事件日志有驱动重置 | 桌面程序吃穿了 `--reserve-vram 1.0` | 调高 `--reserve-vram`：Box A 的前台程序约占 2.4 GB，所以设 2.5；你的按自己的前台占用来定 |
 | `/free` 后显存不降；报 "Cannot set version_counter for inference tensor" | 部分加载的 INT8 ConvRot 挂了 LoRA（漏约 11 GB） | 停服务再起；`/free` 救不回来 |
 | 没有作业却占着显存或提交内存；WinError 1455 | 崩掉的作业留下孤儿或僵尸 Python | 按命令行列进程；按监听端口或命令行杀 |
 | 服务说显存够，作业照样 OOM | 服务报的空闲数不算别的进程；Box A 前台程序常驻约 2.4 GB | 厂商工具的总量减去服务自己的占用 |
@@ -46,7 +46,7 @@
 
 ## 静默出错的规则
 
-1. **读实际提交的图谱，不读脚本默认值，也不读 sidecar JSON。**
+1. **读实际提交的图谱，不读脚本默认值，也不读 元数据 JSON。**
    理由：2026-06-25 一张 txt2img 图带着 denoise 0.5，得出三条假结论（其中有 VAE 和曝光那两条），后来全部撤回。
 
 2. **共享服务上比两张图之前，先用 `free_memory` 清掉节点状态。**
@@ -123,7 +123,7 @@
 ## 失败两次就重新盘点
 
 1. **同一个任务失败两次就停下，不做第三次同形尝试。**
-   理由：常见原因是缺工具或没读文档，不是代码写错。2026-08-27 起的常设规则。
+   理由：常见原因是缺工具或没读文档，不是代码写错。2026-08-27 起仓库主人的决定。
 
 第二次失败后的步骤：
 
@@ -138,7 +138,7 @@
 ## 被卡住时交一条能跑的命令
 
 1. **被卡住就交能跑的命令，不交一段说明。**
-   理由：2026-09-19 起的常设规则。闸机、缺权限、root 所有的文件、只能在图形界面做的一步，都会让
+   理由：2026-09-19 起仓库主人的决定。闸机、缺权限、root 所有的文件、只能在图形界面做的一步，都会让
    agent 停下；只描述步骤等于让我自己拼。
 
 常见卡点：加载或重启 launch agent、托管会话跑不了的进程和网络探针、要占出图机的图形界面加载验证、
@@ -159,6 +159,7 @@ f="$HOME/example/service.yaml"
 grep -q '^args:' "$f" || { echo "anchor 'args:' missing, abort"; exit 1; }
 grep -q -- '--reserve-vram 2.5' "$f" && { echo "already applied"; exit 0; }
 cp -p "$f" "$f.bak.$(date +%Y%m%d%H%M%S)"
+# 这是 macOS 的 sed 写法；GNU sed 去掉 ''
 sed -i '' 's/^args:\(.*\)$/args:\1 --reserve-vram 2.5/' "$f"
 grep -- '--reserve-vram 2.5' "$f"
 ```
@@ -192,7 +193,7 @@ grep -- '--reserve-vram 2.5' "$f"
 
 ## 另见
 
-- `04-model-bringup.md`：模型上线前的架构检查。
-- `06-render-discipline.md`：按进程组停队列、清理。
-- `07-performance.md`：问题是速度不是对错时看这里。
-- `11-safety-and-privacy.md`：受管出网与闸机。
+- [`04-model-bringup.md`](04-model-bringup.md)：模型上线前的架构检查。
+- [`06-render-discipline.md`](06-render-discipline.md)：按进程组停队列、清理。
+- [`07-performance.md`](07-performance.md)：问题是速度不是对错时看这里。
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md)：受管出网与闸机。

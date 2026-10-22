@@ -60,7 +60,7 @@ tags.
    45-cell same-seed calibration matrix every single-artist string in the 1.2 to 1.5 band gave a
    distinct style (2026-08-27).
 3. **The style block leads the base prompt and never goes into character captions.** Why:
-   standing rule from the V4.5 mixing guide, kept for V5.
+   taken from the V4.5 mixing guide, kept for V5.
 4. **Test community rules before adopting them.** "Cut V4.5 artist weights to a half or a third
    on V5" failed here: at 0.35 two loved artists lost their style entirely (2026-09-02).
 5. **Use character boxes for every multi-character image, with hair and eye colour per box.**

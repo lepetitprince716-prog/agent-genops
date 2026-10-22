@@ -3,7 +3,7 @@
 # 环境：机器、软件栈，什么跑在哪
 
 这页回答：这套方法跑在什么硬件和软件上，哪种活派到哪台机器，agent 又怎么连上这些机器。
-数字都是我自己的，带日期。拿它当参照，再按自己的情况填 `templates/fleet.example.yaml`。
+数字都是我自己的，带日期。拿它当参照，再按自己的情况填 [`templates/fleet.example.yaml`](../../templates/fleet.example.yaml)。
 
 > **TL;DR**
 > - 四个角色：跑 agent、不出图的 Controller，两台 Windows 渲染机，以及一台不在出图线里的 Linux 节点。
@@ -107,7 +107,7 @@ Box A 是我的游戏机。下面这些规则都是因为这个。
 5. **把我开着的前台程序算进显存预算。**
    理由：我在 Box A 上常开的程序一直占着约 2.4 GB 显存（实测 2370 到 2493 MiB）。作业执行器的 GPU 就绪阈值在 2026-10-19 经我同意从 2048 MiB 提到 4096 MiB；新阈值只部署在 Box A，Box B 上跑的还是 2048 MiB 的旧版。
 6. **任何一个 ComfyUI 实例有排队的活，批处理 GPU 作业就等着。**
-   理由：standing rule。GPU 守卫会冻住整个 GPU 作业组，这组作业也不许自己往这些 ComfyUI 实例提交 prompt。
+   理由：仓库主人的决定。GPU 守卫会冻住整个 GPU 作业组，这组作业也不许自己往这些 ComfyUI 实例提交 prompt。
 7. **动 Box A 先问；调 Box B 已经预先授权。**
    理由：我 2026-09-30 定的。Box B 上的显存、精度、注意力后端、常驻模型、启动参数，agent 可以自己调；Box A、网络平面、删非测试数据，仍然要我点头。
 
@@ -128,7 +128,7 @@ Box A 是我的游戏机。下面这些规则都是因为这个。
 
 ## 按你自己的环境改
 
-派任何活之前，先复制 `templates/fleet.example.yaml` 填好。
+派任何活之前，先复制 [`templates/fleet.example.yaml`](../../templates/fleet.example.yaml) 填好。
 
 - [ ] 每台机器按角色命名，不写主机名。标明哪台跑 agent、不出图。
 - [ ] 每台记下 GPU、显存、内存、操作系统，以及记录日期。
@@ -142,9 +142,9 @@ Box A 是我的游戏机。下面这些规则都是因为这个。
 
 ## 另见
 
-- `01-architecture.md`：两个面和分层。
-- `04-model-bringup.md`：接入新模型或新的 ComfyUI 版本。
-- `05-debugging.md`：Windows 远程的坑，「重启了但没真重启」。
-- `06-render-discipline.md`：先跑 smoke、队列、清理。
-- `07-performance.md`：A/B 方法，以及启动参数背后的数字。
-- `11-safety-and-privacy.md`：受管 wrapper 和闸门。
+- [`01-architecture.md`](01-architecture.md)：两个面和分层。
+- [`04-model-bringup.md`](04-model-bringup.md)：接入新模型或新的 ComfyUI 版本。
+- [`05-debugging.md`](05-debugging.md)：Windows 远程的坑，「重启了但没真重启」。
+- [`06-render-discipline.md`](06-render-discipline.md)：先跑 smoke、队列、清理。
+- [`07-performance.md`](07-performance.md)：A/B 方法，以及启动参数背后的数字。
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md)：受管 wrapper 和闸门。

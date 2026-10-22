@@ -10,7 +10,7 @@
 > - 先量再调。质量线上所有直觉答案（网络、加载模型、轮询）都错了，真正烧时间的是 detailer 重复采样。
 > - A/B 按 A-B-A 跑，带显式关闭臂，热态，至少 3 个 seed，取中位数。有条 SDXL 管线跨 seed 方差 24%，单样本 A/B 分辨不了 20% 左右以下的差异。
 > - 先换最大的那块，再重新评估剩下的。借来的数字只是假设。
-> - 采纳：mxfp8 权重 + INT8 注意力（Anima 3.8B 快 2.11 倍，画质完好）。塌了：无校准 nvfp4。否掉：Box B 上的 fp8 矩阵乘、一个视频少步蒸馏。
+> - 采纳：mxfp8 权重 + INT8 注意力（RTX 50 显卡上 Anima 3.8B 快 2.11 倍，画质完好；mxfp8 只在 Blackwell 显卡上提速）。塌了：无校准 nvfp4。否掉：Box B 上的 fp8 矩阵乘、一个视频少步蒸馏。
 > - 质量档由我判，不由 agent 判。来自权重格式和内核的提速做不成 LoRA。
 
 ## 规则
@@ -65,7 +65,7 @@
 
 12. **模型常驻，换模型或用完才卸。**
     理由：「每次出图后 POST /free」的旧规则 2026-09-22 起作废。一次 free 要付 1.9 秒远程往返，
-    还真会把权重卸掉。Box B（0.27.1）上去掉每刀 free，WAI 每刀省 1.34 秒（11%），Anima 每刀省
+    还真会把权重卸掉。Box B（0.27.1）上去掉每张图 free，WAI 每张图省 1.34 秒（11%），Anima 每张图省
     0.35 秒（1%），算不上提速杠杆。现在由意图路由器租用显存，空闲回收器负责释放。
 
 13. **量化元数据烤进 checkpoint，并核实走的是原生路径。**
@@ -94,7 +94,7 @@ bf16 0.312 ms；fp8 0.153 ms（2.04 倍，相对误差 0.038）；nvfp4 0.071 ms
 
 ## A/B 流程
 
-1. 写下问题和唯一的变量，填 `../../templates/ab-test.md`。
+1. 写下问题和唯一的变量，填 [`templates/ab-test.md`](../../templates/ab-test.md)。
 2. 别的全部固定：机器、提示词、分辨率、采样器、步数、LoRA 组合。
 3. 臂：对照、处理，开关类再加一个显式关闭臂。LoRA 对照臂用强度 0.001，绝不用 0。
 4. seed 至少 3 个，各臂用同一组。
@@ -135,7 +135,7 @@ Box B 杠杆（RTX 4060 Ti，PyTorch 2.10.0+cu130，ComfyUI 0.27.1，2026-09-30�
 | `--fast fp16_accumulation` | WAI 1.19 倍（12.12→10.19 秒），Anima 1.05 倍；构图不变，细节漂移 | 默认开 |
 | 再叠 SageAttention | Anima 快线 1.087 倍（4.83→4.45 秒），质量线 1.077 倍，WAI 1.027 倍 | 默认开 |
 | fp8 权重 + fp8 矩阵乘 | Anima 反而慢 4%（4.58 对 4.42 秒），PSNR 16.3 dB，构图变了 | 死路 |
-| 去掉每刀 `/free` | WAI 1.34 秒（11%），Anima 0.35 秒（1%） | 不是杠杆 |
+| 去掉每张图 `/free` | WAI 1.34 秒（11%），Anima 0.35 秒（1%） | 不是杠杆 |
 
 `--fast fp16_accumulation` 要写全：只写 `--fast` 会打开全部实验性优化。注意力参数互斥，一个进程只能选一个后端。
 
@@ -172,7 +172,7 @@ LoRA 装的是权重增量。3.8B 的提速来自权重格式（mxfp8）、一�
 - 手写内核（实测天花板约端到端 5%）。
 - 无校准 nvfp4 W4A4。
 - Box B 上的 fp8 矩阵乘：Anima 的 MLP 输入是 5 维张量，fp8 路径静默回退，输入转换又吃掉了矩阵乘 13% 的收益。
-- 把去掉每刀 `/free` 当提速杠杆。
+- 把去掉每张图 `/free` 当提速杠杆。
 - Box B 上 LoRA 训练的四个杠杆（2026-09-03）：关梯度检查点、batch 2（慢 9.5%）、compile（没生效：
   LoRA 靠 forward monkey-patch 注入，图在每个注入点断开）、换完整 AdamW（稳态一样）。
   1024 px 下 2.9–3.0 s/it 就是这块卡的水平。
@@ -181,7 +181,7 @@ LoRA 装的是权重增量。3.8B 的提速来自权重格式（mxfp8）、一�
 
 ## 另见
 
-- `04-model-bringup.md`：采纳量化模型。
-- `05-debugging.md`：OOM、驱动重置、进程污染。
-- `06-render-discipline.md`：批量前先拿 smoke 计时。
-- `../../templates/ab-test.md`：A/B 记录模板。
+- [`04-model-bringup.md`](04-model-bringup.md)：采纳量化模型。
+- [`05-debugging.md`](05-debugging.md)：OOM、驱动重置、进程污染。
+- [`06-render-discipline.md`](06-render-discipline.md)：批量前先拿 smoke 计时。
+- [`templates/ab-test.md`](../../templates/ab-test.md)：A/B 记录模板。

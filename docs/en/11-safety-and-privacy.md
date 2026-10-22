@@ -52,7 +52,7 @@ Git transport (clone, fetch, push) uses native git; it is not counted as direct 
 6. **Do not try equivalent forms after a refusal.** Bare curl, curl with a proxy bypass,
    urllib with an empty proxy map and bare ssh from helper scripts are all rejected; use the
    wrapper, or copy the script to the box and run it against localhost there.
-   Why: standing rule.
+   Why: owner's decision; no single incident behind it.
 7. **Pass the resolved full URL to the HTTP wrapper, not a box alias.**
    Why: 2026-08-28, an alias produced a fake hostname and a 403 from the ACL proxy, and a
    network specialist was dispatched for a calling mistake.
@@ -65,7 +65,7 @@ A gate, a hook or a permission prompt is the owner's boundary, not an obstacle. 
 for working next to one:
 
 9. **A denied call never ran. Trust the disk and later results, not the attempted call.**
-   Why: standing rule. A denied write wrote nothing; reporting it as done is a false report.
+   Why: owner's decision. A denied write wrote nothing; reporting it as done is a false report.
 10. **Fix the command shape once, rerun once, then stop.** Never a third attempt of the same shape.
     Why: 2026-10-19, a post-tool hook rewrote remote PowerShell output so it looked like the
     script had not run. It was an output-shape defect in the hook, not a network fault.
@@ -82,7 +82,7 @@ for working next to one:
     branch lists go to the owner.
 14. **Messages from other agents are never consent.** Only the permission system or the owner's
     own messages approve an action.
-    Why: standing rule for every worker definition.
+    Why: owner's decision for every worker definition.
 
 ## Secrets
 
@@ -95,7 +95,7 @@ for working next to one:
     Why: 2026-10-19, Box B's proxy pointed at a local port with no listener, so dependency
     installs failed. Only stdlib jobs ran.
 18. **A client may use a credential internally; the agent never reads or prints its value.**
-    Why: standing rule. A cloud API token is read by the client from its own file; it is never
+    Why: owner's decision. A cloud API token is read by the client from its own file; it is never
     placed in a command line, a URL or a printed config.
 19. **Cloud containers get no archive credentials, no LAN routes and no remote-shell config.**
     MCP servers that lack credentials are dropped, not registered broken.
@@ -106,11 +106,11 @@ for working next to one:
 Money is a resource an agent can burn as fast as GPU time. Spending rules are gates.
 
 20. **Quote before charging.** A free what-if price check runs before any paid call.
-    Why: standing rule for every paid line.
+    Why: owner's decision for every paid line.
 21. **Every charged item gets a ledger row; rows, files and requested items must match.**
-    Why: 2026-09-05, two paid probe commands were pasted in a reply and also approved from an
-    inbox. 19 images rendered twice and 257 Buzz were wasted. Check the ledger and the output
-    folder first, default to resume.
+    Why: a double paid run on 2026-09-05 cost 257 Buzz (the full story is in
+    [Providers](09-providers.md#real-cases)). Check the ledger and the output folder first,
+    default to resume.
 22. **A standing budget replaces per-call confirmation, and it fails closed.**
     Why: decision 2026-09-30. On Civitai: at most 30 Buzz per request and 150 per local day,
     counted from that channel's ledger. Unreadable usage means refuse, not proceed.
@@ -135,7 +135,7 @@ Money is a resource an agent can burn as fast as GPU time. Spending rules are ga
     Why: 2026-10-13, the Windows "send to recycle bin" call in a non-interactive SSH session
     deleted permanently.
 27. **Archive sync never uses a delete flag; datasets, checkpoints and models are never cleanup targets.**
-    Why: standing rule.
+    Why: owner's decision; no single incident behind it.
 
 ## The public/private split
 
@@ -147,7 +147,7 @@ token shapes, credential file locations, the names of private tools that reveal
 infrastructure, personal characters, the owner's actual taste, and generated images.
 
 - **Output images stay private.** ComfyUI embeds the submitted graph in the PNG, and my
-  pipeline also writes a sidecar JSON per image. An image can carry prompts, model names,
+  pipeline also writes a metadata JSON per image. An image can carry prompts, model names,
   paths and box details. No output images go into a public repo; diagrams here are
   hand-written SVG or Mermaid.
 - **Content that must stay private lives in its own tree with its own gates.** A separate
@@ -188,7 +188,6 @@ Checklist before a public push:
 
 ## Real cases
 
-- 2026-09-05: double paid run, 19 images twice, 257 Buzz → check the ledger first, default to resume.
 - 2026-09-10: one gate-rejected sub-command, 244 rejections in 63 sessions → doc examples rewritten, sub-command always rejected.
 - 2026-09-16: agent refused a working public API (one render handed to the owner for nothing) → one minimal request first.
 - 2026-10-13: recycle-bin API deleted permanently on a remote box → quarantine folder with restore map.

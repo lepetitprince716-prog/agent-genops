@@ -20,21 +20,21 @@
 | 组成 | 在我这里干什么 |
 |---|---|
 | 主会话 | 每个任务一个 Claude Code 会话。定计划、派工、拿磁盘核对每个 worker 的结果、写记录。 |
-| subagent | 主会话按固定档位起的 Claude 模型（Haiku 5.5、Sonnet 5.5、Opus 5.5），做有边界的活。见 `03-dispatch.md`。 |
+| subagent | 主会话按固定档位起的 Claude 模型（Haiku 5.5、Sonnet 5.5、Opus 5.5），做有边界的活。见 [`03-dispatch.md`](03-dispatch.md)。 |
 | 外部 worker | 经 herdr 驱动的别家 agent：默认 Cursor Composer 2.5，错峰用 DeepSeek，高峰期换 OpenCode Go。Claude 模型从不走多路复用器。 |
 | skill | 按需加载的操作手册：怎么连机器、怎么跑某条线、怎么交接。 |
 | MCP server | 执行面上的带类型工具层。ComfyUI 一个 server，NovelAI 另起一个独立 server。 |
 | 任务库 | bd（beads）。跨会话回答「做什么、谁领了、在等谁」。 |
-| 记忆文件 | 一个事实一个文件，外加索引，带日期。快照标明是快照。见 `12-continuity.md`。 |
-| hook 与闸门 | root 所有的 hook、文件闸、shell 闸、受管网络 wrapper。见 `11-safety-and-privacy.md`。 |
+| 记忆文件 | 一个事实一个文件，外加索引，带日期。快照标明是快照。见 [`12-continuity.md`](12-continuity.md)。 |
+| hook 与闸门 | root 所有的 hook、文件闸、shell 闸、受管网络 wrapper。见 [`11-safety-and-privacy.md`](11-safety-and-privacy.md)。 |
 
 **执行面**：把计划变成像素和字节。
 
 | 组成 | 是什么 |
 |---|---|
-| 渲染机 | 两台跑 ComfyUI 的 Windows 台式机。agent 通过 HTTP 提交 API 格式工作流，再取回输出。见 `02-environment.md`。 |
+| 渲染机 | 两台跑 ComfyUI 的 Windows 台式机。agent 通过 HTTP 提交 API 格式工作流，再取回输出。见 [`02-environment.md`](02-environment.md)。 |
 | sidecar 实例 | Box A 上额外的 ComfyUI 实例，只听回环，每个钉一个 ComfyUI 版本、服务一条模型线，平时停着。 |
-| 云端服务 | NovelAI 和 Civitai 走 API，有预算、有台账。见 `09-providers.md`。 |
+| 云端服务 | NovelAI 和 Civitai 走 API，有预算、有台账。见 [`09-providers.md`](09-providers.md)。 |
 | 浏览器面板操作员 | 一个 subagent，在 app 内置浏览器里操作没有公开 API 的网站（Midjourney、给 GPT Image 用的 ChatGPT 网页），一次提交一条原样提示词。 |
 | Linux 节点 | 一对 NVIDIA DGX Spark（头节点加一个工作节点），跑批处理作业和模型服务。不在这里讲的出图线里。 |
 
@@ -69,7 +69,7 @@ flowchart TD
         Cloud["云端 API / 浏览器面板"]
     end
 
-    Evidence["证据：manifest、sidecar JSON、任务库、评审台账"]
+    Evidence["证据：manifest、元数据 JSON、任务库、评审台账"]
 
     Root --> Sub
     Skills -.-> Root
@@ -100,7 +100,7 @@ flowchart TD
 3. **引擎**按模型家族或出图线分，一线一个。工作流、配方、每台机器的小毛病都归引擎管。
 4. **传输层**是唯一跟机器说话的代码：HTTP 连 ComfyUI，Windows 那边的事交给远程 PowerShell 执行器。
 5. **机器**只跑交给它的活。每次都现场探活，文档从不声称哪台机器在线。
-6. **证据**挨着每一层：每次运行一份结果 manifest，每张图一份 sidecar JSON，任务数据库，评审台账。文件存在不等于验收通过。
+6. **证据**挨着每一层：每次运行一份结果 manifest，每张图一份 元数据 JSON，任务数据库，评审台账。文件存在不等于验收通过。
 
 排队的活入口稍有不同。JSON 任务单先过一层校验，Web 应用和单 JSON 入口的命令行（`gen_job.py`）共用这层；然后带着幂等键进持久队列，等真正启动时才翻成路由参数，`--box auto` 也是这时才落到这次尝试的具体机器上。浏览器聊天里的 agent 没有提交工具：它只能生成一张提议卡，人点一下才提交，提议 id 就是幂等键。
 
@@ -121,13 +121,13 @@ flowchart TD
 ## 规则
 
 1. **控制面不出图。**
-   理由：standing rule。Controller 是一台 24 GB 的笔记本，跑 agent；GPU 活交给渲染机。
+   理由：仓库主人的决定。Controller 是一台 24 GB 的笔记本，跑 agent；GPU 活交给渲染机。
 
 2. **所有入口走同一个路由，哪个入口都不复制配方。**
    理由：项目架构文档里的固定规则（2026-08-28）。
 
 3. **先打印，加 `--run` 才执行。**
-   理由：standing rule。主会话拿打印出来的命令和任务单对一遍，再花 GPU 时间。
+   理由：仓库主人的决定。主会话拿打印出来的命令和任务单对一遍，再花 GPU 时间。
 
 4. **每次运行前现场探活；计划合法不代表机器空着。**
    理由：Box A 是我的游戏机。资源计划只是建议，`--run` 会重新探空闲和队列。
@@ -136,7 +136,7 @@ flowchart TD
    理由：2026-09-16。当时有三个 MCP server，解释器各不相同，每家 agent 都要单独配，结果谁都没配上。工具本身能用，就是没人调得到。
 
 6. **canvas 工具从不排队，Queue 由人来按。**
-   理由：standing rule。空闲检查、显存租约、先跑一张 smoke、证据 manifest，全在排队那条路上。从画布直接排队会把这些全绕过去。画布里还存着缓存值，可能跟机器上实时的模型清单对不上，所以提交前要先校验模型名。
+   理由：仓库主人的决定。空闲检查、显存租约、先跑一张 smoke、证据 manifest，全在排队那条路上。从画布直接排队会把这些全绕过去。画布里还存着缓存值，可能跟机器上实时的模型清单对不上，所以提交前要先校验模型名。
 
 7. **队列失败要看得见，不许悄悄退回直接执行。**
    理由：2026-08-28 接入队列时定下的固定规则：门面层从不悄悄回退，直接执行要显式打开环境变量。
@@ -145,10 +145,10 @@ flowchart TD
    理由：stdio 模式下，客户端库一打印或者调 `SystemExit`，协议就坏了。出图改成起子进程，`comfy_run` 把驱动日志挪进结果字段。
 
 9. **写脚本之前先查目录；借用就复制一份。**
-   理由：standing rule（2026-06-25）。见下一节。
+   理由：仓库主人的决定（2026-06-25）。见下一节。
 
 10. **专线保持独立适配器，不造通用媒体框架。**
-    理由：standing rule。各线的提示词方言、运行时、花费都不一样，通用层恰好会把要紧的差别盖住。
+    理由：仓库主人的决定。各线的提示词方言、运行时、花费都不一样，通用层恰好会把要紧的差别盖住。
 
 ## 脚本目录
 
@@ -190,9 +190,9 @@ flowchart TD
 
 ## 另见
 
-- `00-philosophy.md`：这样分面背后的原则。
-- `02-environment.md`：机器，以及什么跑在哪。
-- `03-dispatch.md`：subagent 档位和外部 worker。
-- `06-render-discipline.md`：先跑 smoke、隔离落盘、显存租约。
-- `08-inventory.md`：脚本目录和模型索引。
-- `11-safety-and-privacy.md`：闸门和受管出网。
+- [`00-philosophy.md`](00-philosophy.md)：这样分面背后的原则。
+- [`02-environment.md`](02-environment.md)：机器，以及什么跑在哪。
+- [`03-dispatch.md`](03-dispatch.md)：subagent 档位和外部 worker。
+- [`06-render-discipline.md`](06-render-discipline.md)：先跑 smoke、隔离落盘、显存租约。
+- [`08-inventory.md`](08-inventory.md)：脚本目录和模型索引。
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md)：闸门和受管出网。

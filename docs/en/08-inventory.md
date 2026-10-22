@@ -39,7 +39,7 @@ made it.
    `refresh` must run with the interpreter that has the embedding stack, otherwise status reads
    `partial` (2026-09-22).
 5. **Show an unknown content rating as unknown; never classify it silently.**
-   Why: standing rule. Self-trained LoRAs have base model "Unknown" and no hub metadata by design;
+   Why: owner's decision. Self-trained LoRAs have base model "Unknown" and no hub metadata by design;
    a family-matching function falls back to path tokens. Do not "fix" that.
 6. **Read the safetensors header (block count, parameter count, tensor dtype) before pairing a LoRA or control weight with a base, and record `blocks` on the model card.**
    Why: Anima comes in 28, 40 and 52 blocks. A 28-block LoRA on the 52-block model draws scribbles
@@ -87,7 +87,7 @@ made it.
 ### Scripts
 
 15. **Before writing anything new, read the script registry and the catalogue generated from it.**
-    Why: standing rule since 2026-06-25. The registry is a JSON file with status, zone, effects,
+    Why: owner's decision since 2026-06-25. The registry is a JSON file with status, zone, effects,
     targets, default mode, gates, timeout, output roots, cleanup, tests and authority for every
     script. CI rejects an unregistered script or an undeclared risk increase. Status (active, probe,
     legacy, test, reference) comes only from the registry, never from a filename or file age.
@@ -97,11 +97,11 @@ made it.
 
 ### Outputs
 
-17. **File outputs by the driving model, with a sidecar JSON holding only values really used.**
-    Why: my rule from 2026-06-23. The folder says which agent drove the run; the sidecar records the
+17. **File outputs by the driving model, with a metadata JSON holding only values really used.**
+    Why: my rule from 2026-06-23. The folder says which agent drove the run; the metadata JSON records the
     real engine, base, LoRAs and strengths, prompt and seed, never guessed values. The PNG also
     embeds the full ComfyUI graph.
-18. **When analysing a result, read the graph that was actually submitted, not source defaults or sidecars.**
+18. **When analysing a result, read the graph that was actually submitted, not source defaults or metadata JSON.**
     Why: on 2026-06-25 a txt2img run submitted denoise 0.5 by mistake; "baked VAE washes out" and
     "base over-exposes" were both artefacts of that bug and were retracted.
 19. **Tools run from a worktree point their outputs root at the main checkout; worktree outputs merge back with `rsync --ignore-existing`.**
@@ -137,9 +137,9 @@ made it.
     30 Buzz per request and 150 Buzz per local calendar day replaced per-image confirmation; each render
     appends to a JSONL ledger. Anything over the caps, batch probes and video still need my approval.
 25. **Before any paid command, search the ledger and count the files in the output directory; resume by default; afterwards check ledger rows = rendered files = spec entries.**
-    Why: on 2026-09-05 two paid probe commands pasted into a reply were run from the reply and then
-    approved again in the inbox. 19 images rendered twice and 257 Buzz were wasted. A paid command
-    pasted into chat may already have been run.
+    Why: a double paid run on 2026-09-05 cost 257 Buzz (the full story is in
+    [Providers](09-providers.md#real-cases)). A paid command pasted into chat may already have
+    been run.
 26. **NovelAI gets a local manifest and a daily Anlas ledger, because the API keeps no history.**
     Why: the default ledger cap is 300 Anlas per day and is not raised casually; the client is locked
     to the free tier unless a render is marked paid; HTTP 402 means stop, not retry. On 2026-09-30 the
@@ -181,8 +181,6 @@ made it.
   the same index carried on. Produced the lexical fallback.
 - **2026-09-17, 52-block scribbles.** Unremapped 28-block LoRAs on the 52-block base drew noise
   with no error. Produced the header check and the patch-count identity.
-- **2026-09-05, double paid run.** 257 Buzz for 19 duplicate images. Produced ledger reconciliation
-  and resume by default.
 - **2026-08-13, archive quota.** No hard cut-off at the provider. Produced the upload-side gate at 80%.
 
 ## Tried and dropped
@@ -194,7 +192,7 @@ made it.
 
 ## See also
 
-- `06-render-discipline.md`: isolation, cleanup and delivery of renders.
-- `04-model-bringup.md`: adopting a model, model cards.
-- `09-providers.md`: cloud budgets per provider.
-- `11-safety-and-privacy.md`: secrets and what stays private.
+- [`06-render-discipline.md`](06-render-discipline.md): isolation, cleanup and delivery of renders.
+- [`04-model-bringup.md`](04-model-bringup.md): adopting a model, model cards.
+- [`09-providers.md`](09-providers.md): cloud budgets per provider.
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md): secrets and what stays private.

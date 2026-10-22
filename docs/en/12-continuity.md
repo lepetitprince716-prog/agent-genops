@@ -13,6 +13,8 @@ task list, and how results are reported to me.
 > - Session trees stay one level deep. Task status lives in one place, the shared tracker.
 > - Reports lead with the conclusion and never drop bad news.
 
+On this page: [Memory files](#memory-files) · [STATE snapshot versus append-only logs](#state-snapshot-versus-append-only-logs) · [Three handoff levels](#three-handoff-levels) · [Session trees one level deep](#session-trees-one-level-deep) · [The shared task tracker](#the-shared-task-tracker) · [Report style](#report-style) · [Real cases](#real-cases) · [Tried and dropped](#tried-and-dropped)
+
 ## Memory files
 
 1. **One fact or one tight topic per file; the index carries one line per file.**
@@ -44,9 +46,9 @@ task list, and how results are reported to me.
    A terse classical style also scored 5/5 but used 48 more characters. An aggressive classical
    style scored 4.5/5, and the lost half point came from deleted facts.
 9. **Record routing changes and worker retirements in global rules, not in one project's memory.**
-   Why: standing rule. Project memory is invisible to other projects.
+   Why: owner's decision. Project memory is invisible to other projects.
 10. **Mark retired knowledge bases as retired and do not build on them.**
-    Why: standing rule. The project keeps one retired folder with the note "do not read, cite or
+    Why: owner's decision. The project keeps one retired folder with the note "do not read, cite or
     build logic on it".
 
 Template: [`templates/memory-entry.md`](../../templates/memory-entry.md).
@@ -54,21 +56,21 @@ Template: [`templates/memory-entry.md`](../../templates/memory-entry.md).
 ## STATE snapshot versus append-only logs
 
 11. **STATE is overwritten in place and kept to a short "where are we" snapshot.**
-    Why: standing rule. In-flight work in STATE is a pointer (branch, PR, HEAD, handoff folder),
+    Why: owner's decision. In-flight work in STATE is a pointer (branch, PR, HEAD, handoff folder),
     not a narrative; the narrative lives in the dated handoff folder.
 12. **PROGRESS, DECISIONS and MEMORY are append-only, each entry with date and author tag. Wrong history gets a correction appended, never a silent edit.**
-    Why: standing rule. An edited history cannot be audited.
+    Why: owner's decision. An edited history cannot be audited.
 13. **The roadmap says "where next and which gate blocks it"; it carries no progress numbers.**
-    Why: standing rule. STATE owns progress; the roadmap defers to it.
+    Why: owner's decision. STATE owns progress; the roadmap defers to it.
 14. **A decision, once made, is written back into its authority file and removed from the open list.**
-    Why: standing rule.
+    Why: owner's decision; no single incident behind it.
 15. **Never write unfinished work as done.**
-    Why: standing rule. STATE and the roadmap both carry this warning for UI items.
+    Why: owner's decision. STATE and the roadmap both carry this warning for UI items.
 16. **Write pointers, not state that expires, and never put a verdict inside the tree under review.**
     Why: on 2026-09-16 a handoff note saying "all four packages PASS" sat inside a PR diff. The
     next docs package was then blocked under the injection rule. Verdicts live in the PR comment.
 17. **A planning session opens with three reads: STATE, the roadmap status table, the runbook.**
-    Why: standing rule. After each accepted checkpoint it closes with a PROGRESS append and a STATE
+    Why: owner's decision. After each accepted checkpoint it closes with a PROGRESS append and a STATE
     bullet update.
 
 The governing files follow an authority read order: current state, then roadmap, vocabulary,
@@ -176,13 +178,13 @@ tracker does not, and non-Claude workers see only the tracker.
     Why: on 2026-10-14 a task sat in progress with "not closing, waiting for user", and the wrap-up
     to-do list came out empty. When I decide, the task goes back to open with the assignee cleared.
 34. **Close with metadata (agent, model, effort, minutes, sessions) and a close reason that starts with the result.**
-    Why: standing rule. Metadata makes "which tier did this work" a query. The reason's first
+    Why: owner's decision. Metadata makes "which tier did this work" a query. The reason's first
     sentence (60 characters or fewer) is what shows in the sidebar.
 35. **Discovered work links to its source and carries a chain counter. The third derived task is created blocked.**
     Why: decided 2026-10-07. The same kind of small fix cannot roll on by itself; direction stays
     with me.
 36. **Every wrap-up ends with the blocked list and the stale in-progress list (no update in two days). Report only; do not act on them.**
-    Why: standing rule. These are the two lists I need and would otherwise not see.
+    Why: owner's decision. These are the two lists I need and would otherwise not see.
 
 Titles: verb first, 24 characters or fewer, no repo name (the label carries it).
 
@@ -191,12 +193,12 @@ Titles: verb first, 24 characters or fewer, no repo name (the label carries it).
 37. **Conclusion first. The first sentence says whether it works and why.**
     Why: the reader needs to know "can I use it, what next" within three seconds.
 38. **Numbers go in directly: "1952 pass / 26 fail", not "tests mostly pass".**
-    Why: standing rule.
+    Why: owner's decision; no single incident behind it.
 39. **Bad news is never trimmed. Unverified, undone, impossible and failed items stay, with whether the failure is yours.**
-    Why: standing rule. Trim order is explanations first, then details, then merged items. Bad news
+    Why: owner's decision. Trim order is explanations first, then details, then merged items. Bad news
     and commands are never cut.
 40. **Commands, paths, branches and links are copied verbatim. When a gate blocks you, hand over one runnable command, not prose.**
-    Why: standing rule since 2026-09-19. The command is idempotent, backs up what it overwrites,
+    Why: owner's decision since 2026-09-19. The command is idempotent, backs up what it overwrites,
     aborts on a missing anchor, and says which parts stayed unverified.
 41. **At most two options per decision, with a recommendation. Progress notes only when the plan changes, something fails, or before a long wait.**
     Why: length is a hard constraint for me; progress notes count toward it (2026-10-17).

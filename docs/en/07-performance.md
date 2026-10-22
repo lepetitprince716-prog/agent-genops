@@ -11,7 +11,7 @@ re-measured on 0.42.1, which both render boxes run since 2026-10-20.
 > - Measure before tuning. On the quality line every intuitive cause (network, model loading, polling) was wrong; detailer resampling was the cost.
 > - A/B as A-B-A, with an explicit off arm, warm runs, at least 3 seeds, median. One SDXL pipeline showed 24% seed variance, so a single-sample A/B cannot resolve differences under about 20%.
 > - Change the biggest lever first, then re-measure the rest. Borrowed numbers are hypotheses.
-> - Adopted: mxfp8 weights plus INT8 attention (2.11x on Anima 3.8B, quality intact). Collapsed: uncalibrated nvfp4. Rejected: fp8 matmul on Box B, a few-step video distill.
+> - Adopted: mxfp8 weights plus INT8 attention (2.11x on Anima 3.8B on an RTX 50 card, quality intact; mxfp8 speeds up Blackwell cards only). Collapsed: uncalibrated nvfp4. Rejected: fp8 matmul on Box B, a few-step video distill.
 > - Quality tiers are judged by me, not the agent. Speed from weight format and kernels cannot be packaged as a LoRA.
 
 ## Rules
@@ -107,7 +107,7 @@ nvfp4 0.071 ms (4.38x, relative error 0.134).
 
 ## The A/B procedure
 
-1. Write the question and the one variable. Fill in `../../templates/ab-test.md`.
+1. Write the question and the one variable. Fill in [`templates/ab-test.md`](../../templates/ab-test.md).
 2. Fix everything else: box, prompt, resolution, sampler, steps, LoRA set.
 3. Arms: control, treatment, and an explicit off arm for any toggle. A LoRA control arm uses
    strength 0.001, never 0.
@@ -214,7 +214,7 @@ launch flags. The only LoRA-shaped speed-up is a step-reducing turbo LoRA.
 
 ## See also
 
-- `04-model-bringup.md`: adopting a quantized model.
-- `05-debugging.md`: OOM, driver resets, polluted processes.
-- `06-render-discipline.md`: smoke timing before a batch.
-- `../../templates/ab-test.md`: the write-up template.
+- [`04-model-bringup.md`](04-model-bringup.md): adopting a quantized model.
+- [`05-debugging.md`](05-debugging.md): OOM, driver resets, polluted processes.
+- [`06-render-discipline.md`](06-render-discipline.md): smoke timing before a batch.
+- [`templates/ab-test.md`](../../templates/ab-test.md): the write-up template.

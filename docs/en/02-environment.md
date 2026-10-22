@@ -4,7 +4,7 @@ English | [中文](../zh/02-environment.md)
 
 This page answers: what hardware and software does this method run on, which work goes to
 which machine, and how the agents reach the machines. The numbers are mine and dated. Use
-them as a reference point, then fill in `templates/fleet.example.yaml` for your own setup.
+them as a reference point, then fill in [`templates/fleet.example.yaml`](../../templates/fleet.example.yaml) for your own setup.
 
 > **TL;DR**
 > - Four roles: a Controller that runs the agents and renders nothing, two Windows render boxes, and a Linux node outside the image lines.
@@ -117,7 +117,7 @@ Box A is my gaming PC. The rules below exist because of that.
 5. **Count the owner's foreground apps in the VRAM budget.**
    Why: apps kept open on Box A hold about 2.4 GB of VRAM all the time (2370 to 2493 MiB measured). The job runner's GPU-ready threshold went from 2048 to 4096 MiB with my consent on 2026-10-19; the new threshold is deployed on Box A only, and Box B still runs the 2048 MiB build.
 6. **When any ComfyUI instance has queued work, batch GPU jobs wait.**
-   Why: standing rule. A GPU guard freezes the whole GPU job group, and those jobs must not submit prompts to the ComfyUI instances themselves.
+   Why: owner's decision. A GPU guard freezes the whole GPU job group, and those jobs must not submit prompts to the ComfyUI instances themselves.
 7. **Changes to Box A ask first; Box B tuning is pre-authorised.**
    Why: owner decision 2026-09-30. Memory, precision, attention backend, resident models and launch flags on Box B are in scope for agents; Box A, the network plane and deleting non-test data still need a yes.
 
@@ -138,7 +138,7 @@ Box A is my gaming PC. The rules below exist because of that.
 
 ## Adapting this to your setup
 
-Copy `templates/fleet.example.yaml` and fill it in before an agent dispatches anything.
+Copy [`templates/fleet.example.yaml`](../../templates/fleet.example.yaml) and fill it in before an agent dispatches anything.
 
 - [ ] Name each machine by role, not by hostname. Mark which one runs agents and renders nothing.
 - [ ] Record GPU, VRAM, RAM and OS per box, and the date you recorded them.
@@ -152,9 +152,9 @@ Copy `templates/fleet.example.yaml` and fill it in before an agent dispatches an
 
 ## See also
 
-- `01-architecture.md`: the two planes and the layers.
-- `04-model-bringup.md`: adopting a new model or ComfyUI version.
-- `05-debugging.md`: Windows remote traps, restarts that do not restart.
-- `06-render-discipline.md`: smoke first, queues, cleanup.
-- `07-performance.md`: A/B method and the numbers behind the launch flags.
-- `11-safety-and-privacy.md`: managed wrappers and gates.
+- [`01-architecture.md`](01-architecture.md): the two planes and the layers.
+- [`04-model-bringup.md`](04-model-bringup.md): adopting a new model or ComfyUI version.
+- [`05-debugging.md`](05-debugging.md): Windows remote traps, restarts that do not restart.
+- [`06-render-discipline.md`](06-render-discipline.md): smoke first, queues, cleanup.
+- [`07-performance.md`](07-performance.md): A/B method and the numbers behind the launch flags.
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md): managed wrappers and gates.

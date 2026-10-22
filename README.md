@@ -47,6 +47,8 @@ The [24 rules](docs/en/00-philosophy.md) come in six groups:
 [Agents and dispatch](docs/en/00-philosophy.md#4-agents-and-dispatch) (14–17) ·
 [Memory and honesty](docs/en/00-philosophy.md#5-memory-and-honesty) (18–21) ·
 [Creative work](docs/en/00-philosophy.md#6-creative-work) (22–24).
+Each page adds working rules of its own; a number such as "rule 13" refers to the numbered
+list it sits in on its own page.
 
 ## The idea
 

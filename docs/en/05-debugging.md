@@ -26,7 +26,7 @@ render boxes run since 2026-10-20.
 | Same seed, different pixels after a ComfyUI upgrade | Expected drift (Anima PSNR 28 to 37 dB, 0.27.1 to 0.42.1) or a real regression | Same-seed A/B on a sibling instance; composition unchanged means drift |
 | Old runtime will not start after rollback | 0.42.1 migrated the UI database | Restore the database backup taken before the upgrade |
 | OOM at VAE decode only on a quantized model | Quantized DiT not partially offloadable | Explicit unload and cache empty before decode |
-| Server dies, no traceback, event log shows a driver reset | Desktop apps ate through `--reserve-vram 1.0` | Set `--reserve-vram 2.5` |
+| Server dies, no traceback, event log shows a driver reset | Desktop apps ate through `--reserve-vram 1.0` | Raise `--reserve-vram`: 2.5 on Box A, whose desktop apps hold about 2.4 GB; size yours from your own apps |
 | VRAM stays high after `/free`; "Cannot set version_counter for inference tensor" | LoRA on a partially loaded INT8 ConvRot checkpoint (about 11 GB leaked) | Service stop and start; `/free` cannot recover it |
 | VRAM or commit memory held with no job; WinError 1455 | Orphan or zombie Python from a crashed run | Processes by command line; kill by listening port or command line |
 | Server reports free VRAM, jobs still OOM | Server's number ignores other processes; Box A's foreground apps hold about 2.4 GB | Vendor tool total minus the server's own use |
@@ -47,7 +47,7 @@ render boxes run since 2026-10-20.
 
 ## Rules for silent failures
 
-1. **Read the graph that was actually submitted, not the script defaults or the sidecar JSON.**
+1. **Read the graph that was actually submitted, not the script defaults or the metadata JSON.**
    Why: on 2026-06-25 a txt2img graph carried denoise 0.5 and produced three false findings,
    among them the VAE and exposure ones. All three were retracted.
 
@@ -155,7 +155,7 @@ Procedure after the second failure:
 ## Handing over a runnable command
 
 1. **Blocked means a runnable command, not prose.**
-   Why: standing rule since 2026-09-19. A gate, a missing permission, a root-owned file or a
+   Why: owner's decision since 2026-09-19. A gate, a missing permission, a root-owned file or a
    GUI-only step stops the agent; describing the steps leaves me to assemble them.
 
 Typical blockers: loading or restarting a launch agent, process or network probes the managed
@@ -176,6 +176,7 @@ f="$HOME/example/service.yaml"
 grep -q '^args:' "$f" || { echo "anchor 'args:' missing, abort"; exit 1; }
 grep -q -- '--reserve-vram 2.5' "$f" && { echo "already applied"; exit 0; }
 cp -p "$f" "$f.bak.$(date +%Y%m%d%H%M%S)"
+# macOS sed; with GNU sed, drop the ''
 sed -i '' 's/^args:\(.*\)$/args:\1 --reserve-vram 2.5/' "$f"
 grep -- '--reserve-vram 2.5' "$f"
 ```
@@ -214,7 +215,7 @@ grep -- '--reserve-vram 2.5' "$f"
 
 ## See also
 
-- `04-model-bringup.md`: architecture checks before a model goes live.
-- `06-render-discipline.md`: process-group queue stops, cleanup.
-- `07-performance.md`: when the problem is speed, not correctness.
-- `11-safety-and-privacy.md`: managed egress and gates.
+- [`04-model-bringup.md`](04-model-bringup.md): architecture checks before a model goes live.
+- [`06-render-discipline.md`](06-render-discipline.md): process-group queue stops, cleanup.
+- [`07-performance.md`](07-performance.md): when the problem is speed, not correctness.
+- [`11-safety-and-privacy.md`](11-safety-and-privacy.md): managed egress and gates.

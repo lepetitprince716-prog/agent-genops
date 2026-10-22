@@ -53,7 +53,7 @@ Runnable handover command must be:
 
 1. Run the free quote first.
 2. Check the ledger and the output folder for an earlier run of the same job. Default to resume.
-3. Stay inside the standing budget. Civitai: at most 30 Buzz per request, 150 per local day, counted from that channel's ledger.
+3. Stay inside the budget in LOCAL.md; the author's defaults follow. Civitai: at most 30 Buzz per request, 150 per local day, counted from that channel's ledger.
 4. Write one ledger row per charged item.
 5. After the run, check ledger rows == files == requested items.
 6. Unreadable usage or quota: refuse. Never proceed on unknown spend.

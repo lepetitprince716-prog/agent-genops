@@ -68,8 +68,8 @@ Read when: choosing a model or LoRA, downloading a model, writing a new script, 
 
 ## Outputs
 
-- File by driving model; sidecar JSON with only values really used (engine, base, LoRAs, strengths, prompt, seed).
-- PNG embeds the submitted graph. Analyse the submitted graph, not defaults or sidecars.
+- File by driving model; metadata JSON with only values really used (engine, base, LoRAs, strengths, prompt, seed).
+- PNG embeds the submitted graph. Analyse the submitted graph, not defaults or metadata JSON.
 - Worktree tools: set the outputs root to the main checkout. Merge worktree outputs with `rsync --ignore-existing`. Never `rm` in the main outputs tree.
 
 ## Cold archive

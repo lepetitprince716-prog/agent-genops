@@ -19,7 +19,7 @@ Every other page cites its reasons from here.
 2. **Each incident names the rule it produced and where that rule now lives.**
    Why: a lesson that lives only in chat is lost when the transcript is cleaned.
 3. **A rule's reason stays in the file that owns the rule; the changelog keeps one line.**
-   Why: policy files are distilled by dropping reasons and keeping constraints (standing rule).
+   Why: policy files are distilled by dropping reasons and keeping constraints (owner's decision).
 4. **Two failures of the same task send the agent back to inventory, not to a third attempt.**
    Why: the usual cause is a missing tool or an unread doc, not a coding error (policy entry 2026-08-27).
 
@@ -136,7 +136,7 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - **Release VRAM after every render.** Dropped for leases and an idle reaper (2026-09-22).
 - **Longer timeouts on a hanging remote box.** Dropped for a narrower command shape (2026-10-13).
 - **Same-family review only.** Dropped after two misses in July 2026; a second tool family reviews.
-- **Polling scripts that wait for CI.** Dropped: check once, wait, check once (standing rule).
+- **Polling scripts that wait for CI.** Dropped: check once, wait, check once (owner's decision).
 
 ## See also
 

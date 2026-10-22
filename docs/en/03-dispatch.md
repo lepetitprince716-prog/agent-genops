@@ -22,14 +22,14 @@ tool calls.
    Why: a worker costs a packet, a cold start and an acceptance pass, and it starts without the
    root's context. On single-chain work that cost buys nothing.
 2. **Delegate for two reasons only: to fan out independent lanes, or to keep a large read out of the root's context.**
-   Why: standing rule since 2026-07-26 (threshold-style delegation). The root's context is the
+   Why: owner's decision since 2026-07-26 (threshold-style delegation). The root's context is the
    scarcest resource in a long session.
 3. **Fact questions are answered by reading, not by agents.**
    Why: in one acceptance round, a second-tool pre-read hung (its session log stopped at 2.5 KB with
    no growth for 10 minutes). The root read the code directly and found the misclassified script.
    When the output you want is a fact ("does this symbol exist"), grep beats restarting a flaky agent.
 4. **Two failures of the same shape send you back to inventory, not to a third attempt.**
-   Why: the usual cause is a missing tool or an unread doc, not a coding error (standing rule,
+   Why: the usual cause is a missing tool or an unread doc, not a coding error (owner's decision,
    2026-08-27).
 
 ## The tier ladder
@@ -66,7 +66,7 @@ Ready-made definitions are in [`templates/agents/`](../../templates/agents/).
    Why: a literature re-check workflow burned quota on 2026-10-15 because its agents inherited the
    session's strongest model.
 10. **Run plan-reviewer before leaving plan mode, and fact-checker before a commit or a user-facing summary.**
-    Why: standing rule (plan review since 2026-09-22). An independent review of one plan found nine
+    Why: owner's decision (plan review since 2026-09-22). An independent review of one plan found nine
     defects; all nine held up, and I re-checked five of them directly at the source.
 
 ## External workers through herdr
@@ -94,7 +94,7 @@ vendors. Claude models never go through it: they run only as subagents of the ro
     Why: on 2026-09-20 three corrections sat queued in a pane and never reached the agent. About 4 GB
     were downloaded for nothing. "Submitted" can mean "queued".
 15. **Close every workspace the task spawned.**
-    Why: standing rule.
+    Why: owner's decision; no single incident behind it.
 
 ## The task packet
 
@@ -123,20 +123,20 @@ no child delegation; do not revert other work
     Why: pre-reads caught 3 P1 findings on one refactor brief, 1 P1 plus 5 P2 on the next, and
     3 P1 plus 7 P2 on a tests-only brief. Each would have misled the executor.
 19. **Delegated runners execute; the dispatcher keeps every creative and parameter call.**
-    Why: standing rule in every runner runbook. Outfit, LoRA weight, adapter strength and the final
+    Why: owner's decision, written into every runner runbook. Outfit, LoRA weight, adapter strength and the final
     pick stay with the dispatcher. The runbooks also say: print mode first, relay asset errors verbatim and stop, open every
     reported path, report shortfalls honestly.
 
 ## Acceptance by the root
 
 20. **A worker's self-report is not acceptance.**
-    Why: standing rule. Numbers are checked against artifacts or a re-run. `done` means settled;
+    Why: owner's decision. Numbers are checked against artifacts or a re-run. `done` means settled;
     `unknown` does not mean finished.
 21. **Read the RESULT file, not the terminal.**
     Why: terminal output carries startup banners and wastes context. Fallbacks in order: the last
     assistant message from the session log, then a bounded read of the last 40 lines.
 22. **A failed Haiku check is retried on Sonnet, not re-asked of Haiku.**
-    Why: standing rule.
+    Why: owner's decision; no single incident behind it.
 23. **Test PRs get one reviewer with a mutation viewpoint.**
     Why: see the worked example below. "The assertion is correct" is the pass line. "A broken
     implementation would fail this test" is the value.
@@ -156,9 +156,9 @@ Acceptance checklist:
     Why: on 2026-09-16 a dirty main checkout with 55 changed files was taken for orphaned work,
     committed as WIP and switched. It belonged to a live session whose pane said "done".
 25. **Cap the multiplexer at three workers and run a two-lane preflight before scheduling writers.**
-    Why: standing rule. The preflight refuses lanes whose worktrees or panes overlap.
+    Why: owner's decision. The preflight refuses lanes whose worktrees or panes overlap.
 26. **When several lanes must change one file, each lane writes a fragment file; the root integrates serially.**
-    Why: standing rule. A fragment holds the full insert text plus a content anchor, never line
+    Why: owner's decision. A fragment holds the full insert text plus a content anchor, never line
     numbers. Contract tests run after each integration.
 27. **Before deleting a worktree, scan it for work that never reached a branch.**
     Why: on 2026-08-16 one worktree held a whole 3D line (16 modified files, 10 test files, a toolchain)
@@ -173,11 +173,11 @@ Acceptance checklist:
 29. **Before writing code, inventory what already exists: MCP servers and plugins, local CLIs, project facilities, runtime versions.**
     Why: hand-written implementation is the last resort. The inventory is cached for seven days.
 30. **Then search open source at the tier the change needs.**
-    Why: standing rule. Tiers are: skip (a string, a parameter, an already-located bug), light (single
+    Why: owner's decision. Tiers are: skip (a string, a parameter, an already-located bug), light (single
     file, no new dependency: one quick search, a one-line report, then build), full (new module,
     dependency or architecture). When unsure, go heavier.
 31. **Full-tier candidates are scored and the comparison is shown before code is written.**
-    Why: standing rule. Score = fit x3 + maintenance x2 + dependency weight x2 + readability x2 +
+    Why: owner's decision. Score = fit x3 + maintenance x2 + dependency weight x2 + readability x2 +
     maturity x1, out of 50. Fit below 3 eliminates. Stars are not a score. A license problem is a
     veto, and GPL/AGPL source from a vetoed candidate is not read into context.
 

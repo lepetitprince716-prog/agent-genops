@@ -114,10 +114,10 @@ flowchart LR
 3. 放进真实模型根，重启服务，在 `object_info` 里确认名字。
 4. 按官方工作流搭图，用 API 格式提交，结果读回来。
 5. 架构检查：块数对上打算用的 LoRA 和控制权重；补丁数 = 张量数 ÷ 3。
-6. 出一张 smoke：放大批量之前先核单张耗时、落盘路径、文件名规则（见 `06-render-discipline.md`）。
+6. 出一张 smoke：放大批量之前先核单张耗时、落盘路径、文件名规则（见 [`06-render-discipline.md`](06-render-discipline.md)）。
 7. 挂常用 LoRA 栈出一张，提示词和 seed 跟现行默认一致。
 8. 机器门先筛掉坏图，剩下的放进一个评审页给我看。
-9. 写模型卡（`../../templates/model-card.md`）：长处、短处、提示词规则、配方、热态速度（带日期和
+9. 写模型卡（[`templates/model-card.md`](../../templates/model-card.md)）：长处、短处、提示词规则、配方、热态速度（带日期和
    ComfyUI 版本）、坑、结论。
 10. 采纳：设注册表角色，冻结评测引擎，配方按名字注册。
     放弃：状态标 `no_gain`，归档，删本地测试图，教训留下。
@@ -178,14 +178,14 @@ sidecar 和主服务共用一张 16 GB 显卡，跑 sidecar 前先让主服务�
 
 - 新 checkpoint 铺裸模矩阵（2026-09-15）。
 - 拿专用的继续预训练评测框架横比模型。
-- 无校准的 nvfp4 烘焙：快 1.65 倍，画质塌了（细节见 `07-performance.md`）。
+- 无校准的 nvfp4 烘焙：快 1.65 倍，画质塌了（细节见 [`07-performance.md`](07-performance.md)）。
 - Krea-2 线：2026-10-13 三方二次元对照里我判 Qwen-Image 2.1 胜出，这条线停掉，底模移进隔离目录。
 - 某视频模型的量化版：Civitai 上只有 NVFP4，在 ComfyUI 里是坏的。
 
 ## 另见
 
-- `05-debugging.md`：模型能加载但出图不对时看这里。
-- `06-render-discipline.md`：先 smoke 再批量、隔离落盘、清理。
-- `07-performance.md`：量化与蒸馏的结论。
-- `08-inventory.md`：注册表、模型索引、归档。
-- `10-prompting-and-review.md`：各模型族的提示词规则和评审方法。
+- [`05-debugging.md`](05-debugging.md)：模型能加载但出图不对时看这里。
+- [`06-render-discipline.md`](06-render-discipline.md)：先 smoke 再批量、隔离落盘、清理。
+- [`07-performance.md`](07-performance.md)：量化与蒸馏的结论。
+- [`08-inventory.md`](08-inventory.md)：注册表、模型索引、归档。
+- [`10-prompting-and-review.md`](10-prompting-and-review.md)：各模型族的提示词规则和评审方法。

@@ -132,10 +132,10 @@ flowchart LR
 5. Run the architecture check: block count against the LoRA and control weights you intend to
    use; patch count equals tensors / 3.
 6. Render one smoke image. Check time per image, write path and filename rule before anything
-   bigger (see `06-render-discipline.md`).
+   bigger (see [`06-render-discipline.md`](06-render-discipline.md)).
 7. Render one image with the usual LoRA stack, same prompt and seed as the current default.
 8. Let gates reject broken output. Put the survivors in front of me on one review page.
-9. Write the model card (`../../templates/model-card.md`): strengths, weaknesses, prompt
+9. Write the model card ([`templates/model-card.md`](../../templates/model-card.md)): strengths, weaknesses, prompt
    rules, recipe, warm speed with date and ComfyUI version, traps, verdict.
 10. Adopted: set the registry role, freeze the eval engine, register recipes by name.
     Dropped: status `no_gain`, archive, delete local test images, keep the lesson.
@@ -210,7 +210,7 @@ private root) before killing; never kill by image name.
 
 - Bare-model matrices for new checkpoints (2026-09-15).
 - A purpose-built continued-pretraining eval script as a cross-model bench.
-- Uncalibrated nvfp4 baking: 1.65x faster, quality collapsed (details in `07-performance.md`).
+- Uncalibrated nvfp4 baking: 1.65x faster, quality collapsed (details in [`07-performance.md`](07-performance.md)).
 - The Krea-2 line: dropped on 2026-10-13 after a three-way anime comparison I judged in favour
   of Qwen-Image 2.1; its base models went to a quarantine folder.
 - A video model's quantized release that existed only as NVFP4 on Civitai and was broken in
@@ -218,8 +218,8 @@ private root) before killing; never kill by image name.
 
 ## See also
 
-- `05-debugging.md`: when a new model loads but renders wrong.
-- `06-render-discipline.md`: smoke before batch, isolation, cleanup.
-- `07-performance.md`: quantization and distillation verdicts.
-- `08-inventory.md`: registries, model index, archive.
-- `10-prompting-and-review.md`: prompt rules per family, review method.
+- [`05-debugging.md`](05-debugging.md): when a new model loads but renders wrong.
+- [`06-render-discipline.md`](06-render-discipline.md): smoke before batch, isolation, cleanup.
+- [`07-performance.md`](07-performance.md): quantization and distillation verdicts.
+- [`08-inventory.md`](08-inventory.md): registries, model index, archive.
+- [`10-prompting-and-review.md`](10-prompting-and-review.md): prompt rules per family, review method.

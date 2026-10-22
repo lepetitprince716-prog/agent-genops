@@ -130,7 +130,7 @@ later page seems to disagree with this one, the later page is wrong and should b
     folder on the same disk and the owner empties it.
 
 20. **Quality first; "all" means all.**
-    Why: standing rule. A visual acceptance pass covers every unit, not a sample.
+    Why: owner's decision. A visual acceptance pass covers every unit, not a sample.
 
 21. **Conclusion first, and bad news is never trimmed.**
     Why: long reports do not get read, so length is a hard limit. When a report must shrink,

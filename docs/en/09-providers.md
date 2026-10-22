@@ -17,6 +17,8 @@ and one image model reached through a coding agent all sit behind the same root 
 >   the account. Logins stay the owner's. Downloads need consent.
 > - Adult work, where it exists, runs in a separate private lane and is not covered here.
 
+On this page: [Routing table](#routing-table) · [Rules for every provider](#rules-for-every-provider) · [Local boxes](#local-boxes) · [NovelAI](#novelai) · [Midjourney](#midjourney) · [Civitai](#civitai) · [GPT Image](#gpt-image) · [Procedure: browser-pane operator packet](#procedure-browser-pane-operator-packet) · [Procedure: paid Civitai render](#procedure-paid-civitai-render) · [Checklist before any paid call](#checklist-before-any-paid-call) · [Real cases](#real-cases) · [Tried and dropped](#tried-and-dropped)
+
 ## Routing table
 
 | Job | Backend | Reached through | Why this one |
@@ -48,11 +50,11 @@ and one image model reached through a coding agent all sit behind the same root 
    never appear in argv, logs, error text or database rows.** Why: an older Civitai client put
    its token in argv, where any process list could read it. It was replaced.
 6. **New tools that gain a cloud path default to plan, preset or dry run.** Auto-render is
-   opt-in. Why: standing rule from the low-volume decision (2026-09-16).
+   opt-in. Why: follows from the low-volume decision (2026-09-16).
 7. **Logins are the owner's.** A login page, Cloudflare check or CAPTCHA stops the agent; the
-   owner passes it in the pane. Nobody types credentials for the owner. Why: standing rule.
+   owner passes it in the pane. Nobody types credentials for the owner. Why: owner's decision; no single incident behind it.
 8. **Downloads to disk need consent, per batch or within a scope the owner gave.** Report count,
-   size and location. Why: standing rule. Midjourney images my own project generated are the one
+   size and location. Why: owner's decision. Midjourney images my own project generated are the one
    waived scope (2026-10-19).
 9. **Adult work stays out of these backends.** Where it exists it runs in a separate private
    lane with its own gates. Why: Midjourney moderation can ban the account, and the Civitai
@@ -85,7 +87,7 @@ The per-line recipes live in the line pages. ComfyUI on both boxes is 0.42.1 as 
    Generate button on 2026-09-30: 512x768 and 960x1088 cost 0, 1088x1024 is charged. The older
    "three size presets" rule was void from that day. img2img and Enhance are never free.
 3. **Quote paid combinations in Anlas before calling them.** The local ledger caps at 300 Anlas a
-   day; do not raise it casually. Why: standing rule.
+   day; do not raise it casually. Why: owner's decision; no single incident behind it.
 4. **Send a custom User-Agent.** Why: on 2026-08-25/27 the CDN rejected the default Python
    signature with 403/1010.
 5. **Keep a local manifest; the API keeps no history.** Why: without it a render cannot be traced.
