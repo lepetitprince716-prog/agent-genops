@@ -119,7 +119,7 @@
 
 各页提到的脚本（意图路由、模型索引、账本等）是作者自己的，只当例子，这个仓库里没有。每个角色要做到什么、只有 ComfyUI 时拿什么顶替，写在 [SKILL.md](skills/agent-genops/SKILL.md) 的角色表里；你自己的对应关系填进 [templates/LOCAL.example.md](templates/LOCAL.example.md)。看不懂的词查[术语表](skills/agent-genops/references/glossary.md#中文)。
 
-另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、LOCAL.md、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具）。
+另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、LOCAL.md、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具，以及性能那一页用到的 GPU 内核分类工具和矩阵乘探针）。
 
 ## 使用 skill
 

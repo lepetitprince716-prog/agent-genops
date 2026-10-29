@@ -138,7 +138,7 @@ Unfamiliar terms are in the [glossary](skills/agent-genops/references/glossary.m
 
 Also in the repo: [templates/](templates/) (task packet, model card, A/B write-up, run order,
 handoff, memory entry, LOCAL.md, subagent definitions) and [tools/](tools/) (the privacy scanner
-this repo runs on itself).
+this repo runs on itself, plus a GPU kernel classifier and a GEMM probe from the performance page).
 
 ## Use the skill
 

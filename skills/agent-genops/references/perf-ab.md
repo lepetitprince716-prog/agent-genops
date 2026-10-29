@@ -44,7 +44,14 @@ Read when: proposing or testing a speed-up (quantization, attention backend, lau
 | Attention | 14.0% | 21.6% |
 | Fusable rest | about 14% | about 10% |
 
-Implications: precision reduction is the GEMM lever; attention backends matter more on DiT; hand-written kernels cap at about 5% end to end; do not quote "attention 40 to 70%" (video/FLUX class only).
+Implications: precision reduction is the GEMM lever; attention backends matter more on DiT; hand-written fusion of the non-GEMM parts caps at about 5% end to end; do not quote "attention 40 to 70%" (video/FLUX class only). GEMM kernel choice is a separate question: on Box B under the power cap, a Triton FP16-accumulate matmul beat cuBLAS 1.11 to 1.20x in isolation (2026-10-29, not in a render).
+
+## Bounding a speed-up that cannot be run
+
+- Split one profiled render's kernels by accumulator with `tools/kernel_classes.py`: A (FP16/BF16 in, FP32 accumulate), B (already full rate), C (no tensor-core math). Unmatched names stop the run.
+- Ceiling: T' = T - A x (1 - 1/s). s from the same render with FP16 accumulation off (measured), plus 1.7 and 2.0.
+- Time GEMM candidates with `tools/gemm_probe.py`: sustained load, nvidia-smi clock and power, error against FP32 to confirm the accumulator.
+- A ceiling is not a measurement; say so in the report.
 
 ## Recorded verdicts (do not re-run without a new reason)
 
@@ -56,16 +63,19 @@ Implications: precision reduction is the GEMM lever; attention backends matter m
 | mxfp8 in production server, pre-distilled 2.9B | 22 to 24% faster | Adopted 2026-10-01 |
 | int8 convrot instead of GGUF Q8_0 (Qwen-Image 2.1) | 0.657 to 0.210 s/step | Adopted |
 | INT8 attention on Qwen-Image | 5 to 7% on GGUF, 14 to 21% on convrot | Adopted |
-| `--fast fp16_accumulation` (Box B, 0.27.1) | WAI 1.19x, Anima 1.05x | Default on |
+| `--fast fp16_accumulation` (Box B, 0.42.1, 2026-10-29) | WAI 1.21x, Anima 1.25x to 1.27x (0.27.1: 1.19x, 1.05x) | Default on |
 | SageAttention on top (Box B, 0.27.1) | 1.03x to 1.09x | Default on |
 | fp8 matmul (Box B) | 4% slower, PSNR 16.3 dB | Dead end |
 | Per-pass `/free` removal | 1% to 11% | Not a lever; keep models resident anyway |
-| Hand-written kernels | Ceiling about 5% | Rejected |
+| Hand-written fusion of the non-GEMM parts | Ceiling about 5% | Rejected |
+| GeForce FP32-accumulate unlock (Box B, needs Linux) | Ceiling 1.00x to 1.14x on lines in use; 1.26x to 1.52x for a BF16-computed DiT | Not pursued (bounded, not run) |
+| Triton FP16-accumulate GEMM instead of cuBLAS (Box B) | 1.11x to 1.20x per GEMM in isolation | Open: not tried in a render |
+| One layer routed by a custom loader to a slower library GEMM, moved back to cuBLAS (Box B) | 1.10x per image | Open: quality not accepted |
 | Video few-step distill LoRA, 8 steps | 1.5x, motion stalls | Rejected 2026-10-21 (single seed) |
 | Qwen-Image few-step distill / self-baked mxfp8 | Not built | Rejected on payback |
 | Box B LoRA training: GC off, batch 2, compile, full AdamW | Slower or neutral | Rejected |
 
-Box B numbers were measured on 0.27.1 and not re-measured on 0.42.1. Box A kernel and quantization numbers were measured on 0.33.1.
+Box B numbers were measured on 0.27.1 and not re-measured on 0.42.1, except fp16 accumulation and the 2026-10-29 rows. Box A kernel and quantization numbers were measured on 0.33.1.
 
 ## Quantization checklist
 

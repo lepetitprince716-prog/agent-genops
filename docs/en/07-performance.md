@@ -5,7 +5,7 @@ English | [中文](../zh/07-performance.md)
 This page answers: how do I tell whether a speed-up is real, where does render time actually
 go, and which quantization and distillation choices held up on 16 GB consumer cards? Every
 number carries its date, box and ComfyUI version. Numbers from 0.27.1 or 0.33.1 were not
-re-measured on 0.42.1, which both render boxes run since 2026-10-20.
+re-measured on 0.42.1, which both render boxes run since 2026-10-20, unless a re-measure is noted.
 
 > **TL;DR**
 > - Measure before tuning. On the quality line every intuitive cause (network, model loading, polling) was wrong; detailer resampling was the cost.
@@ -13,6 +13,7 @@ re-measured on 0.42.1, which both render boxes run since 2026-10-20.
 > - Change the biggest lever first, then re-measure the rest. Borrowed numbers are hypotheses.
 > - Adopted: mxfp8 weights plus INT8 attention (2.11x on Anima 3.8B on an RTX 50 card, quality intact; mxfp8 speeds up Blackwell cards only). Collapsed: uncalibrated nvfp4. Rejected: fp8 matmul on Box B, a few-step video distill.
 > - Quality tiers are judged by me, not the agent. Speed from weight format and kernels cannot be packaged as a LoRA.
+> - A speed-up you cannot run can still be bounded: split the profiled kernels by accumulator type and apply T' = T - A(1 - 1/s). A GeForce unlock is worth at most 1.00 to 1.14x on the Box B lines in use, so it is not pursued.
 
 ## Rules
 
@@ -33,6 +34,11 @@ re-measured on 0.42.1, which both render boxes run since 2026-10-20.
    beats hand kernels. The fusable parts (elementwise, norm, rope, other) are about 14% on
    SDXL and 10% on the Anima DiT, worth about 5% end to end. The often-quoted "attention is
    40 to 70%" comes from video and FLUX-class models and is false for both lines here.
+   Measured exception (Box B, 2026-10-29): with FP16 accumulation under the card's 165 W power
+   cap, a short Triton matmul ran 1.11 to 1.20x faster than cuBLAS on three DiT layer shapes in
+   isolation, so "the vendor library beats hand kernels" does not hold there. It has not run in
+   a render and is not adopted; see [Kernel choice under a power cap](#kernel-choice-under-a-power-cap).
+   The 5% figure is for fusing the non-GEMM parts and is unchanged.
 
 4. **Time warm runs, at least 3 repeats, report the median, drop the cold start.**
    Why: the same SDXL recipe varied 24% across seeds (81.36 to 100.73 s). A claimed -19.4%
@@ -161,6 +167,13 @@ Box B levers (RTX 4060 Ti, PyTorch 2.10.0+cu130, ComfyUI 0.27.1, 2026-09-30, A-B
 Write `--fast fp16_accumulation` explicitly: bare `--fast` enables every experimental
 optimisation. Attention flags are mutually exclusive; one process gets one backend.
 
+fp16 accumulation re-measured on 0.42.1 (Box B, 2026-10-29, one process with only
+`torch.backends.cuda.matmul.allow_fp16_accumulation` toggled, A-B-A, median of 3): WAI 1.21x
+(11.96 to 9.89 s), Anima fast line 1.25x (5.46 to 4.36 s), Anima quality line 1.27x (30.05 to
+23.70 s). The 1.05x for Anima in the table is stale: on 0.27.1 its main model ran in BF16, on
+0.42.1 it computes in FP16, so every GEMM takes the flag. Qwen-Image 2.1 with INT8 weights is
+unaffected (10.58 against 10.57 s). SageAttention was not re-measured.
+
 ## Distillation and step-count verdicts
 
 - **Pre-distilled Anima 2.9B, 8 steps, CFG 1:** 2.1 s warm against 14.2 s for 30 steps at CFG 4
@@ -177,6 +190,87 @@ optimisation. Attention flags are mutually exclusive; one process gets one backe
   about 1.5x, because each step got slower with the LoRA attached (2.62 s against 1.81 s).
   Motion energy fell from 0.47 to 0.30 with stop-and-jump frames; audio -56 against -45 dB. Rejected
   on 2026-10-21. Single seed, single prompt, ComfyUI 0.30.0 runtime.
+
+## Bounding a speed-up you cannot run
+
+GeForce cards run tensor-core math with FP16 or BF16 inputs and FP32 accumulation at half the
+rate of the professional parts. Community unlock tools
+([gpu-unlock](https://github.com/Zagitta/gpu-unlock),
+[gpu-unlock-ada](https://github.com/JustAResearcher/gpu-unlock-ada)) lift that cap. The RTX 4060
+Ti (AD106) has only a Linux kernel module and Box B runs Windows, so on 2026-10-29 I bounded the
+gain instead of measuring it:
+
+1. Profile one warm render per workload, device kernels only (rule 2).
+2. Put every kernel in a class by accumulator type with
+   [`tools/kernel_classes.py`](../../tools/kernel_classes.py). A: FP16 or BF16 inputs with FP32
+   accumulation (cuBLAS and CUTLASS s-kernels, cuDNN convolution, exact attention); only these
+   gain. B: already full rate on GeForce (FP16 accumulation, INT8 with INT32 accumulation,
+   SageAttention with its PV product accumulated in FP16). C: no tensor-core math. A kernel no
+   rule matches stops the run, so a new tensor kernel cannot fall into C unseen. Some kernels are
+   decided by a template argument: SageAttention's `use_pv_fp16_accu`, a CUTLASS GEMM's
+   accumulator type.
+3. Ceiling: T' = T - A x (1 - 1/s), with T the timed median and A the class-A seconds of the
+   profiled render. s = 2.0 is the ideal; 1.7 is a third-party measurement on the same card
+   model under its 165 W limit ([gpu-unlock-ada #98](https://github.com/JustAResearcher/gpu-unlock-ada/issues/98));
+   the in-situ value comes from the same render with FP16 accumulation switched off, which sends
+   the same FP16 GEMMs to the half-rate FP32-accumulate kernels, power limit included.
+
+Box B (RTX 4060 Ti 16 GB, 165 W, ComfyUI 0.42.1, PyTorch 2.10.0+cu130, `--fast fp16_accumulation
+--use-sage-attention`, 2026-10-29). The low end uses the in-situ s (1.52 to 1.63; 1.44 for the
+MOSS-Image rows, see Real cases; 1.7 for Qwen-Image, which has no FP16 GEMM to toggle), the high
+end s = 2.0:
+
+| Workload | Now | Class A | Ceiling |
+|---|---|---|---|
+| WAI + LoRA, 1216x832, 30 steps | 9.89 s | 26.1%, almost all convolution | 1.09 to 1.14x |
+| Anima fast line, 10 steps | 4.36 s | 3.2% | 1.01 to 1.02x |
+| Anima quality line, 30 steps | 23.70 s | 0.6% | 1.00x |
+| Qwen-Image 2.1, INT8 weights and INT8 attention, 1024x1024, 16 steps | 10.57 s | 4.8%, VAE convolution | 1.02x |
+| MOSS-Image, custom FP16 loader, exact attention, 1024x1024, 25 steps | 45.43 s | 22.6%, exact attention | 1.07 to 1.13x |
+| MOSS-Image, stock loader (BF16 compute), SageAttention, 1024x1024, 25 steps | 60.67 s | 68.9%, GEMM | 1.26 to 1.52x |
+
+- The lines in use gain little because their expensive work already runs at full rate:
+  `--fast fp16_accumulation` puts their GEMMs on FP16-accumulate kernels, and INT8 and
+  SageAttention were never half rate. What is left is cuDNN convolution (PyTorch runs FP16
+  convolution with FP32 accumulation) and exact attention.
+- Only a model computed in BF16 gains much, because BF16 GEMMs can only accumulate in FP32. The
+  custom FP16 loader already takes most of that without an unlock: 1.42x faster per step than
+  the stock loader on Box B, both with exact attention (measured 2026-10-21).
+- Verdict: switching Box B to Linux for an unlock is not worth it for the lines in use.
+- Not verified: no render ran on an unlocked card. Convolution and attention are assumed to gain
+  the GEMM s (issue #98 measured 1.63 to 1.66x for SDPA attention). The comfy-kitchen INT8
+  attention kernel is in class B from its name and the INT8 quantization kernels before it; its
+  source was not read.
+
+## Kernel choice under a power cap
+
+Box B, 2026-10-29, PyTorch 2.10.0+cu130, Triton 3.8.0, driver 610.88.
+[`tools/gemm_probe.py`](../../tools/gemm_probe.py) times the four linear layers of a 3072-wide DiT
+block (MOSS-Image) with random FP16 operands and M = 4352 rows (a 1024x1024 image plus text).
+Each variant runs for 2 s while nvidia-smi is sampled every 100 ms; the error against an FP32
+product shows which accumulator ran. The table is the run of the tool in this repo; an earlier
+run the same day agreed within 2.4%, with the same kernels and errors.
+
+| Layer (K to N) | cuBLAS, FP16 acc | Triton, FP16 acc | cuBLAS, FP32 acc |
+|---|---|---|---|
+| qkv 3072 to 9216 | 3.26 ms, 2505 MHz | 2.93 ms, 2573 MHz | 4.96 ms, 2925 MHz |
+| o 3072 to 3072 | 1.18 ms, 2400 MHz | 0.98 ms, 2595 MHz | 1.67 ms, 2910 MHz |
+| ffn_up_gate 3072 to 16384 | 6.19 ms, 2325 MHz | 5.25 ms, 2565 MHz | 8.85 ms, 2910 MHz |
+| ffn_down 8192 to 3072 | 2.99 ms, 2310 MHz, split-K | 2.74 ms, 2430 MHz | 4.41 ms, 2850 MHz |
+
+- For FP16 accumulation on SM 8.9, cuBLAS picks its h1688 kernels for every shape here, as it did
+  for the SDXL and Anima GEMMs in the profiles. cuBLASLt picks the same kernels, within 1%.
+- The FP16-accumulate variants sat on the 165 W software power cap (throttle reason 0x4) in 70
+  to 100% of the busy samples, at 2220 to 2600 MHz. With FP32 accumulation the K=3072 layers touched the cap in part of the
+  samples at 2895 to 2925 MHz; ffn_down was capped throughout, at 2850 to 2880 MHz.
+- The cap does not fix the speed. Under it, on the K=3072 layers, the Triton kernel held a higher
+  clock and ran at 0.93 to 0.94 of the FP16-accumulate peak at the sampled clock, against 0.83 to
+  0.88 for cuBLAS: 1.11 to 1.20x faster with the same error (2.88e-3), over both runs.
+- ffn_down (K=8192): cuBLAS splits K (a memset before each call), and its error (3.33e-3) is lower
+  than full-K FP16 accumulation in Triton (4.69e-3); FP32 accumulation gives 2.08e-4. Triton is
+  only 1.09x faster there.
+- Not tried in a render: the Triton kernel for the three K=3072 layers. Estimated at about 3 s per
+  MOSS-Image render on Box B (those layers take 20.4 s); not verified.
 
 ## Speed-ups that cannot ship as a LoRA
 
@@ -198,10 +292,32 @@ launch flags. The only LoRA-shaped speed-up is a step-reducing turbo LoRA.
   before decode.
 - **2026-09-21, 8 steps against 16.** The agent's "8 is fine" was overruled; the payback
   maths doubled.
+- **2026-10-29, one layer on a slow kernel.** The in-situ s of the custom FP16 loader for
+  MOSS-Image came out at 1.34, against 1.52 to 1.63 for WAI and Anima. The first explanation, the
+  h1688 kernel choice, was wrong. Splitting the profile per layer found the cause: the loader's
+  fast mode sends the FFN down-projection through a hook in ComfyUI's ops to a comfy-kitchen
+  CUTLASS GEMM with FP16 accumulation, 4.83 ms per call, slower than plain cuBLAS with either
+  accumulator (2.99 and 4.41 ms in the probe). That layer alone has an s of about 0.92, the other
+  three about 1.56. The MOSS-Image rows of the unlock table therefore use the probe's
+  cuBLAS-to-cuBLAS s over the four layers: 1.44 in the earlier run, 1.46 in the run shown above.
+  Forcing the layer through its own module (cuBLAS, split-K) in a second ComfyUI process, with
+  production untouched: 45.41 to 41.31 s per image, 1.10x, 6 renders per arm over two runs.
+  Quality is not accepted. Against an all-FP32-accumulate reference the new route won 1 of 3
+  seeds, and the more accurate FP32 route also lost to the default on 2 of 3, so whole-image PSNR
+  after 25 steps measures trajectory divergence, not accumulator error (rule 10). Acceptance needs
+  the loader's original checks, single-forward error against FP32 and 16 prompt pairs. Not
+  adopted. Rule: split a low aggregate ratio per layer before naming a cause.
+- **2026-10-29, preview files overwrote each other.** ComfyUI's PreviewImage reuses a file name
+  within one process once earlier previews have left its temp folder. Test previews moved into a
+  holding folder by name kept 16 of 115, and the first A/B run's image comparisons read the same
+  file on both sides. Timings were unaffected. Fix: move each preview to a unique path and record
+  it. Rule: when a comparison reads files back, check that the two sides are different files.
 
 ## Tried and dropped
 
-- Hand-written kernels (measured ceiling about 5% end to end).
+- Hand-written fused kernels for the non-GEMM parts (measured ceiling about 5% end to end).
+- A GeForce FP32-accumulate unlock on Box B: ceiling 1.00 to 1.14x on the lines in use, and it
+  needs Linux (bounded, not run).
 - Uncalibrated nvfp4 W4A4.
 - fp8 matmul on Box B: Anima's MLP feeds 5-D tensors, which the fp8 path silently routes to
   the fallback, and input conversion ate the 13% matmul gain.
@@ -218,3 +334,4 @@ launch flags. The only LoRA-shaped speed-up is a step-reducing turbo LoRA.
 - [`05-debugging.md`](05-debugging.md): OOM, driver resets, polluted processes.
 - [`06-render-discipline.md`](06-render-discipline.md): smoke timing before a batch.
 - [`templates/ab-test.md`](../../templates/ab-test.md): the write-up template.
+- [`tools/README.md`](../../tools/README.md): the kernel classifier and the GEMM probe used above.

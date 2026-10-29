@@ -1,10 +1,16 @@
 English | [中文](#中文)
 
-# Privacy guard
+# Tools
+
+- [`privacy_scan.py`](privacy_scan.py): keeps personal data out of this public repository. Standard library only.
+- [`kernel_classes.py`](kernel_classes.py): splits a profiled render's GPU kernels by tensor-core accumulator type and bounds what a GeForce FP32-accumulate unlock could gain. Standard library only.
+- [`gemm_probe.py`](gemm_probe.py): times a model's linear-layer GEMMs per kernel and accumulator under sustained load, with the GPU clock and power. Needs CUDA and torch.
+
+## Privacy guard
 
 `privacy_scan.py` keeps personal data out of this public repository: LAN addresses, home paths, emails, credentials and image-generation metadata. Python 3.9+, standard library only. It never prints a matched value; a finding is one line, `location: rule_id -- why`.
 
-## Set up (once per clone)
+### Set up (once per clone)
 
 ```sh
 git config core.hooksPath .githooks
@@ -14,7 +20,7 @@ python3 tools/privacy_scan.py --tracked --history              # expect: clean
 
 `pre-commit` runs `--identity --staged`, `commit-msg` runs `--message "$1"`, `pre-push` runs `--history`. CI runs `--no-private --tracked --history` on every push to `main` and every pull request.
 
-## Modes
+### Modes
 
 Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skipped).
 
@@ -30,7 +36,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 
 Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations look like `docs/a.md:12`, `blob 1a2b3c4d5e6f docs/a.md:12` (history), `commit 1a2b3c4d5e6f author:1` or `message:3` (annotated tags say `tag`), and `identity author:1`. Images report line 1. The guard fails closed: a file it cannot read or decode is a finding.
 
-## Rules
+### Rules
 
 | Rule id | Catches |
 | --- | --- |
@@ -49,7 +55,7 @@ Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations loo
 
 Author, committer and tagger emails (`--identity`, `--history`) face a stricter test than `email`: only `allowed_emails` patterns pass.
 
-## Private rules
+### Private rules
 
 Your own patterns (names, handles, machine names) live outside the repository in `~/.config/agent-genops/private_rules.json`, or in the file named by `AGENT_GENOPS_PRIVATE_RULES`. The schema is the one in `tools/privacy_rules.json`, and every list is appended to the public one. A line on stderr says how many private rules loaded. `AGENT_GENOPS_REQUIRE_PRIVATE=1` turns a missing file into an error (exit 2).
 
@@ -66,7 +72,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 `version` is required and `note` is free text that is ignored; any other unknown key is an error, so a typo cannot silently drop rules. `flags` is optional (`i` only). `suffixes` optionally limits a rule to file types such as `[".md"]`. Before a line is matched, every `allow_literals` entry (as a whole token, so `0.0.0.0` never hides a longer address) and every `allow_patterns` match is replaced by spaces. Fix a false positive by adding an entry there, not by weakening the public rules.
 
-## Limits
+### Limits
 
 - Pattern based: base64, URL-encoded or split-up values are not decoded.
 - File names are not scanned and pixel data is not inspected, so keep generated images out of the repository.
@@ -74,11 +80,70 @@ Your own patterns (names, handles, machine names) live outside the repository in
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
 - With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
 
+## Kernel classes
+
+`kernel_classes.py` answers one question: if the half-rate cap on FP32-accumulate tensor math were lifted, how much faster could this render get? The method and the Box B results are on [the performance page](../docs/en/07-performance.md#bounding-a-speed-up-you-cannot-run).
+
+### Run
+
+Trace one warm render with CUDA activity:
+
+```python
+with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA]) as prof:
+    render_once()
+prof.export_chrome_trace("render.json")
+```
+
+```sh
+python3 tools/kernel_classes.py render.json --seconds 9.89
+python3 tools/kernel_classes.py render.json --seconds 9.89 --off render_fp32acc.json
+```
+
+| Flag | Does |
+| --- | --- |
+| `--seconds T` | the render's timed median. Without it T is the kernel total, which runs a little short of wall time, so the ceiling comes out high |
+| `--off TRACE` | the same render traced with FP16 accumulation switched off; adds the s measured on this card |
+| `--s S` | a speed-up for the class-A kernels, repeatable; default 1.7 and 2.0 |
+| `--lenient` | list kernels no rule matches as class U instead of stopping |
+| `--json OUT` | also write the classes, ceilings and every kernel row |
+
+The output gives seconds and share per class, one ceiling per s, and a review list: every A, B and U kernel, plus each C kernel whose name looks like matrix or attention work. Read that list before trusting a ceiling. Exit status: `0` done, `2` usage error, unreadable trace, or kernels no rule matches.
+
+### Rules and limits
+
+- The first match in `RULES` wins. SageAttention's FP8 kernel and comfy-kitchen's CUTLASS GEMMs are decided by a template argument.
+- A kernel no rule matches stops the run. Add a rule, or pass `--lenient`; each ceiling is then a range, with U counted as C at the low end and as A at the high end.
+- The rules were checked by hand on SDXL, Anima, Qwen-Image 2.1 and MOSS-Image renders under ComfyUI 0.42.1 with torch 2.10.0+cu130 on Windows, where template kernels appear with mangled names. Other stacks, torch.compile output and other attention libraries will need rules of their own.
+- It bounds; it does not measure. Convolution and attention are assumed to gain the same s as GEMMs.
+- The comfy-kitchen INT8 attention kernel is placed in class B from its name; its source was not read.
+
+## GEMM probe
+
+`gemm_probe.py` times each layer shape with cuBLAS and cuBLASLt at both accumulator types and with a Triton matmul that accumulates in FP16. Each variant runs for `--seconds` (default 2) while nvidia-smi is sampled, so the clock, power and power-cap share are measured under load. It also reports the error against an FP32 product and the kernel names. Needs a CUDA GPU, torch 2.7 or later, nvidia-smi on the PATH, and triton for the Triton variant (`--no-triton` skips it).
+
+```sh
+python3 tools/gemm_probe.py                     # the four layers of a 3072-wide DiT block, M = 4352
+python3 tools/gemm_probe.py --shape qkv=3072,9216 --m 4352 --m 4160 --out gemm.jsonl
+```
+
+- One line per variant on stdout; `--out` appends one JSON record per variant.
+- The relative error tells the accumulator: about 3e-3 with FP16 accumulation and 2e-4 with FP32 at K = 3072 for these operands.
+- Efficiency is reported on GeForce Ada (SM 8.9) only: TFLOPS against the dense peak at the median sampled clock, 1024 FLOPs per SM per clock with FP16 accumulation and 512 with FP32. A median clock can put a value near 1.0 slightly above it.
+- `--smi-index` picks the nvidia-smi GPU; on a multi-GPU box make it match the device torch uses.
+- Run it with the GPU otherwise idle: another process on the card changes the clock and the result.
+- Run on Box B (RTX 4060 Ti, Windows, torch 2.10.0+cu130, Triton 3.8.0) on 2026-10-29; not run on other cards.
+
 ## 中文
+
+- [`privacy_scan.py`](privacy_scan.py)：不让个人信息进这个公开仓库。只用标准库。
+- [`kernel_classes.py`](kernel_classes.py)：把一张图剖析出的 GPU 内核按张量核累加类型分类，估出 GeForce 的 FP32 累加解锁最多能快多少。只用标准库。
+- [`gemm_probe.py`](gemm_probe.py)：持续满载下，按内核和累加类型给模型线性层的矩阵乘计时，同时记下 GPU 频率和功耗。要 CUDA 和 torch。
+
+### 隐私防护
 
 `privacy_scan.py` 在内容进入公开仓库之前拦下个人信息：内网地址、家目录路径、邮箱、凭据，以及图片里嵌入的生成元数据。只用 Python 3.9+ 标准库。命中的原文永远不会打印，每个问题只有一行：`位置: 规则 id -- 原因`。
 
-### 初次设置（每个克隆做一次）
+#### 初次设置（每个克隆做一次）
 
 ```sh
 git config core.hooksPath .githooks
@@ -88,7 +153,7 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 
 `pre-commit` 运行 `--identity --staged`，`commit-msg` 运行 `--message "$1"`，`pre-push` 运行 `--history`。CI 在每次推送 `main` 和每个 pull request 时运行 `--no-private --tracked --history`。
 
-### 参数
+#### 参数
 
 可以任意组合；`PATH` 可以是文件或目录（递归，跳过 `.git`）。
 
@@ -104,7 +169,7 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 
 退出码：`0` 干净，`1` 有发现，`2` 用法错误或内部错误。位置写法见上面的英文部分，图片一律报第 1 行。宁可误报也不漏报：读不了或解不开的文件，本身就算一条发现。
 
-### 规则
+#### 规则
 
 | 规则 id | 拦截内容 |
 | --- | --- |
@@ -123,16 +188,69 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 
 作者、提交者和标签者的邮箱（`--identity`、`--history`）要过更严的一关：只有匹配 `allowed_emails` 的才放行。
 
-### 私有规则
+#### 私有规则
 
 你自己的规则（姓名、账号、机器名）放在仓库之外的 `~/.config/agent-genops/private_rules.json`，也可以用环境变量 `AGENT_GENOPS_PRIVATE_RULES` 指向别的文件。格式与 `tools/privacy_rules.json` 相同，各个列表接在公开规则后面。stderr 上会有一行告诉你加载了多少条私有规则。设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，文件不存在就报错退出（退出码 2）。上面英文部分有一个完整的示例。
 
 `version` 必填，`note` 是会被忽略的备注；其余未知的键一律报错，免得拼错键名悄悄丢掉规则。`flags` 可省略（只支持 `i`）；`suffixes` 可以把一条规则限定在某些文件类型上，例如 `[".md"]`。每行匹配之前，`allow_literals` 里的每一项（按整词匹配，所以 `0.0.0.0` 不会遮住更长的地址）和 `allow_patterns` 的每处命中，都会被替换成等长的空格。遇到误报，往这两处加条目，不要去削弱公开规则。
 
-### 局限
+#### 局限
 
 - 只做模式匹配：base64、URL 编码、被拆开的值都不会解码。
 - 不检查文件名，也不检查像素数据，所以生成的图片不要放进仓库。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
 - 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
+
+### 内核分类
+
+`kernel_classes.py` 只回答一个问题：要是 FP32 累加的张量运算不再限半速，这张图最多能快多少？方法和 Box B 上的结果写在[性能那一页](../docs/zh/07-performance.md#跑不了的提速怎么估上限)。
+
+#### 用法
+
+热态剖析一张图，只录 CUDA 活动：
+
+```python
+with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA]) as prof:
+    render_once()
+prof.export_chrome_trace("render.json")
+```
+
+```sh
+python3 tools/kernel_classes.py render.json --seconds 9.89
+python3 tools/kernel_classes.py render.json --seconds 9.89 --off render_fp32acc.json
+```
+
+| 参数 | 作用 |
+| --- | --- |
+| `--seconds T` | 这张图的计时中位数。不给就拿内核总时间当 T，它比墙钟时间略短，算出的上限会偏高 |
+| `--off TRACE` | 同一张图关掉 FP16 累加后的剖析，用来算本卡实测的 s |
+| `--s S` | A 类内核的加速倍数，可以给多个；默认 1.7 和 2.0 |
+| `--lenient` | 对不上规则的内核归为 U 类，不直接退出 |
+| `--json OUT` | 另外把分类、上限和每个内核写成 JSON |
+
+输出是每类的秒数和占比、每个 s 对应的上限，以及一份待核清单：所有 A、B、U 类内核，加上名字像矩阵乘或注意力的 C 类内核。信上限之前先把这份清单过一遍。退出码：`0` 完成，`2` 用法错误、剖析文件读不了，或者有内核对不上规则。
+
+#### 规则与局限
+
+- `RULES` 里第一条命中的规则说了算。SageAttention 的 FP8 内核和 comfy-kitchen 的 CUTLASS 矩阵乘要看模板参数。
+- 对不上规则的内核会让程序停下。要么补一条规则，要么加 `--lenient`；这时每个上限都给一个区间，U 类当 C 类算是下沿，当 A 类算是上沿。
+- 规则是在 Windows 上、ComfyUI 0.42.1 加 torch 2.10.0+cu130 跑 SDXL、Anima、Qwen-Image 2.1 和 MOSS-Image 时逐个人工核过的，那里模板内核报的是修饰过的名字。换了环境、用 torch.compile 或别的注意力库，都得自己补规则。
+- 它只估上限，不实测。卷积和注意力按矩阵乘的 s 算。
+- comfy-kitchen 的 INT8 注意力内核是按名字归进 B 类的，源码没读。
+
+### 矩阵乘探针
+
+`gemm_probe.py` 对每个层形状分别用 cuBLAS 和 cuBLASLt 的两种累加，外加一个 FP16 累加的 Triton 矩阵乘计时。每种做法连续跑 `--seconds` 秒（默认 2），期间采样 nvidia-smi，所以频率、功耗和顶墙比例都是满载时量的。它还报和 FP32 乘积比的误差，以及内核名。要 CUDA 显卡、torch 2.7 以上、PATH 里有 nvidia-smi；Triton 那一档要装 triton（`--no-triton` 跳过）。
+
+```sh
+python3 tools/gemm_probe.py                     # 3072 宽 DiT 块的四个层，M = 4352
+python3 tools/gemm_probe.py --shape qkv=3072,9216 --m 4352 --m 4160 --out gemm.jsonl
+```
+
+- 每种做法在标准输出打一行；`--out` 每种做法追加一条 JSON。
+- 看相对误差就知道用的哪种累加：这组操作数在 K = 3072 时，FP16 累加约 3e-3，FP32 累加约 2e-4。
+- 只有 GeForce Ada（SM 8.9）报效率：TFLOPS 除以按采样频率中位数算的稠密峰值，FP16 累加每个 SM 每周期 1024 次浮点运算，FP32 累加 512 次。频率取的是中位数，接近 1.0 的值可能略超过 1。
+- `--smi-index` 选 nvidia-smi 里的哪块卡；多卡机器上要和 torch 用的那块对上。
+- 跑的时候卡上别有别的活：别的进程会改变频率，也改变结果。
+- 2026-10-29 在 Box B（RTX 4060 Ti，Windows，torch 2.10.0+cu130，Triton 3.8.0）上跑过；别的卡没跑过。

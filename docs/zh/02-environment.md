@@ -45,7 +45,7 @@
 
 **Box B（Windows）。**
 - ComfyUI 0.42.1，2026-10-20 起；torch 2.10.0+cu130；开机由计划任务拉起。手动启动任务后 80.6 s 就绪；开机触发要等下次重启才算验过。前端包比 Box A 旧。
-- fp16 accumulation 和 SageAttention 默认开。数字是 0.27.1 上测的（2026-09-30），0.42.1 上没重测：fp16 accumulation 在一个 SDXL 系 checkpoint 上快 1.19 倍，在 Anima 上快 1.05 倍；再叠 SageAttention，按线不同又快 2.7% 到 8.7%。
+- fp16 accumulation 和 SageAttention 默认开。fp16 accumulation 在 0.42.1 上重测过（2026-10-29）：一个 SDXL 系 checkpoint 快 1.21 倍，Anima 快 1.25 到 1.27 倍（0.27.1 上是 1.19 倍和 1.05 倍）。再叠 SageAttention，按线不同又快 2.7% 到 8.7%，这是 0.27.1 上测的（2026-09-30），没重测。
 - triton_windows 3.8.0。另装了一套 kohya 用来训练。
 - 闲置会睡眠。它的空闲检查每 5 分钟采样一次，短作业叫不醒它。
 - 32 GB 内存加 16 GB 页面文件。有一次训练超出提交上限，报 WinError 1455。

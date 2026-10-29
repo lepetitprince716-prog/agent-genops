@@ -46,7 +46,7 @@ Only versions the records state, with the date they were recorded.
 
 **Box B (Windows).**
 - ComfyUI 0.42.1 since 2026-10-20, torch 2.10.0+cu130, started at boot by a scheduled task. Ready 80.6 s after a manual task start; the boot trigger itself waits for the next reboot to count as verified. Its front-end package is older than Box A's.
-- fp16 accumulation and SageAttention on by default. Measured on 0.27.1 (2026-09-30), not re-measured on 0.42.1: fp16 accumulation 1.19x on an SDXL-class checkpoint and 1.05x on Anima; SageAttention on top added 2.7 to 8.7 percent depending on the line.
+- fp16 accumulation and SageAttention on by default. fp16 accumulation re-measured on 0.42.1 (2026-10-29): 1.21x on an SDXL-class checkpoint and 1.25 to 1.27x on Anima (1.19x and 1.05x on 0.27.1). SageAttention on top added 2.7 to 8.7 percent depending on the line, measured on 0.27.1 (2026-09-30) and not re-measured.
 - triton_windows 3.8.0. A second kohya install for training.
 - Sleeps when idle. Its idle check samples every 5 minutes, so short jobs do not keep it awake.
 - 32 GB RAM plus a 16 GB pagefile. A training run that exceeded the commit limit failed with WinError 1455.
