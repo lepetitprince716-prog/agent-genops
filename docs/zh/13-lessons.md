@@ -108,6 +108,11 @@
 - 2026-10-06 — 一条 28 个 commit 的分支从没开过 PR，却被当成已合并，生产上一个接口回 404 → 认定已合并之前，先 `git log origin/main` 查这个文件。
 - 2026-10-14 — 一次大 push 在 sideband 断开后仍报成功 → 每次 push 都用 fetch 加 `rev-parse` 核对。
 
+### Controller 上的 Web 应用
+
+- 2026-10-29 — Web 出图应用的实时任务流里，自己提交的 3 次有 2 次新行停在 opacity 0，刷新才出来；推测是 JS 动画库的 `initial`/`animate` 进场在中途丢了标记，没有复现 → 只在挂载时打标记的进场，用挂在 data 属性上的 CSS 动画做，位移用 `translate`，不用 `transform`。
+- 2026-10-29 — 重启服务卡在 uvicorn 的 `Waiting for connections to close`，是开着的浏览器标签握着事件流，而这段等待默认没有上限 → 用 `lsof` 找出客户端，把标签导航走，或者补发一次 SIGINT 强退，新进程交给服务管理器拉起。
+
 ### 云端花费
 
 - 2026-08-25 — Civitai 的公开图片接口不再返回生成元数据（10 次全空）→ 别假设 REST 会给元数据；改用解析页面的导入路线。

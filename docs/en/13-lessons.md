@@ -109,6 +109,11 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-10-06 — a 28-commit branch never had a PR, was believed merged, and an endpoint returned 404 in production → check `git log origin/main` for the file before assuming a merge.
 - 2026-10-14 — a large push reported success after a sideband disconnect → verify every push with fetch plus `rev-parse`.
 
+### Web app on the Controller
+
+- 2026-10-29 — new rows in the web studio app's live feed stayed at opacity 0 until a reload on 2 of 3 own submissions; suspected cause, not reproduced: a JS animation library's `initial`/`animate` entrance lost its flag mid-run → run mount-only entrances as a CSS animation keyed on a data attribute, moved with `translate` rather than `transform`.
+- 2026-10-29 — a server restart stalled at uvicorn's `Waiting for connections to close` because an open browser tab held an event stream, and the wait has no limit by default → find the client with `lsof`, navigate the tab away or force the exit with a follow-up SIGINT, and let the service manager start the new process.
+
 ### Cloud spend
 
 - 2026-08-25 — Civitai's public image endpoint stopped returning generation metadata (10 of 10 empty) → do not assume REST returns metadata; use an import route that parses the page.
