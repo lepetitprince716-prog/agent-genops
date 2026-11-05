@@ -43,6 +43,7 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-09-30 — reusing a locally cached output path returned another image's pixels with the new metadata → look up history by prompt; drop local cached-path reuse.
 - 2026-09-30 — an identical rerun on ComfyUI 0.27.1 polled until the 1,800 s timeout and looked like a hang → look up the same prompt in history and fetch the existing file; fail fast on 404.
 - 2026-10-01 — img2img returned black images after a long multi-agent session; a restart fixed it and the cause was not captured → on black images, restart the box before debugging precision.
+- 2026-11-05 — more pictures were wanted for a style set whose first version was already in training → a set handed to training is frozen and its build refuses to run; additions go under a new version name.
 
 ### Remote Windows boxes
 
