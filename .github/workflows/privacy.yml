@@ -18,3 +18,32 @@ jobs:
           fetch-depth: 0
       - name: Scan tracked files and history
         run: python3 tools/privacy_scan.py --no-private --tracked --history
+
+  betterleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Linux x64 asset of the v1.10.1 release. The digest is the one the GitHub release API
+      # lists for the asset; it matches the release's checksums.txt (read 2026-11-18).
+      BETTERLEAKS_VERSION: "1.10.1"
+      BETTERLEAKS_ARCHIVE: betterleaks_1.10.1_linux_x64.tar.gz
+      BETTERLEAKS_SHA256: c174b42d7aa60caf58c0c3e555c0e4bed01fe6b0d99a412bce777b5af4ce913e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install Betterleaks (pinned version, checked against the hash above)
+        run: |
+          set -eu
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$BETTERLEAKS_ARCHIVE" \
+            "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${BETTERLEAKS_ARCHIVE}"
+          echo "${BETTERLEAKS_SHA256}  ${RUNNER_TEMP}/${BETTERLEAKS_ARCHIVE}" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$BETTERLEAKS_ARCHIVE" -C "$RUNNER_TEMP/bin" betterleaks
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Show the installed version
+        run: betterleaks version
+      - name: Scan history for secrets
+        run: sh tools/secret_scan.sh history
+      - name: Test the secret guard
+        run: python3 -B -m unittest discover -s tests
