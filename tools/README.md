@@ -3,6 +3,7 @@ English | [中文](#中文)
 # Tools
 
 - [`privacy_scan.py`](privacy_scan.py): keeps personal data out of this public repository. Standard library only.
+- [`secret_scan.sh`](secret_scan.sh): second scan for secrets, a wrapper around the Betterleaks command line, called by the same three hooks. Setup and false positives: [PRIVACY.md](../PRIVACY.md#second-scan-betterleaks).
 - [`kernel_classes.py`](kernel_classes.py): splits a profiled render's GPU kernels by tensor-core accumulator type and bounds what a GeForce FP32-accumulate unlock could gain. Standard library only.
 - [`gemm_probe.py`](gemm_probe.py): times a model's linear-layer GEMMs per kernel and accumulator under sustained load, with the GPU clock and power. Needs CUDA and torch.
 
@@ -136,6 +137,7 @@ python3 tools/gemm_probe.py --shape qkv=3072,9216 --m 4352 --m 4160 --out gemm.j
 ## 中文
 
 - [`privacy_scan.py`](privacy_scan.py)：不让个人信息进这个公开仓库。只用标准库。
+- [`secret_scan.sh`](secret_scan.sh)：第二道密钥扫描，包装了 Betterleaks 命令行，由同样三个 hook 调用。安装和误报放行见 [PRIVACY.md](../PRIVACY.md#second-scan-betterleaks)。
 - [`kernel_classes.py`](kernel_classes.py)：把一张图剖析出的 GPU 内核按张量核累加类型分类，估出 GeForce 的 FP32 累加解锁最多能快多少。只用标准库。
 - [`gemm_probe.py`](gemm_probe.py)：持续满载下，按内核和累加类型给模型线性层的矩阵乘计时，同时记下 GPU 频率和功耗。要 CUDA 和 torch。
 

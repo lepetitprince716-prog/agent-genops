@@ -47,6 +47,40 @@ Run it by hand at any time:
 python3 tools/privacy_scan.py --tracked --history
 ```
 
+## Second scan: Betterleaks
+
+Two scanners run side by side. `tools/privacy_scan.py` knows this repository's own rules: addresses,
+home paths, emails, hostnames, image metadata, and the private patterns on your machine.
+[Betterleaks](https://github.com/betterleaks/betterleaks) is an offline secret scanner with a broad
+rule set for provider keys and tokens, and it also looks at entropy. Neither replaces the other; a
+change must pass both. Betterleaks never prints a value (`--redact`), a finding is one line,
+`rule path:line commit`.
+
+[`tools/secret_scan.sh`](tools/secret_scan.sh) wraps it, and the hooks call it after the privacy scan:
+
+| Hook | Runs | Looks at |
+| --- | --- | --- |
+| `pre-commit` | `sh tools/secret_scan.sh staged` | what the next commit adds |
+| `commit-msg` | `sh tools/secret_scan.sh message "$1"` | the commit message, every line (`#` lines included) |
+| `pre-push` | `sh tools/secret_scan.sh history` | every commit diff on any ref, plus all commit and tag messages |
+
+Install it once per machine: `brew install betterleaks`, or a release from
+https://github.com/betterleaks/betterleaks/releases. Without it on `PATH` the hooks fail (exit 3)
+and say so: a guard that skips itself is no guard. CI installs the pinned release 1.10.1, checks its
+SHA-256 and runs `sh tools/secret_scan.sh history` and `tests/test_secret_guard.py` (run the tests
+locally with `python3 -B -m unittest discover -s tests`). Live validation is off, because it would
+send candidates to the network, and the repository's own Betterleaks config is not loaded.
+
+A false positive, checked on 1.10.1:
+
+- Put `betterleaks:allow` (or `gitleaks:allow`) in a comment on the same line. This also works for a
+  commit message line.
+- Or list its fingerprint, one per line, in `.betterleaksignore` at the repository root: build it
+  from the finding as `path:rule:line` for staged files, and `commit:path:rule:line` for history
+  (the full commit hash from the finding line). The file is committed, so the exception is reviewed.
+- A secret that sits in an already pushed commit message cannot be allowed with a comment. Revoke
+  it, then decide with the owner whether history is rewritten.
+
 ## If something leaks
 
 Assume a pushed secret is already copied. Revoke or rotate it first, then remove it from the
@@ -81,6 +115,20 @@ the same shape next time.
 - git hook：`pre-commit` 检查提交身份和暂存文件，`commit-msg` 检查提交信息，`pre-push` 检查历史里的每个文件和每次提交。每个克隆打开一次即可（命令见上文英文部分）。
 - CI 在每次 push 和 pull request 时用内置规则跑同一个扫描器。
 - 提交时请用 GitHub 的 noreply 邮箱，身份检查会拒绝其他地址。
+
+### 第二道扫描：Betterleaks
+
+两个扫描器并行。`tools/privacy_scan.py` 管本仓库自己的规则：地址、用户目录路径、邮箱、主机名、图片元数据，以及你本机的私有规则。[Betterleaks](https://github.com/betterleaks/betterleaks) 是离线的密钥扫描器，内置覆盖各家服务商密钥和令牌的规则集，也看熵值。两者互不替代，一次改动必须同时通过。Betterleaks 从不打印密钥本身（`--redact`），一条命中就是一行 `规则 路径:行号 提交`。
+
+[`tools/secret_scan.sh`](tools/secret_scan.sh) 包装了它，hook 在隐私扫描之后调用：`pre-commit` 跑 `staged`（这次提交新增的内容），`commit-msg` 跑 `message "$1"`（提交信息的每一行，`#` 开头的也算），`pre-push` 跑 `history`（所有引用上的每个提交 diff，加上全部提交信息和标签信息）。
+
+每台机器装一次：`brew install betterleaks`，或到 https://github.com/betterleaks/betterleaks/releases 下载。`PATH` 上找不到它时 hook 会失败（退出码 3）并说明原因：找不到工具就放行，等于没有守卫。CI 安装钉死的 1.10.1 发布包，校验 SHA-256，然后跑 `sh tools/secret_scan.sh history` 和 `tests/test_secret_guard.py`（本地跑测试：`python3 -B -m unittest discover -s tests`）。在线验证是关着的，因为它会把候选密钥发到外面；仓库自己的 Betterleaks 配置也不会被加载。
+
+误报的放行办法（在 1.10.1 上验证过）：
+
+- 在同一行的注释里写 `betterleaks:allow`（`gitleaks:allow` 也认）。提交信息的行同样适用。
+- 或者把指纹逐行写进仓库根目录的 `.betterleaksignore`：暂存区的命中写成 `路径:规则:行号`，历史里的命中写成 `提交:路径:规则:行号`（提交取命中那一行里的完整哈希）。这个文件会被提交，所以例外是过了审的。
+- 已经推送出去的提交信息里的密钥无法用注释放行。先吊销，再和仓库主人商量要不要改写历史。
 
 ### 万一泄露了
 
