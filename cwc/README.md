@@ -67,6 +67,10 @@ Inputs that used to pass and now do not, or now warn:
   finding (E8) per compile, one line on stderr that lists the keys and the nodes that set them,
   and in the report of a successful compile with the keys one by one in `data.keys`. The exit
   code and `ok` do not change.
+- A `_meta` key that another key of the same node overrides is a warning (E7) that names both
+  keys and says what to remove, and the exit code and `ok` do not change. `ui_role: cockpit`
+  beats `ui_group`, `ui_group` beats `ui_role: plumbing`, and `ui_optional` beats `ui_role`
+  `cockpit` and `plumbing`. Before, the overridden key did nothing and nothing said so.
 
 The authoring checks of `compile` report these codes (the report's `title` field carries the
 same text; the other code families check the canvas):
@@ -89,6 +93,36 @@ warning for any other.
 three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge
 where the server or a redirect points: a server on this machine or the local network is the usual
 source, so name only a server you trust.
+
+## The Controls group
+
+The positive and negative prompts and the empty latent (the image size) go into the Controls
+group by themselves. Any other node goes in with `"ui_role": "cockpit"` in its `_meta`, and
+`"ui_role": "pipeline"` keeps a node out. For example, to make the step count a control, feed
+the sampler from a primitive node (`cwc node PrimitiveInt` shows its widget, `value`):
+
+```
+"steps": {"class_type": "PrimitiveInt", "inputs": {"value": 28},
+          "_meta": {"title": "Steps", "ui_role": "cockpit"}},
+"sampler": {"class_type": "KSampler", "inputs": {"steps": ["steps", 0], ...}}
+```
+
+On a plain text-to-image graph, the Controls group then holds the two prompts, the empty latent
+and a node titled Steps. Without the `ui_role` line the same node sits in the Sampling group.
+
+The report of a successful compile says which `_meta` keys changed the canvas. Under
+`metrics.authoring_keys`, each key has the ids of the nodes it changed in `nodes`, and
+`no_effect_on` lists the nodes where the key was set and did nothing. The report of the graph
+above has:
+
+```
+"authoring_keys": [
+ {"key": "_meta.title", "nodes": ["steps"]},
+ {"key": "_meta.ui_role", "nodes": ["steps"]}
+]
+```
+
+The keys that have no effect yet are not listed there; they are in the E8 finding.
 
 ## Input limits
 
