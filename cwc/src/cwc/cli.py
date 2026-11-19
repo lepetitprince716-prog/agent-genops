@@ -23,12 +23,18 @@ from cwc.layout.presets import load_presets
 from cwc.pipeline import AUTO, PRESET_GUIDE, Compiled, compile_document
 from cwc.render.command import command as render_command
 from cwc.report import CwcError, ExitCode, Mode, Report, Severity, sort_findings
+from cwc.resources import read_bytes
 
 CLOSEST = 3
+GUIDE_FILE = "guide.md"  # the one authoring reference; README and the skill point at `cwc guide`
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=TOOL_NAME, description="ComfyUI workflow compiler")
+    parser = argparse.ArgumentParser(
+        prog=TOOL_NAME,
+        description="ComfyUI workflow compiler. New here? `cwc guide` explains the input format, "
+        "every authoring key and its effect, with an example.",
+    )
     parser.add_argument("--version", action="version", version=f"{TOOL_NAME} {__version__}")
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
@@ -52,6 +58,9 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--allow-unknown", action="store_true", help="accept node types with no definition")
     build.add_argument("--json", action="store_true", help="print a JSON summary")
     build.set_defaults(run=_compile)
+
+    guide = commands.add_parser("guide", help="print the authoring guide: input format, _meta and _workflow keys, an example")
+    guide.set_defaults(run=_guide)
 
     presets = commands.add_parser("presets", help="list the layout presets, what each looks like and when to pick it")
     presets.add_argument("--json", action="store_true", help="print JSON")
@@ -150,6 +159,14 @@ def _node(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
         out.write(json_bytes(_node_json(nd)).decode("utf-8"))
     else:
         out.writelines(line + "\n" for line in _node_text(nd))
+    return ExitCode.OK
+
+
+# --- cwc guide ------------------------------------------------------------------------
+
+
+def _guide(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
+    out.write(read_bytes(GUIDE_FILE).decode("utf-8"))
     return ExitCode.OK
 
 

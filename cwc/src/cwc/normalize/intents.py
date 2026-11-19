@@ -90,7 +90,7 @@ UI_PREFIX = "ui_"
 
 
 def _unknown_key(author_id: str, key: str, out: Findings) -> None:
-    known = f"known keys: {', '.join(_KEYS)}"
+    known = f"known keys: {', '.join(_KEYS)}; `cwc guide` describes each"
     if key.startswith(UI_PREFIX):
         closest = difflib.get_close_matches(key, list(_KEYS), n=1, cutoff=0.6)
         guess = f"; did you mean {closest[0]!r}?" if closest else ""

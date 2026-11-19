@@ -239,5 +239,49 @@ class UnknownPresetTest(Folder):
             self.assertIn(name, err.split("unknown preset 'bentoo'", 1)[1])
 
 
+
+def guide_example():
+    text = run("guide")[1]
+    block = text.split("```json\n", 1)[1].split("```", 1)[0]
+    return text, json.loads(block)
+
+
+class GuideTest(Folder):
+    def test_prints_the_bundled_guide(self):
+        from cwc.resources import read_bytes
+
+        code, out, err = run("guide")
+        self.assertEqual((code, err), (ExitCode.OK, ""))
+        self.assertEqual(out, read_bytes("guide.md").decode("utf-8"))
+
+    def test_names_every_key_the_compiler_reads(self):
+        from cwc.normalize.intents import _KEYS
+        from cwc.normalize.workflow_info import GROUP_KEYS, LAYOUT_KEYS, MODEL_KEYS, TOP_KEYS
+
+        text = run("guide")[1]
+        for key in [*_KEYS, *TOP_KEYS, *LAYOUT_KEYS, *GROUP_KEYS, *MODEL_KEYS]:
+            self.assertIn(f"`{key}`" if key in _KEYS or key in TOP_KEYS else key, text)
+
+    def test_the_example_compiles_as_described(self):
+        _, doc = guide_example()
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertEqual(code, ExitCode.OK, err)
+        self.assertIn(", 1 optional module, 0 warnings;", err)
+        canvas = self.read(".ui.json")
+        modes = {node["type"]: node["mode"] for node in canvas["nodes"]}
+        self.assertEqual(modes["LoraLoader"], 4)
+        controls = next(g for g in canvas["groups"] if g["title"].endswith("Controls"))
+        x, y, w, h = controls["bounding"]
+        inside = {n["type"] for n in canvas["nodes"] if x <= n["pos"][0] < x + w and y <= n["pos"][1] < y + h}
+        self.assertEqual(inside, {"CLIPTextEncode", "EmptyLatentImage", "KSampler"})
+        sampler = next(n for n in canvas["nodes"] if n["type"] == "KSampler")
+        self.assertIn("fixed", sampler["widgets_values"])
+        self.assertNotIn("LoraLoader", {node["class_type"] for node in self.read(".api.json").values()})
+
+    def test_the_help_names_the_command(self):
+        out = run("--help")[1]
+        self.assertIn("guide", out)
+
+
 if __name__ == "__main__":
     unittest.main()

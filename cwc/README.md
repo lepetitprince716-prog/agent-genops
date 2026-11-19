@@ -14,6 +14,14 @@ running frontend are not available as commands yet. Details: `docs/ARCHITECTURE.
 `docs/m1-templates.md` (widget templates and their evaluation) and
 `docs/m2-frontend-facts.md` (groups, node boxes and links as the frontend stores them).
 
+## For agents
+
+1. `cwc guide` prints the authoring reference: the input format, every `_meta` and `_workflow`
+   key with its effect, and an example with an optional module.
+2. Write the API prompt and run `cwc compile GRAPH.json -o out`. Errors and warnings go to
+   stderr with a hint each; `--json` gives the same list as `finding_list`.
+3. Fix and compile again until the summary line says `ok`; `cwc render` draws the canvas.
+
 ## Commands
 
 ```
@@ -21,6 +29,7 @@ cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
 cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--all-enabled]
              [--allow-unknown] [--json]
 cwc presets  [--json]
+cwc guide
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
 cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 ```
@@ -30,6 +39,7 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
   `--preset` takes one of `bento`, `swimlanes`, `cockpit-split`, `tower-preview`,
   `stepped`, or `auto`, which chooses by the size and shape of the graph.
 - `presets` lists the presets, what each looks like and when to pick it.
+- `guide` prints the authoring guide.
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.
 
