@@ -99,11 +99,11 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 ### Secret scan wrapper
 
-`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off, and always with Betterleaks' default rules: it loads neither the repository's own Betterleaks config nor one named in the environment (`BETTERLEAKS_CONFIG`, `GITLEAKS_CONFIG` and their `_TOML` forms are cleared). A finding is one line, `rule path:line commit`. It takes one mode:
+`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off, and always with Betterleaks' default rules: it loads neither the repository's own Betterleaks config nor one named in the environment (`BETTERLEAKS_CONFIG`, `GITLEAKS_CONFIG` and their `_TOML` forms are cleared). The default config's path prefilter, which skips whole files by name (image and font suffixes, office documents, lock files, `node_modules` and vendor folders), is replaced with one that skips nothing, so those files are read like any other. A finding is one line, `rule path:line commit`. It takes one mode:
 
 | Mode | Scans |
 | --- | --- |
-| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`) and files with a suffix in `allowed_binary_suffixes`, which Betterleaks skips (the second by its default path allowlist), are read again through stdin, so their findings carry no path and the fingerprint is `:rule:line`; `rev`, `range`, `history` and `files` do the same for the blobs and files they cover |
+| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`), which Betterleaks skips, is read again through stdin, so its findings carry no path and the fingerprint is `:rule:line`; `rev`, `range`, `history` and `files` do the same for the blobs and files they cover |
 | `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
 | `message FILE` | one commit message file |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
@@ -255,11 +255,11 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 #### 密钥扫描包装脚本
 
-`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，始终用 Betterleaks 的默认规则：不加载仓库自己的 Betterleaks 配置，也不用环境变量指定的配置（`BETTERLEAKS_CONFIG`、`GITLEAKS_CONFIG` 及其 `_TOML` 形式会被清掉）。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
+`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，始终用 Betterleaks 的默认规则：不加载仓库自己的 Betterleaks 配置，也不用环境变量指定的配置（`BETTERLEAKS_CONFIG`、`GITLEAKS_CONFIG` 及其 `_TOML` 形式会被清掉）。默认配置里按文件名整份跳过的路径预过滤（图片和字体后缀、办公文档、lock 文件、`node_modules` 和 vendor 目录等）换成了什么都不跳过的版本，这些文件和别的文件一样读。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
 
 | 模式 | 扫描对象 |
 | --- | --- |
-| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）和后缀在 `allowed_binary_suffixes` 里的文件 Betterleaks 会跳过（后者按它默认的路径白名单），这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号`；`rev`、`range`、`history`、`files` 对各自覆盖的 blob 和文件同样处理 |
+| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）Betterleaks 会跳过，这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号`；`rev`、`range`、`history`、`files` 对各自覆盖的 blob 和文件同样处理 |
 | `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
 | `message FILE` | 一个提交说明文件 |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |

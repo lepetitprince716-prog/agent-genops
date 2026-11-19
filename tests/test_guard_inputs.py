@@ -589,5 +589,51 @@ class ImageAndBinaryTests(unittest.TestCase):
         self.assertEqual(pushed.returncode, 0, combined(pushed))
 
 
+# One path from each family the prefilter of Betterleaks 1.10.1's default config drops by name
+# (`betterleaks config show`): image, font, document, lock file, Go checksum, dependency folder.
+DEFAULT_PREFILTER_SAMPLES = (
+    "logo.svg",
+    "fonts/body.woff2",
+    "guide.pdf",
+    "yarn.lock",
+    "go.sum",
+    "node_modules/pkg/index.js",
+)
+
+
+class DefaultPathPrefilterTests(unittest.TestCase):
+    """Betterleaks' default config drops whole files by path before any rule runs: images and
+    fonts, office documents, lock files, dependency and vendor folders. The wrapper replaces that
+    prefilter, so a token in such a file is found with its path by Betterleaks' own git and dir
+    scans, in every mode and through the hooks."""
+
+    def test_a_token_in_a_file_the_default_prefilter_names_is_found_in_every_mode(self) -> None:
+        for name in DEFAULT_PREFILTER_SAMPLES:
+            with self.subTest(name=name):
+                repo = Repo(self)
+                token = registry_token()
+                repo.add_file(name, f"key = {token}\n")
+                for args in (("staged",), ("files", name)):
+                    scanned = repo.secret(*args)
+                    refused_by_secret_scan(self, scanned, token)
+                    self.assertIn(name, combined(scanned))
+                before = repo.git("rev-parse", "HEAD")
+                committed = repo.run("git", "commit", "-q", "-m", "add a file")
+                refused_by_secret_scan(self, committed, token)
+                self.assertEqual(repo.git("rev-parse", "HEAD"), before)
+                repo.unchecked_commit("add a file")
+                for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+                    scanned = repo.secret(*args)
+                    refused_by_secret_scan(self, scanned, token)
+                    self.assertIn(name, combined(scanned))
+                pushed = repo.push("main")
+                refused_by_secret_scan(self, pushed, token)
+                self.assertEqual(repo.git("--git-dir", str(repo.remote), "rev-parse", "main"), before)
+                (repo.path / name).write_text(f"key = {registry_token()}\n")
+                scanned = repo.secret("unstaged")
+                refused_by_secret_scan(self, scanned, token)
+                self.assertIn(name, combined(scanned))
+
+
 if __name__ == "__main__":
     unittest.main()

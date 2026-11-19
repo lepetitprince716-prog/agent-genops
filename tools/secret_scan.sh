@@ -50,7 +50,8 @@
 # Validation is off (it would send candidates to the network). The rules are Betterleaks' default
 # rules, named with --config: the repository's own Betterleaks config is not loaded
 # (--unsafe-auto-load-config is not used), and a config named in the environment
-# (BETTERLEAKS_CONFIG, GITLEAKS_CONFIG and their _TOML forms) is cleared before the scan.
+# (BETTERLEAKS_CONFIG, GITLEAKS_CONFIG and their _TOML forms) is cleared before the scan. The
+# default config's path prefilter, which skips whole files by name, is switched off (see below).
 set -eu
 
 usage() {
@@ -91,9 +92,17 @@ trap 'exit 130' INT TERM HUP
 # --help lists, and the only ones its binary holds). One left in the shell for another project
 # would replace the rules and allowlists here, so they are cleared and the default rules are
 # named explicitly.
+#
+# The default config of 1.10.1 (`betterleaks config show`) opens with a prefilter that drops a
+# file by its path before any rule runs: image and font suffixes (.svg among them), office
+# documents and executables, lock files (yarn.lock, package-lock.json, go.sum, poetry.lock and
+# more), node_modules, vendor and virtualenv folders. Its git and dir modes alike never read
+# such a file, so a token in it, or in any file renamed to look like one, would pass. A top-level
+# prefilter here replaces the default one (`config show` prints ours; checked with 1.10.1), and
+# 'false' drops nothing. The default rules and their per-finding filters stay as they are.
 unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG BETTERLEAKS_CONFIG_TOML GITLEAKS_CONFIG_TOML
 config="$work/config.toml"
-printf '[extend]\nuseDefault = true\n' >"$config"
+printf "prefilter = 'false'\n\n[extend]\nuseDefault = true\n" >"$config"
 
 ignore_path=${SECRET_SCAN_IGNORE_PATH:-}
 src=.
@@ -245,25 +254,22 @@ peel() {
 # Betterleaks' own scan skips. Its git mode prints "Binary files differ" for content git treats as
 # binary (a NUL byte in the first 8000 bytes, or -diff or binary in a committed .gitattributes,
 # which its own git run reads whatever GIT_ATTR_SOURCE, --text in --log-opts or the clone's
-# info/attributes say), and its default path allowlist skips files named like images in the git and
-# dir modes alike (checked with 1.10.1). So the selection is: binary by git's rule, or a suffix in
-# allowed_binary_suffixes of the public privacy rules (the only binary content the privacy scan
-# admits). A dir scan is no way round: it also skips a file by a head that looks like an executable,
-# a document or an archive. Stdin sniffs only the head of the stream (checked up to 10 MiB in), so
-# the stream starts with an empty line. Findings here carry no path; a false positive is allowed
-# inline or by its ":rule:line" fingerprint, the line counted in this stream. The log form takes
-# every blob the walked commits add or change (merges against their first parent), once each.
+# info/attributes say), and its dir mode skips a file with a NUL byte too (checked with 1.10.1).
+# So the selection is binary by git's rule. A dir scan is no way round: it also skips a file by a
+# head that looks like an executable, a document or an archive. Stdin sniffs only the head of the
+# stream (checked up to 10 MiB in), so the stream starts with an empty line. Findings here carry
+# no path; a false positive is allowed inline or by its ":rule:line" fingerprint, the line counted
+# in this stream. The log form takes every blob the walked commits add or change (merges against
+# their first parent), once each.
 scan_binary() {
   python3 -I -B -c '
-import json, os, subprocess, sys
+import os, subprocess, sys
 
-stream, rules, mode, *rest = sys.argv[1:]
-with open(rules, "rb") as handle:
-    images = tuple(s.lower() for s in json.load(handle)["allowed_binary_suffixes"])
+stream, mode, *rest = sys.argv[1:]
 git = ["git", "--no-replace-objects"]
 
-def wanted(path, data):
-    return b"\0" in data[:8000] or os.path.splitext(os.fsdecode(path))[1].lower() in images
+def wanted(data):
+    return b"\0" in data[:8000]
 
 def run(args, data=None):
     return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
@@ -301,33 +307,33 @@ if mode in ("staged", "unstaged"):
                     data = handle.read()
             else:
                 continue
-        if marked or wanted(path, data):
+        if marked or wanted(data):
             found.append(data)
 elif mode == "log":
     raw = run(["log", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-merges=first-parent",
                "--format=", *rest])
-    seen, paths = {}, iter(raw.split(b"\0"))
-    for token in paths:
+    seen, fields = {}, iter(raw.split(b"\0"))
+    for token in fields:
         if not token.startswith(b":"):
             continue
-        path = next(paths)
+        next(fields)  # the path that follows each raw record
         _, new_mode, _, oid, status = token[1:].split(b" ")
-        if new_mode.startswith(b"100") and status[:1] in b"AMT" and oid not in seen:
-            seen[oid] = path
+        if new_mode.startswith(b"100") and status[:1] in b"AMT":
+            seen[oid] = None
     oids = list(seen)
-    found = [data for oid, data in zip(oids, batch(oids)) if wanted(seen[oid], data)]
+    found = [data for data in batch(oids) if wanted(data)]
 else:
     with open(rest[0], "rb") as handle:
         data = handle.read()
-    if wanted(rest[0].encode(), data):
+    if wanted(data):
         found.append(data)
 with open(stream, "wb") as out:
     out.write(b"\n")
     for data in found:
         out.write(data + b"\n")
-' "$work/binary-stream" "$here/privacy_rules.json" "$@"
+' "$work/binary-stream" "$@"
   if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
-    scan "content Betterleaks skips as binary or by an image name" stdin <"$work/binary-stream"
+    scan "content Betterleaks skips as binary" stdin <"$work/binary-stream"
   fi
 }
 
