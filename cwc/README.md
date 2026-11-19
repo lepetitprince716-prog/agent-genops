@@ -37,8 +37,9 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 - `node` shows one node definition or searches the definitions.
 - `compile` turns an authoring graph into a canvas and its API prompts.
   `--preset` takes one of `bento`, `swimlanes`, `cockpit-split`, `tower-preview`,
-  `stepped`, or `auto`, which chooses by the size and shape of the graph.
-- `presets` lists the presets, what each looks like and when to pick it.
+  `stepped`, or `auto`, which chooses by the number of nodes, optional modules and control
+  branches.
+- `presets` lists the presets, what each looks like, when to pick it, and the rules of `auto`.
 - `guide` prints the authoring guide.
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.

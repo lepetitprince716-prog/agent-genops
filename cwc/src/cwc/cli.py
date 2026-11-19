@@ -20,7 +20,7 @@ from cwc.nodedefs.learn import command as learn_command
 from cwc.nodedefs.registry import NodeDefs, read_source
 from cwc.nodedefs.types import NodeDef
 from cwc.layout.presets import load_presets
-from cwc.pipeline import AUTO, PRESET_GUIDE, Compiled, compile_document
+from cwc.pipeline import AUTO, Compiled, compile_document, preset_guide
 from cwc.render.command import command as render_command
 from cwc.report import Code, CwcError, ExitCode, Mode, Report, Severity, sort_findings
 from cwc.resources import read_bytes
@@ -174,10 +174,8 @@ def _guide(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
 
 
 def _presets(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
-    rows = [
-        {"name": name, "description": PRESET_GUIDE[name][0], "use_when": PRESET_GUIDE[name][1]}
-        for name in [*load_presets(), AUTO]
-    ]
+    guide = preset_guide()
+    rows = [{"name": name, "description": guide[name][0], "use_when": guide[name][1]} for name in [*load_presets(), AUTO]]
     if args.json:
         out.write(json_bytes(rows).decode("utf-8"))
     else:

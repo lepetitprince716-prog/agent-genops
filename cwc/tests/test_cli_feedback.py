@@ -351,6 +351,86 @@ class PresetsCommandTest(unittest.TestCase):
         self.assertIn("presets", out)
 
 
+class PresetDescriptionTest(Folder):
+    """What `cwc presets` says each preset does is what the code does: auto's rules and their
+    thresholds, and the geometry each description names, measured on a compiled canvas."""
+
+    def descriptions(self):
+        code, out, _ = run("presets", "--json")
+        self.assertEqual(code, ExitCode.OK)
+        return {row["name"]: row["description"] for row in json.loads(out)}
+
+    def groups(self, preset):
+        out = self.out / preset
+        code, _, err = run("compile", self.graph(base.with_lora(TXT2IMG)), "-o", out, "--preset", preset)
+        self.assertEqual(code, ExitCode.OK, err)
+        canvas = json.loads((out / "graph.ui.json").read_text(encoding="utf-8"))
+        return [(g["title"], *g["bounding"]) for g in canvas["groups"]]
+
+    def test_auto_names_its_rules_in_order_with_the_code_thresholds(self):
+        from cwc.annotate.types import PlanCounts
+        from cwc.pipeline import AUTO_LARGE_NODES, AUTO_PARALLEL_BRANCHES, AUTO_SMALL_NODES, choose_auto
+
+        text = self.descriptions()["auto"]
+        rules = [
+            (f"at most {AUTO_SMALL_NODES} nodes and no optional module", "tower-preview"),
+            (f"{AUTO_PARALLEL_BRANCHES} or more control or mask branches", "swimlanes"),
+            (f"{AUTO_LARGE_NODES} nodes or more", "cockpit-split"),
+            ("otherwise", "bento"),
+        ]
+        places = []
+        for condition, preset in rules:
+            self.assertIn(f"{condition}: {preset}", text)
+            places.append(text.index(f"{condition}: {preset}"))
+        self.assertEqual(places, sorted(places))
+        # the same boundaries, asked of the code
+        counts = dict(nodes=AUTO_SMALL_NODES, optional_modules=0, control_branches=0)
+        self.assertEqual(choose_auto(PlanCounts(**counts)).preset, "tower-preview")
+        self.assertEqual(choose_auto(PlanCounts(**{**counts, "nodes": AUTO_SMALL_NODES + 1})).preset, "bento")
+        self.assertEqual(choose_auto(PlanCounts(**{**counts, "nodes": 20, "control_branches": AUTO_PARALLEL_BRANCHES})).preset, "swimlanes")
+        self.assertEqual(choose_auto(PlanCounts(**{**counts, "nodes": AUTO_LARGE_NODES, "control_branches": AUTO_PARALLEL_BRANCHES - 1})).preset, "cockpit-split")
+
+    def test_no_description_promises_a_link_corridor(self):
+        # the router does not route through corridors yet (docs/ARCHITECTURE.md, layout rules)
+        for name, text in self.descriptions().items():
+            with self.subTest(preset=name):
+                self.assertNotIn("corridor", text)
+
+    def test_the_gaps_and_sizes_named_are_on_the_canvas(self):
+        from cwc.canvas.geometry import snap_up
+        from cwc.layout.presets import load_presets
+        from cwc.layout.section import BAND_GAP, SCREEN_W
+
+        text = self.descriptions()
+        presets = load_presets()
+        # swimlanes: an empty strip above the row, the canvas starts that much lower than bento's
+        self.assertIn(f"empty strip {BAND_GAP} px high above each row", text["swimlanes"])
+        lower = min(g[2] for g in self.groups("swimlanes")) - min(g[2] for g in self.groups("bento"))
+        self.assertEqual(lower, BAND_GAP)
+        # cockpit-split: a wider gap after Controls than between the other groups of the row
+        self.assertIn(f"a gap of {BAND_GAP} px", text["cockpit-split"])
+        row = sorted(self.groups("cockpit-split"), key=lambda g: g[1])
+        controls = next(g for g in row if g[0].endswith("Controls"))
+        after = min((g for g in row if g[1] > controls[1] and g[2] == controls[2]), key=lambda g: g[1])
+        self.assertEqual(after[1] - (controls[1] + controls[3]), BAND_GAP)
+        # tower-preview: the output group's size
+        preview = presets["tower-preview"].preview
+        width = snap_up(round(preview.share * SCREEN_W, 6))
+        self.assertIn(f"at least {width} px wide and {preview.min_height} px high", text["tower-preview"])
+        output = next(g for g in self.groups("tower-preview") if g[0].endswith("Output"))
+        self.assertGreaterEqual((output[3], output[4]), (width, preview.min_height))
+        # bento: the wrap ratio
+        self.assertIn(f"wider than {presets['bento'].wrap_ratio:g} times its height", text["bento"])
+        # stepped: step titles, the models and Controls groups one above the other
+        self.assertIn("Step 1, Step 2", text["stepped"])
+        stepped = self.groups("stepped")
+        self.assertTrue(all(g[0].startswith(f"Step {i} ") for i, g in enumerate(stepped, 1)), stepped)
+        models, controls = (next(g for g in stepped if g[0].endswith(t)) for t in ("Models", "Controls"))
+        self.assertIn("one above the other in the first column", text["stepped"])
+        self.assertEqual(models[1], controls[1])
+        self.assertLess(models[2] + models[4], controls[2])
+
+
 class UnknownPresetTest(Folder):
     def test_the_error_lists_the_names(self):
         code, _, err = run("compile", self.graph(TXT2IMG), "-o", self.out, "--preset", "bentoo")
