@@ -8,9 +8,11 @@ test through its environment variable, which can shorten the timeout but never l
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -26,34 +28,81 @@ from test_release_trusted import clean_candidate, manifests, need_betterleaks  #
 SHORT = "2"
 
 
+def run_against_silent_remote(testcase: unittest.TestCase, transport: str) -> tuple[SyntheticRepo, subprocess.Popen[str], str, str]:
+    """``./check release`` for a clean candidate, with ``transport`` as the remote's ssh command.
+
+    Returns once the check has ended (or failed the test after 30 s)."""
+    need_betterleaks(testcase)
+    repo = SyntheticRepo(testcase, maintainer=True)
+    cand = clean_candidate(repo)
+    fake = repo.base / "silent-ssh.sh"
+    fake.write_text(transport)
+    fake.chmod(0o755)
+    url = "ssh://git.example.invalid/x.git"
+    repo.git("remote", "set-url", "origin", url)
+    repo.git("config", "genops.allowedPushUrl", url)
+    env = dict(repo.env, GIT_SSH_COMMAND=str(fake))
+    env[release_check.REMOTE_TIMEOUT_ENV] = SHORT
+    cmd = [sys.executable, "-B", str(repo.work / "check"), "release", "--to", "origin", "--ref",
+           "refs/heads/main", "--commit", cand, "--manifest-dir", str(repo.manifest_dir)]
+    proc = subprocess.Popen(cmd, cwd=repo.work, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
+    started = time.monotonic()
+    try:
+        out, err = proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.communicate()
+        testcase.fail("./check release was still waiting on the remote after 30 s")
+    testcase.assertLess(time.monotonic() - started, 20)
+    return repo, proc, out, err
+
+
+def is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 class SilentRemoteTests(unittest.TestCase):
     def test_a_remote_that_never_answers_is_refused_within_the_timeout(self) -> None:
-        need_betterleaks(self)
-        repo = SyntheticRepo(self, maintainer=True)
-        cand = clean_candidate(repo)
-        fake = repo.base / "silent-ssh.sh"
-        fake.write_text("#!/bin/sh\nexec sleep 600\n")
-        fake.chmod(0o755)
-        url = "ssh://git.example.invalid/x.git"
-        repo.git("remote", "set-url", "origin", url)
-        repo.git("config", "genops.allowedPushUrl", url)
-        env = dict(repo.env, GIT_SSH_COMMAND=str(fake))
-        env[release_check.REMOTE_TIMEOUT_ENV] = SHORT
-        cmd = [sys.executable, "-B", str(repo.work / "check"), "release", "--to", "origin", "--ref",
-               "refs/heads/main", "--commit", cand, "--manifest-dir", str(repo.manifest_dir)]
-        proc = subprocess.Popen(cmd, cwd=repo.work, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, start_new_session=True)
-        started = time.monotonic()
-        try:
-            out, err = proc.communicate(timeout=30)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.communicate()
-            self.fail("./check release was still waiting on the remote after 30 s")
-        self.assertLess(time.monotonic() - started, 20)
+        repo, proc, out, err = run_against_silent_remote(self, "#!/bin/sh\nexec sleep 600\n")
         self.assertEqual(proc.returncode, 2, out + err)
         self.assertIn("did not answer", out + err)
         self.assertEqual(manifests(repo), [])
+
+    def test_the_transport_and_what_it_started_do_not_outlive_the_check(self) -> None:
+        """The ssh command git starts, and a process that one starts in turn, are gone once the
+        check has given up: stopping git alone would leave both running."""
+        probe = Path(tempfile.mkdtemp(prefix="genops-transport-"))
+        self.addCleanup(shutil.rmtree, probe, True)
+        script = (
+            "#!/bin/sh\n"
+            f"echo $$ > {probe}/transport.pid\n"
+            f"sleep 600 > /dev/null 2>&1 &\n"
+            f"echo $! > {probe}/grandchild.pid\n"
+            "wait\n"
+        )
+        repo, proc, out, err = run_against_silent_remote(self, script)
+        pids = []
+        for name in ("transport.pid", "grandchild.pid"):
+            pids.append(int((probe / name).read_text().strip()))
+        for pid in pids:
+            self.addCleanup(self.kill_quietly, pid)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and any(is_running(pid) for pid in pids):
+            time.sleep(0.1)
+        self.assertEqual([pid for pid in pids if is_running(pid)], [], out + err)
+        self.assertEqual(proc.returncode, 2, out + err)
+
+    @staticmethod
+    def kill_quietly(pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 class RemoteTimeoutValueTests(unittest.TestCase):
