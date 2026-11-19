@@ -463,6 +463,26 @@ class ExplicitIgnoreFileTests(unittest.TestCase):
         result = self.repo.secret("rev", "HEAD")
         self.assertEqual(result.returncode, 0, combined(result))
 
+    def test_working_tree_ignore_file_does_not_apply_to_message_or_files(self) -> None:
+        # A commit message and a symlink's target text go through stdin, where Betterleaks
+        # applies the ignore file of its current directory next to -i; cover every line a stdin
+        # finding could sit on, and check first that it does hide them without a named file.
+        token = registry_token()
+        rules = {fp.split(":")[-2] for fp in self.prints}
+        (self.repo.path / ".betterleaksignore").write_text(
+            "\n".join(f":{rule}:{line}" for rule in rules for line in range(1, 50)) + "\n"
+        )
+        message = self.repo.base / "msg.txt"
+        message.write_text(f"subject\n\ntoken {token}\n")
+        (self.repo.path / "link.txt").symlink_to(f"key-{token}")
+        for args in (("message", str(message)), ("files", "link.txt")):
+            with self.subTest(args=args):
+                without = self.repo.secret(*args)
+                self.assertEqual(without.returncode, 0, combined(without))
+                result = self.repo.secret(*args, extra_env=self.explicit(self.empty))
+                self.assert_refused(result)
+                self.assertNotIn(token, combined(result))
+
     def test_unstaged_mode_refuses_a_named_ignore_file(self) -> None:
         result = self.repo.secret("unstaged", extra_env=self.explicit(self.empty))
         self.assertEqual(result.returncode, 2, combined(result))

@@ -403,6 +403,35 @@ class PerRefPathTests(TemplateCase):
         self.assert_refused(pushed, "secret_scan:")
         self.assertEqual(repo.remote_tip(), before)
 
+    def test_secret_scan_rev_reads_every_message_below_the_tip(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("ok.txt", "clean\n")
+        repo.unchecked_commit(f"note the token {token}")
+        repo.add_file("later.txt", "clean too\n")
+        repo.unchecked_commit("a clean commit on top")
+        scanned = repo.run("sh", "tools/secret_scan.sh", "rev", "HEAD")
+        self.assert_refused(scanned, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(scanned))
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "secret_scan:")
+        self.assertNotIn(token, combined(pushed))
+        self.assertEqual(repo.remote_tip(), before)
+
+    def test_pre_push_stops_when_the_other_refs_cannot_be_checked(self) -> None:
+        # A local ref to an object the clone does not have makes the other-refs scan fail
+        # (exit 2); the candidate itself is clean, and the push still stops.
+        repo = self.repo()
+        repo.add_file("more.txt", "clean\n")
+        repo.unchecked_commit("clean work")
+        gitdir = Path(repo.git("rev-parse", "--absolute-git-dir"))
+        (gitdir / "refs" / "heads" / "broken").write_text("1" * 40 + "\n")
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "error checking non-candidate local refs (exit 2)")
+        self.assertEqual(repo.remote_tip(), before)
+
 
 class IgnoreFileTests(TemplateCase):
     """A Betterleaks ignore file only the working tree has is an exemption nobody sees (R8b)."""
