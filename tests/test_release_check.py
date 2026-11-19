@@ -860,5 +860,42 @@ class ReleaseInputValidationTests(unittest.TestCase):
         self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
 
 
+    def test_every_push_url_of_the_remote_must_be_the_one_approved_url(self) -> None:
+        if shutil.which("betterleaks") is None:
+            self.fail("betterleaks is not installed: brew install betterleaks")
+        repo = SyntheticRepo(self, maintainer=True)
+        commit = self.clean_candidate(repo)
+        rogue = repo.base / "rogue.git"
+        repo.git("init", "-q", "--bare", str(rogue), cwd=repo.base)
+
+        # Control: the single approved push URL passes and writes one manifest.
+        ok = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(ok.returncode, 0, combined(ok))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+        # A second push URL: git pushes to every one of them, the first is the approved one.
+        repo.git("remote", "set-url", "--add", "--push", "origin", str(repo.remote))
+        repo.git("remote", "set-url", "--add", "--push", "origin", str(rogue))
+        listed = repo.git("remote", "get-url", "--push", "--all", "origin").stdout.split()
+        self.assertEqual(listed, [str(repo.remote), str(rogue)])
+        two = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(two.returncode, 2, combined(two))
+        self.assertIn("push URL", combined(two))
+
+        # A second plain url entry doubles as a second push URL when no pushurl is set.
+        repo.git("config", "--unset-all", "remote.origin.pushurl")
+        repo.git("remote", "set-url", "--add", "origin", str(rogue))
+        both = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(both.returncode, 2, combined(both))
+
+        # The same approved URL listed twice is still not one address.
+        repo.git("config", "--unset-all", "remote.origin.url")
+        repo.git("config", "--add", "remote.origin.url", str(repo.remote))
+        repo.git("config", "--add", "remote.origin.url", str(repo.remote))
+        dup = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(dup.returncode, 2, combined(dup))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

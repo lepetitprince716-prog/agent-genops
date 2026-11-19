@@ -669,7 +669,14 @@ def check_remote_policy(
         )
 
     fetch_url = git_text(["remote", "get-url", remote], root)
-    push_url = git_text(["remote", "get-url", "--push", remote], root)
+    # git pushes to every push URL of a remote: all of them are read, and there must be one.
+    push_urls = git_text(["remote", "get-url", "--push", "--all", remote], root).splitlines()
+    if len(push_urls) != 1:
+        raise CheckError(
+            f"remote '{remote}' must have exactly one push URL; found {len(push_urls)} "
+            "(git pushes to every push URL of a remote)"
+        )
+    push_url = push_urls[0]
 
     custom_cfg = git_optional(["config", "--get", "genops.allowedPushUrl"], root)
     if allowed_url:
