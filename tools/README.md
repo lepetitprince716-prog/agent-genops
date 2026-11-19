@@ -102,8 +102,8 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 | Mode | Scans |
 | --- | --- |
-| `staged` | the index |
-| `unstaged` | working-tree changes relative to the index |
+| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`), which Betterleaks' diff walk skips, is read again through stdin, so its findings carry no path and its fingerprint is `:rule:line` |
+| `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
 | `message FILE` | one commit message file |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
 | `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
@@ -257,8 +257,8 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 | 模式 | 扫描对象 |
 | --- | --- |
-| `staged` | 暂存区 |
-| `unstaged` | 工作区里相对暂存区的改动 |
+| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）Betterleaks 的 diff 扫描会跳过，这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号` |
+| `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
 | `message FILE` | 一个提交说明文件 |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
 | `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |

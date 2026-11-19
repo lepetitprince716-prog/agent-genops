@@ -240,6 +240,54 @@ peel() {
   done
 }
 
+# scan_binary staged|unstaged: Betterleaks' git mode prints "Binary files differ" for a path git
+# treats as binary, by content (a NUL byte) or by a committed .gitattributes (-diff, binary), and
+# so reads none of it; its own git run ignores GIT_ATTR_SOURCE, --text in --log-opts and the
+# clone's info/attributes. Every such path of the diff is read again here, through stdin: a dir
+# scan would skip a file by name (images, vendored folders) or by a head that looks like an
+# executable, a document or an archive, with or without NUL bytes (checked with 1.10.1). Stdin
+# sniffs only the head of the stream (checked up to 10 MiB in), so the stream starts with an
+# empty line. Findings here carry no path; a false positive is allowed inline or by its
+# ":rule:line" fingerprint, the line counted in this stream.
+scan_binary() {
+  python3 -I -B -c '
+import os, subprocess, sys
+
+mode, stream = sys.argv[1:3]
+git = ["git", "--no-replace-objects"]
+cmd = git + ["diff", "--numstat", "-z", "--no-renames", "--no-textconv", "--no-ext-diff",
+             "--ignore-submodules=all", "--diff-filter=ACMT"]
+if mode == "staged":
+    cmd.append("--cached")
+listing = subprocess.run(cmd, check=True, stdout=subprocess.PIPE).stdout
+with open(stream, "wb") as out:
+    out.write(b"\n")
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        added, deleted, path = record.split(b"\t", 2)
+        if added != b"-" or deleted != b"-":
+            continue
+        if mode == "staged":
+            data = subprocess.run(git + ["cat-file", "blob", b":0:" + path], check=True,
+                                  stdout=subprocess.PIPE).stdout
+        else:
+            local = os.fsdecode(path)
+            if os.path.islink(local):
+                # What git would store for a symlink: its target text.
+                data = os.fsencode(os.readlink(local))
+            elif os.path.exists(local):
+                with open(local, "rb") as handle:
+                    data = handle.read()
+            else:
+                continue
+        out.write(data + b"\n")
+' "$1" "$work/binary-stream"
+  if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
+    scan "$1 content git treats as binary" stdin <"$work/binary-stream"
+  fi
+}
+
 case "$mode" in
   ignore-check)
     top=$(g rev-parse --show-toplevel)
@@ -288,9 +336,11 @@ case "$mode" in
     ;;
   staged)
     scan "staged changes" git --pre-commit --staged "$src"
+    scan_binary staged
     ;;
   unstaged)
     scan "unstaged changes" git --pre-commit .
+    scan_binary unstaged
     ;;
   message)
     scan "commit message" stdin <"$2"
