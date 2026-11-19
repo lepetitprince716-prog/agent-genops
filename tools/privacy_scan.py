@@ -796,21 +796,38 @@ def scan_identity(rules: RuleSet, cwd: Path | None = None) -> list[Finding]:
 
 
 def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = "") -> list[Finding]:
-    """Scan a commit or tag object: identities by the email list, the message by the rules."""
+    """Scan a commit or tag object: identities by the email list, everything else by the rules.
+
+    Every header is read, not only the known ones: git keeps extra headers, and a mergetag header
+    (written when a signed tag is merged) carries a whole tag object, one space in, whose tagger
+    is checked like any identity."""
     head, _, body = data.decode("utf-8", "replace").partition("\n\n")
     where = f"{prefix}{kind} {oid[:SHORT_SHA]}"
     findings = []
+    other: list[str] = []
+    header = ""
     for line in head.split("\n"):
-        field, _, value = line.partition(" ")
-        if field in IDENT_FIELDS:
-            findings += check_ident(f"{where} {field}", value, rules)
-        elif kind == "tag" and field == "tag":
+        if line.startswith(" "):
+            # A continuation line of the header above it.
+            field, _, value = line[1:].partition(" ")
+            if header == "mergetag" and field in IDENT_FIELDS:
+                findings += check_ident(f"{where} mergetag {field}", value, rules)
+            else:
+                other.append(line[1:])
+            continue
+        header, _, value = line.partition(" ")
+        if header in IDENT_FIELDS:
+            findings += check_ident(f"{where} {header}", value, rules)
+        elif kind == "tag" and header == "tag":
             # The name stored inside the tag object outlives its ref; never print it.
             hits = scan_text(value, rules, "")
             findings += [
                 Finding(f"{where} name", 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})")
                 for hit in hits
             ]
+        else:
+            other.append(line)
+    findings += to_findings(f"{where} header", scan_text("\n".join(other), rules, ""))
     return findings + to_findings(f"{where} message", scan_text(body, rules, ""))
 
 

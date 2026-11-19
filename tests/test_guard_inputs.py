@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_guard_objects import MARKER, Repo, combined, registry_token  # noqa: E402
+from test_guard_objects import IDENTITY, MARKER, Repo, combined, registry_token  # noqa: E402
 
 CONFIG_VARS = ("BETTERLEAKS_CONFIG", "GITLEAKS_CONFIG")
 CONFIG_TOML_VARS = ("BETTERLEAKS_CONFIG_TOML", "GITLEAKS_CONFIG_TOML")
@@ -223,6 +223,82 @@ class AttributeTests(unittest.TestCase):
                 # Out of the index; the untracked copy left behind is read by no mode used here.
                 self.repo.git("rm", "-q", "--cached", name)
                 self.repo.unchecked_commit(f"drop {name}")
+
+
+class CommitHeaderTests(unittest.TestCase):
+    """Headers of a commit object other than author and committer are read by both scanners.
+
+    git writes a mergetag header itself when it merges a signed annotated tag: the whole tag
+    object (tagger and message) indented by one space. Any other extra header is kept as well.
+    """
+
+    def setUp(self) -> None:
+        self.repo = Repo(self)
+        self.token = registry_token()
+
+    def write_commit(self, headers: str) -> str:
+        """A commit on main whose object carries ``headers`` after the committer line."""
+        tree = self.repo.git("rev-parse", "HEAD^{tree}")
+        parent = self.repo.git("rev-parse", "HEAD")
+        ident = f"tester <{IDENTITY}> 1700000000 +0000"
+        raw = (
+            f"tree {tree}\nparent {parent}\nauthor {ident}\ncommitter {ident}\n"
+            f"{headers}\nclean subject\n"
+        )
+        oid = self.repo.git("hash-object", "-t", "commit", "-w", "--stdin", stdin=raw)
+        self.repo.git("update-ref", "refs/heads/main", oid)
+        return oid
+
+    def mergetag(self, tagger: str, *message: str) -> str:
+        parent = self.repo.git("rev-parse", "HEAD")
+        lines = ["object " + parent, "type commit", "tag v1", "tagger " + tagger, "", *message]
+        return "mergetag " + "\n ".join(lines) + "\n"
+
+    def privacy_refuses(self, rule: str) -> None:
+        for args in (("--rev", "HEAD"), ("--range", "HEAD~1..HEAD"), ("--history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.privacy(*args)
+                self.assertEqual(scanned.returncode, 1, combined(scanned))
+                self.assertIn(rule, combined(scanned))
+
+    def test_mergetag_message_is_read_by_both_scanners(self) -> None:
+        ident = f"tester <{IDENTITY}> 1700000000 +0000"
+        self.write_commit(self.mergetag(ident, f"note {MARKER}", f"key = {self.token}"))
+        self.privacy_refuses("synthetic_private_marker")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), self.token)
+        pushed = self.repo.push("main")
+        self.assertNotEqual(pushed.returncode, 0, combined(pushed))
+        self.assertNotEqual(
+            self.repo.git("rev-parse", "HEAD"),
+            self.repo.git("--git-dir", str(self.repo.remote), "rev-parse", "main"),
+        )
+
+    def test_mergetag_tagger_is_checked_like_any_identity(self) -> None:
+        # example.com passes the text rules; only the identity list refuses it.
+        self.write_commit(self.mergetag("someone <someone@example.com> 1700000000 +0000", "ok"))
+        self.privacy_refuses("email")
+
+    def test_any_other_extra_header_is_read(self) -> None:
+        self.write_commit(f"x-note {MARKER}\n")
+        self.privacy_refuses("synthetic_private_marker")
+        self.write_commit(f"x-note key = {self.token}\n")
+        for args in (("rev", "HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), self.token)
+
+    def test_a_clean_mergetag_passes(self) -> None:
+        ident = f"tester <{IDENTITY}> 1700000000 +0000"
+        self.write_commit(self.mergetag(ident, "release one"))
+        for args in (("--rev", "HEAD"), ("--history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.privacy(*args)
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
+        for args in (("rev", "HEAD"), ("history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.secret(*args)
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
 
 
 if __name__ == "__main__":

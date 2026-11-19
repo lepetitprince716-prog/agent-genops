@@ -23,7 +23,8 @@
 #
 # Betterleaks itself scans diffs only and shows a merge commit no diff, so content that only a
 # merge adds would pass unseen; every diff walk here asks git for merges against their first
-# parent. Tag objects, messages and directly referenced trees and blobs go through stdin.
+# parent. Tag objects, whole commit objects (every header and the message) and directly
+# referenced trees and blobs go through stdin.
 #
 # Without SECRET_SCAN_IGNORE_PATH, Betterleaks applies the ignore files it finds on disk at the root
 # of its source (and, for stdin, in the current directory), whatever the scanned commit holds. A
@@ -354,7 +355,8 @@ case "$mode" in
       while read -r oid; do
         peel "$oid" </dev/null
       done <"$work/others"
-      g log --all --format='%B' >>"$content"
+      g rev-list --all >"$work/revs"
+      g cat-file --batch <"$work/revs" >>"$content"
       scan "commit messages, tag objects, and trees or blobs refs point at" stdin <"$content"
     fi
     ;;
@@ -367,7 +369,8 @@ case "$mode" in
     if [ -s "$commits" ]; then
       commit=$(cat "$commits")
       scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" "$src"
-      g log "$commit" --format='%B' >>"$content"
+      g rev-list "$commit" >"$work/revs"
+      g cat-file --batch <"$work/revs" >>"$content"
     fi
     if [ -s "$content" ]; then
       scan "candidate messages, tag objects, and tree or blob content" stdin <"$content"
@@ -378,7 +381,8 @@ case "$mode" in
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
       scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" "$src"
-      g log "$spec" --format='%B' >"$content"
+      g rev-list "$spec" >"$work/revs"
+      g cat-file --batch <"$work/revs" >"$content"
       scan "branch commit messages" stdin <"$content"
     fi
     ;;
