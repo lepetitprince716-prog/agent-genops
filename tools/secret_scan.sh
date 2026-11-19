@@ -21,7 +21,12 @@
 # parent. Tag objects, messages and directly referenced trees and blobs go through stdin.
 #
 # Optional environment controls:
-#   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory
+#   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory. When
+#                             set, it is the only ignore list: Betterleaks runs from an empty
+#                             directory, so no .betterleaksignore or .gitleaksignore in the working
+#                             tree (tracked, untracked, or checked out from the scanned history)
+#                             applies. A path that does not exist is a usage error. The unstaged
+#                             mode cannot be isolated from the working tree and refuses it.
 #   SECRET_SCAN_IGNORE_ALLOW  when "1", pass --ignore-gitleaks-allow (inline allow comments off)
 #   SECRET_SCAN_REDACT_SCANNER path to privacy_scan.py used to redact sensitive file paths
 #   SECRET_SCAN_RULES         optional public rules file for path redaction
@@ -63,10 +68,45 @@ g() {
   git --no-replace-objects "$@"
 }
 
-# Scratch space for content streams.
+# Scratch space for content streams, and (with an explicit ignore path) the isolated source.
 work=$(mktemp -d "${TMPDIR:-/tmp}/secret-scan.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT TERM HUP
+
+ignore_path=${SECRET_SCAN_IGNORE_PATH:-}
+src=.
+iso=
+if [ -n "$ignore_path" ]; then
+  case "$ignore_path" in
+    /*) ;;
+    *) ignore_path="$(pwd)/$ignore_path" ;;
+  esac
+  if [ ! -e "$ignore_path" ]; then
+    echo "secret_scan: SECRET_SCAN_IGNORE_PATH does not exist: $ignore_path" >&2
+    exit 2
+  fi
+  if [ "$mode" = unstaged ]; then
+    echo "secret_scan: the unstaged mode reads the working tree, where a .betterleaksignore would apply next to SECRET_SCAN_IGNORE_PATH; use 'files' instead" >&2
+    exit 2
+  fi
+  case "$mode" in
+    staged | history | rev | range)
+      # Betterleaks reads .betterleaksignore and .gitleaksignore from the root of its source and,
+      # for stdin, from the current directory, even when -i names another file (checked with
+      # 1.10.1). An empty directory whose .git file points at this repository gives it the same
+      # history with nothing else to read.
+      iso="$work/src"
+      mkdir "$iso"
+      gitdir=$(g rev-parse --absolute-git-dir)
+      printf 'gitdir: %s\n' "$gitdir" >"$iso/.git"
+      src=$iso
+      ;;
+    message | files)
+      iso="$work/src"
+      mkdir "$iso"
+      ;;
+  esac
+fi
 
 redact_output() {
   if [ -f "$redact_scanner" ] && grep -q -- '--redact-stream' "$redact_scanner" 2>/dev/null; then
@@ -88,16 +128,27 @@ redact_output() {
 }
 
 # bl SUBCOMMAND [ARGS...]: one Betterleaks run with the shared flags; stdin is passed through.
+# With an explicit ignore path, git and stdin runs start in the isolated directory (a dir run
+# names a single file as its source, so no ignore file is read from beside it).
 bl() {
-  if [ -n "${SECRET_SCAN_IGNORE_PATH:-}" ]; then
-    set -- "$@" -i "$SECRET_SCAN_IGNORE_PATH"
+  sub=$1
+  if [ -n "$ignore_path" ]; then
+    set -- "$@" -i "$ignore_path"
   fi
   if [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
     set -- "$@" --ignore-gitleaks-allow
   fi
   set -- "$@" --redact --no-banner --no-color --log-level warn \
     --report-format template --report-template "$template" --report-path -
-  betterleaks "$@"
+  if [ -n "$iso" ] && [ "$sub" != dir ]; then
+    (
+      cd "$iso"
+      unset GIT_DIR GIT_WORK_TREE
+      exec betterleaks "$@"
+    )
+  else
+    betterleaks "$@"
+  fi
 }
 
 # scan LABEL SUBCOMMAND [ARGS...]
@@ -171,7 +222,7 @@ peel() {
 
 case "$mode" in
   staged)
-    scan "staged changes" git --pre-commit --staged .
+    scan "staged changes" git --pre-commit --staged "$src"
     ;;
   unstaged)
     scan "unstaged changes" git --pre-commit .
@@ -180,7 +231,7 @@ case "$mode" in
     scan "commit message" stdin <"$2"
     ;;
   history)
-    scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" .
+    scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" "$src"
     g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
     if [ -s "$work/refs" ]; then
       # Refs to commits are covered by the diff walk above; every other ref is peeled.
@@ -200,7 +251,7 @@ case "$mode" in
     peel "$obj"
     if [ -s "$commits" ]; then
       commit=$(cat "$commits")
-      scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" .
+      scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" "$src"
       g log "$commit" --format='%B' >>"$content"
     fi
     if [ -s "$content" ]; then
@@ -211,7 +262,7 @@ case "$mode" in
     spec=$2
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
-      scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" .
+      scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" "$src"
       g log "$spec" --format='%B' >"$content"
       scan "branch commit messages" stdin <"$content"
     fi

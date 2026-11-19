@@ -160,6 +160,15 @@ class Repo:
     def make_tree(self, blob: str, name: str = "note.txt") -> str:
         return self.git("mktree", stdin=f"100644 blob {blob}\t{name}\n")
 
+    def fingerprints(self, *bl_args: str) -> list[str]:
+        """Fingerprints Betterleaks reports for this repository, read from a JSON report."""
+        report = self.base / f"report-{random_text(6)}.json"
+        self.run(
+            "betterleaks", *bl_args, "--redact", "--no-banner", "--no-color", "--log-level",
+            "error", "-f", "json", "-r", str(report),
+        )
+        return [item["Fingerprint"] for item in json.loads(report.read_text() or "[]")]
+
     def evil_merge(self, token: str | None) -> None:
         """A merge whose tree adds a file that neither parent has (with a token, or clean)."""
         self.git("checkout", "-q", "-b", "side")
@@ -376,3 +385,110 @@ class MergeOnlyContentTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, combined(result))
 
 
+class ExplicitIgnoreFileTests(unittest.TestCase):
+    """R4: with SECRET_SCAN_IGNORE_PATH set, that file is the only ignore list."""
+
+    def setUp(self) -> None:
+        self.repo = Repo(self)
+        self.token = registry_token()
+        self.repo.add_file("config.txt", f"key = {self.token}\n")
+        self.repo.unchecked_commit("add config")
+        self.empty = self.repo.base / "empty.ignore"
+        self.empty.write_text("")
+        self.prints = self.repo.fingerprints("git", str(self.repo.path))
+        self.assertTrue(self.prints, "betterleaks found nothing to fingerprint")
+
+    def explicit(self, path: Path) -> dict[str, str]:
+        return {"SECRET_SCAN_IGNORE_PATH": str(path)}
+
+    def assert_refused(self, result: subprocess.CompletedProcess[str]) -> None:
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertNotEqual(result.returncode, 2, combined(result))
+        self.assertNotIn(self.token, combined(result))
+
+    def test_committed_ignore_file_does_not_apply(self) -> None:
+        self.repo.add_file(".betterleaksignore", "\n".join(self.prints) + "\n")
+        self.repo.unchecked_commit("add ignore")
+        head = self.repo.git("rev-parse", "HEAD")
+        for args in (("rev", head), ("history",), ("range", f"{head}~2..{head}")):
+            with self.subTest(args=args):
+                self.assert_refused(self.repo.secret(*args, extra_env=self.explicit(self.empty)))
+
+    def test_committed_legacy_ignore_file_does_not_apply(self) -> None:
+        self.repo.add_file(".gitleaksignore", "\n".join(self.prints) + "\n")
+        self.repo.unchecked_commit("add legacy ignore")
+        for args in (("rev", "HEAD"), ("history",)):
+            with self.subTest(args=args):
+                self.assert_refused(self.repo.secret(*args, extra_env=self.explicit(self.empty)))
+
+    def test_untracked_ignore_file_does_not_apply(self) -> None:
+        (self.repo.path / ".betterleaksignore").write_text("\n".join(self.prints) + "\n")
+        for args in (("rev", "HEAD"), ("history",)):
+            with self.subTest(args=args):
+                self.assert_refused(self.repo.secret(*args, extra_env=self.explicit(self.empty)))
+
+    def test_working_tree_ignore_file_does_not_cover_messages(self) -> None:
+        message = self.repo.base / "msg.txt"
+        message.write_text(f"token {registry_token()}\n")
+        self.repo.git("tag", "-a", "v9", "-F", str(message), "HEAD~1")
+        report = self.repo.base / "stdin.json"
+        self.repo.run(
+            "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
+            "-f", "json", "-r", str(report), stdin=message.read_text(),
+        )
+        # A stdin finding's fingerprint is ":<rule>:<line>"; cover every line the message stream
+        # the wrapper builds could put the token on.
+        rules = {item["RuleID"] for item in json.loads(report.read_text())}
+        self.assertTrue(rules)
+        stdin_prints = [f":{rule}:{line}" for rule in rules for line in range(1, 400)]
+        (self.repo.path / ".betterleaksignore").write_text(
+            "\n".join(self.prints + stdin_prints) + "\n"
+        )
+        self.repo.git("checkout", "-q", "HEAD~1")  # the token file is gone from disk
+        for args in (("rev", "v9"), ("history",)):
+            with self.subTest(args=args):
+                self.assert_refused(self.repo.secret(*args, extra_env=self.explicit(self.empty)))
+
+    def test_the_named_ignore_file_still_applies(self) -> None:
+        named = self.repo.base / "named.ignore"
+        named.write_text("\n".join(self.prints) + "\n")
+        for args in (("rev", "HEAD"), ("history",)):
+            with self.subTest(args=args):
+                result = self.repo.secret(*args, extra_env=self.explicit(named))
+                self.assertEqual(result.returncode, 0, combined(result))
+
+    def test_without_a_named_file_the_working_tree_ignore_file_still_applies(self) -> None:
+        # The documented way to allow a false positive in a clone (PRIVACY.md) stays as it was.
+        (self.repo.path / ".betterleaksignore").write_text("\n".join(self.prints) + "\n")
+        result = self.repo.secret("rev", "HEAD")
+        self.assertEqual(result.returncode, 0, combined(result))
+
+    def test_unstaged_mode_refuses_a_named_ignore_file(self) -> None:
+        result = self.repo.secret("unstaged", extra_env=self.explicit(self.empty))
+        self.assertEqual(result.returncode, 2, combined(result))
+
+
+class InlineAllowSwitchTests(unittest.TestCase):
+    """SECRET_SCAN_IGNORE_ALLOW=1 makes Betterleaks ignore inline allow comments."""
+
+    def test_switch_turns_inline_allow_comments_off(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        repo.add_file("config.txt", f"key = {token}  # gitleaks:allow\n")
+        repo.unchecked_commit("allowed inline")
+        empty = repo.base / "empty.ignore"
+        empty.write_text("")
+        for args in (("rev", "HEAD"), ("history",)):
+            for named in (False, True):
+                with self.subTest(args=args, named=named):
+                    base_env = {"SECRET_SCAN_IGNORE_PATH": str(empty)} if named else {}
+                    allowed = repo.secret(*args, extra_env=base_env)
+                    self.assertEqual(allowed.returncode, 0, combined(allowed))
+                    strict = repo.secret(*args, extra_env={**base_env, "SECRET_SCAN_IGNORE_ALLOW": "1"})
+                    self.assertNotEqual(strict.returncode, 0, combined(strict))
+                    self.assertNotEqual(strict.returncode, 2, combined(strict))
+                    self.assertNotIn(token, combined(strict))
+
+
+if __name__ == "__main__":
+    unittest.main()
