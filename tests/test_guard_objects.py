@@ -160,6 +160,18 @@ class Repo:
     def make_tree(self, blob: str, name: str = "note.txt") -> str:
         return self.git("mktree", stdin=f"100644 blob {blob}\t{name}\n")
 
+    def evil_merge(self, token: str | None) -> None:
+        """A merge whose tree adds a file that neither parent has (with a token, or clean)."""
+        self.git("checkout", "-q", "-b", "side")
+        self.add_file("side.txt", "side\n")
+        self.unchecked_commit("side")
+        self.git("checkout", "-q", "main")
+        self.add_file("main.txt", "main\n")
+        self.unchecked_commit("main work")
+        self.git("merge", "-q", "--no-ff", "--no-commit", "side")
+        self.add_file("merged.txt", f"key = {token}\n" if token else "nothing to see\n")
+        self.unchecked_commit("merge side")
+
 
 class AnnotatedTagPushTests(unittest.TestCase):
     """R1 through the real pre-push hook: the tag object itself is what is published."""
@@ -329,5 +341,38 @@ class SharedBlobTests(unittest.TestCase):
                 result = repo.privacy(*args)
                 self.assertEqual(result.returncode, 1, combined(result))
                 self.assertIn("synthetic_cfg_marker", result.stdout)
+
+
+class MergeOnlyContentTests(unittest.TestCase):
+    """R3: a token that only the merge commit's tree adds."""
+
+    def test_secret_scan_sees_a_token_added_only_in_a_merge(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        repo.evil_merge(token)
+        base = repo.git("rev-parse", "HEAD^1")
+        for args in (("rev", "HEAD"), ("history",), ("range", f"{base}..HEAD")):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertNotEqual(result.returncode, 0, combined(result))
+                self.assertNotEqual(result.returncode, 2, combined(result))
+                self.assertNotIn(token, combined(result))
+        result = repo.push("main")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertNotEqual(
+            repo.git("rev-parse", "HEAD"),
+            repo.run("git", "--git-dir", str(repo.remote), "rev-parse", "main").stdout.strip(),
+        )
+
+    def test_a_clean_merge_passes(self) -> None:
+        repo = Repo(self)
+        repo.evil_merge(None)
+        base = repo.git("rev-parse", "HEAD^1")
+        for args in (("rev", "HEAD"), ("history",), ("range", f"{base}..HEAD")):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertEqual(result.returncode, 0, combined(result))
+        result = repo.push("main")
+        self.assertEqual(result.returncode, 0, combined(result))
 
 

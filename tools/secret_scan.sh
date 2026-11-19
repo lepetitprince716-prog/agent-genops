@@ -5,18 +5,20 @@
 #   sh tools/secret_scan.sh unstaged         working-tree diff relative to the index
 #   sh tools/secret_scan.sh message FILE     one commit message file
 #   sh tools/secret_scan.sh history          every object any ref reaches: every commit diff
-#                                            all commit messages,
-#                                            every tag object (nested tags
+#                                            (merge commits against their first parent), all
+#                                            commit messages, every tag object (nested tags
 #                                            layer by layer), and trees or blobs a ref or tag
 #                                            points at directly
 #   sh tools/secret_scan.sh rev OBJECT       one pushed object: a commit and its history, an
 #                                            annotated (nested) tag layer by layer plus what it
 #                                            ends in, a tree or a blob
-#   sh tools/secret_scan.sh range BASE..HEAD commits in a range, plus their messages
+#   sh tools/secret_scan.sh range BASE..HEAD commits in a range (merges against their first
+#                                            parent), plus their messages
 #   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
 #
-# Betterleaks itself scans diffs only. Tag objects, messages and directly referenced trees and
-# blobs go through stdin.
+# Betterleaks itself scans diffs only and shows a merge commit no diff, so content that only a
+# merge adds would pass unseen; every diff walk here asks git for merges against their first
+# parent. Tag objects, messages and directly referenced trees and blobs go through stdin.
 #
 # Optional environment controls:
 #   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory
@@ -178,7 +180,7 @@ case "$mode" in
     scan "commit message" stdin <"$2"
     ;;
   history)
-    scan "history" git --log-opts="--full-history --all" .
+    scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" .
     g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
     if [ -s "$work/refs" ]; then
       # Refs to commits are covered by the diff walk above; every other ref is peeled.
@@ -198,7 +200,7 @@ case "$mode" in
     peel "$obj"
     if [ -s "$commits" ]; then
       commit=$(cat "$commits")
-      scan "candidate history" git --log-opts="$commit" .
+      scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" .
       g log "$commit" --format='%B' >>"$content"
     fi
     if [ -s "$content" ]; then
@@ -209,7 +211,7 @@ case "$mode" in
     spec=$2
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
-      scan "branch commit range" git --log-opts="$spec" .
+      scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" .
       g log "$spec" --format='%B' >"$content"
       scan "branch commit messages" stdin <"$content"
     fi
