@@ -39,6 +39,7 @@ PRIVATE_RULES_ENV = "AGENT_GENOPS_PRIVATE_RULES"
 REQUIRE_PRIVATE_ENV = "AGENT_GENOPS_REQUIRE_PRIVATE"
 MAINTAINER_MODE_CONFIG_KEY = "genops.mode"
 MAINTAINER_MODE_VALUE = "maintainer"
+CONTRIBUTOR_MODE_VALUE = "contributor"
 
 DOCUMENT_LISTS = (
     "rules",
@@ -1333,6 +1334,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="emit a structured, redacted JSON report on stdout",
     )
     parser.add_argument(
+        "--clone-mode",
+        action="store_true",
+        help="print 'maintainer' or 'contributor' (genops.mode, case-insensitive, or "
+        "AGENT_GENOPS_REQUIRE_PRIVATE=1) and exit; the hooks act on this answer",
+    )
+    parser.add_argument(
         "--redact-stream",
         action="store_true",
         help="read lines from stdin and print them with sensitive paths redacted",
@@ -1344,6 +1351,25 @@ def main(argv: list[str] | None = None) -> int:
     """Parse arguments, run the scans, print findings; return the exit status."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    modes = [
+        args.staged,
+        args.unstaged,
+        args.untracked,
+        args.tracked,
+        args.history,
+        args.rev,
+        args.range_spec,
+        args.other_refs_except,
+        args.ref_names,
+        args.identity,
+        args.message,
+        args.paths,
+    ]
+    if args.clone_mode:
+        if args.redact_stream or any(modes):
+            parser.error("--clone-mode takes no other mode")
+        print(MAINTAINER_MODE_VALUE if is_maintainer_required() else CONTRIBUTOR_MODE_VALUE)
+        return EXIT_CLEAN
     if args.redact_stream:
         sys.stdout.reconfigure(errors="backslashreplace")
         try:
@@ -1363,20 +1389,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"privacy_scan: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
             return EXIT_ERROR
 
-    modes = [
-        args.staged,
-        args.unstaged,
-        args.untracked,
-        args.tracked,
-        args.history,
-        args.rev,
-        args.range_spec,
-        args.other_refs_except,
-        args.ref_names,
-        args.identity,
-        args.message,
-        args.paths,
-    ]
     if not any(modes):
         parser.error("nothing to scan: give a mode (see --help) or a PATH")
     sys.stdout.reconfigure(errors="backslashreplace")

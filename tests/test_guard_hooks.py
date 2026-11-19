@@ -256,6 +256,133 @@ class TypeChangeTests(TemplateCase):
         self.assertIn("synthetic_private_marker", combined(scanned))
 
 
+class CloneModeTests(TemplateCase):
+    """The hooks act on the scanner's one reading of genops.mode (R6)."""
+
+    def test_mode_is_read_case_insensitively_and_the_hook_follows_it(self) -> None:
+        for value in ("Maintainer", "MAINTAINER", " maintainer "):
+            with self.subTest(mode=value):
+                repo = self.repo()
+                repo.git("config", "genops.mode", value)
+                asked = repo.privacy("--clone-mode")
+                self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "maintainer"),
+                                 combined(asked))
+                pushed = repo.push("other", "main")
+                self.assert_refused(pushed, "refused in maintainer mode")
+                self.assertEqual(repo.refs_of(repo.other), [])
+
+    def test_contributor_clone_may_push_anywhere(self) -> None:
+        repo = self.repo()
+        repo.git("config", "--unset", "genops.mode")
+        asked = repo.privacy("--clone-mode")
+        self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "contributor"),
+                         combined(asked))
+        pushed = repo.push("other", "main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        self.assertEqual(repo.refs_of(repo.other), ["refs/heads/main"])
+
+    def test_the_environment_switch_also_makes_the_hook_a_maintainer(self) -> None:
+        repo = self.repo()
+        repo.git("config", "--unset", "genops.mode")
+        env = dict(repo.env, AGENT_GENOPS_REQUIRE_PRIVATE="1")
+        asked = repo.privacy("--clone-mode", env=env)
+        self.assertEqual(asked.stdout.strip(), "maintainer", combined(asked))
+        pushed = repo.push("other", "main", env=env)
+        self.assert_refused(pushed, "refused in maintainer mode")
+        self.assertEqual(repo.refs_of(repo.other), [])
+
+    def test_the_hook_refuses_when_the_mode_cannot_be_read(self) -> None:
+        for name, stub in (
+            ("garbage", "import sys\nprint('banana')\nsys.exit(0)\n"),
+            ("failure", "import sys\nsys.exit(2)\n"),
+        ):
+            with self.subTest(stub=name):
+                repo = self.repo()
+                repo.git("config", "--unset", "genops.mode")
+                (repo.path / "tools" / "privacy_scan.py").write_text(stub)
+                pushed = repo.push("other", "main")
+                self.assert_refused(pushed, "pre-push:")
+                self.assertEqual(repo.refs_of(repo.other), [])
+
+    def test_clone_mode_is_a_mode_of_its_own(self) -> None:
+        repo = self.repo()
+        result = repo.privacy("--clone-mode", "--staged")
+        self.assertEqual(result.returncode, 2, combined(result))
+
+
+class PerRefPathTests(TemplateCase):
+    """pre-push scans each pushed ref, whatever the scanner's source looks like (R8)."""
+
+    def test_pre_push_takes_the_per_ref_path_with_any_first_scan(self) -> None:
+        repo = self.repo()
+        log = repo.base / "first-scan.log"
+        (repo.path / "tools" / "privacy_scan.py").write_text(
+            "import sys\n"
+            f"with open({str(log)!r}, 'a') as fh:\n"
+            "    fh.write(' '.join(sys.argv[1:]) + '\\n')\n"
+            "if sys.argv[1:] == ['--clone-mode']:\n"
+            "    print('contributor')\n"
+            "sys.exit(0)\n"
+        )
+        repo.add_file("more.txt", "clean\n")
+        repo.unchecked_commit("more")
+        pushed = repo.push("origin", "main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        calls = log.read_text().splitlines()
+        self.assertIn(f"--rev {repo.head()} --ref-name refs/heads/main", calls)
+        self.assertNotIn("--history", calls)
+
+    def test_push_refuses_a_token_in_history_with_the_real_scanners(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("deploy.txt", f"value: {token}\n")
+        repo.unchecked_commit("slip")
+        repo.add_file("deploy.txt", "value: removed\n")
+        repo.unchecked_commit("remove it again")
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(pushed))
+        self.assertEqual(repo.remote_tip(), before)
+
+    def test_secret_scan_rev_reads_commit_messages(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("ok.txt", "clean\n")
+        repo.unchecked_commit(f"note the token {token}")
+        scanned = repo.run("sh", "tools/secret_scan.sh", "rev", "HEAD")
+        self.assert_refused(scanned, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(scanned))
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "secret_scan:")
+        self.assertEqual(repo.remote_tip(), before)
+
+
+class MaintainerRulesTests(TemplateCase):
+    """In maintainer mode a missing or empty private rules file stops every hook."""
+
+    def test_commit_and_push_are_refused_without_usable_private_rules(self) -> None:
+        for state in ("empty", "missing"):
+            with self.subTest(rules=state):
+                repo = self.repo()
+                repo.add_file("more.txt", "clean\n")
+                repo.unchecked_commit("unpushed")
+                before = repo.head()
+                remote_before = repo.remote_tip()
+                if state == "empty":
+                    repo.rules.write_text(json.dumps({"version": 1, "rules": []}))
+                else:
+                    repo.rules.unlink()
+                repo.add_file("note.txt", "clean\n")
+                committed = repo.commit("clean change")
+                self.assert_refused(committed, "maintainer")
+                self.assertEqual(repo.head(), before)
+                pushed = repo.push("origin", "main")
+                self.assert_refused(pushed, "maintainer")
+                self.assertEqual(repo.remote_tip(), remote_before)
+
+
 class SubmoduleTests(TemplateCase):
     """A staged gitlink cannot be scanned, so it is refused."""
 
