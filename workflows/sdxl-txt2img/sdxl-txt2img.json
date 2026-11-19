@@ -47,7 +47,7 @@
         "ckpt",
         "CLIP"
       ],
-      "text": "text, watermark"
+      "text": "lowres, blurry, watermark, text, logo, signature"
     },
     "_meta": {
       "title": "Negative prompt",
@@ -87,9 +87,9 @@
       ],
       "seed": 0,
       "steps": 25,
-      "cfg": 8.0,
-      "sampler_name": "euler",
-      "scheduler": "normal",
+      "cfg": 7.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
       "denoise": 1.0
     },
     "_meta": {

@@ -221,10 +221,10 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "text, watermark"
+        "lowres, blurry, watermark, text, logo, signature"
       ],
       "widgets_values_named": {
-        "text": "text, watermark"
+        "text": "lowres, blurry, watermark, text, logo, signature"
       },
       "color": "#3d1e25",
       "bgcolor": "#4d262f"
@@ -395,18 +395,18 @@
         0,
         "fixed",
         25,
-        8.0,
-        "euler",
-        "normal",
+        7.0,
+        "dpmpp_2m",
+        "karras",
         1.0
       ],
       "widgets_values_named": {
         "seed": 0,
         "control_after_generate": "fixed",
         "steps": 25,
-        "cfg": 8.0,
-        "sampler_name": "euler",
-        "scheduler": "normal",
+        "cfg": 7.0,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras",
         "denoise": 1.0
       }
     },

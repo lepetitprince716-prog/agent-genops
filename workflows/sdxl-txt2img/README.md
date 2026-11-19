@@ -27,14 +27,14 @@ an empty 1024 x 1024 latent, decode, save. Every node ships with ComfyUI.
 - Size: 1024 x 1024. The ComfyUI SDXL examples page asks for 1024 x 1024 or another size with
   the same number of pixels, such as 896 x 1152 or 1536 x 640
   (https://comfyanonymous.github.io/ComfyUI_examples/sdxl/, read 2026-11-19).
-- Sampler: `euler`, scheduler `normal`, cfg 8, 25 steps. These are the base sampler's values in
-  ComfyUI's own SDXL template, `templates/sdxl_simple_example.json` in
-  https://github.com/Comfy-Org/workflow_templates (read 2026-11-19). That template hands the
-  last 5 of its 25 steps to the SDXL refiner; this graph runs all 25 steps on the base model,
-  which the model card says can be used on its own. Whether these values are the best choice
-  for the base model alone is not verified.
-- Seed 0, fixed, so that two runs of the same graph give the same image.
-- Negative prompt `text, watermark`, as in the same template.
+- Sampler: `dpmpp_2m`, scheduler `karras`, cfg 7, 25 steps, denoise 1. These are the values in
+  ComfyUI's own base-only SDXL template, `templates/image_sdxl_simple.json` in
+  https://github.com/Comfy-Org/workflow_templates (last changed 2026-09-28, read 2026-11-19).
+  Neither the model card nor the ComfyUI examples page names a sampler, so these values rest on
+  that template alone; whether they are the best choice is not verified.
+- Seed 0, fixed, so the seed stays the same from one run to the next.
+- Negative prompt `lowres, blurry, watermark, text, logo, signature`, a subset of the same
+  template's negative prompt.
 
 ## Changing the inputs
 
