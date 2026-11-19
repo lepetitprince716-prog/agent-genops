@@ -31,6 +31,39 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.
 
+`--nodedefs URL` reads `<URL>/api/object_info` from a running ComfyUI server. It follows at most
+three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge
+where the server or a redirect points: a server on this machine or the local network is the usual
+source, so name only a server you trust.
+
+## Input limits
+
+Inputs are checked once at the edge, and one past a limit below is refused with a message that
+names the limit. The limits are far above real workflows (large canvases are a few hundred nodes
+and a few megabytes). A JSON file is read up to the file limit, then refused at the document
+limit. The values are the constants in `src/cwc/ingest/limits.py`, `src/cwc/ingest/png.py`, `src/cwc/nodedefs/derive.py`,
+`src/cwc/nodedefs/registry.py` and `src/cwc/nodedefs/learn.py`.
+
+| Input | Limit | Past it |
+|---|---|---|
+| An input file (canvas, authoring file, PNG), read | 256 MiB, also for a pipe or a file that grows | I3, exit 3 |
+| A JSON document, or the text of one PNG chunk | 64 MiB | I3, exit 3 |
+| The compressed text chunks of one PNG, inflated, in all | 64 MiB | I3, exit 3 |
+| Nesting of JSON arrays and objects | 64 levels | I3, exit 3 |
+| Canvas nodes, or authoring entries | 5000 | I3, exit 3 |
+| Canvas links | 20000 | I3, exit 3 |
+| A canvas node, link, slot or reroute id (integer or digit string) | 32 digits | I1, exit 3 |
+| An authoring key made of digits | 32 digits | E7, exit 3 |
+| A canvas coordinate or size (nodes, groups, reroutes) | at most 1e9 in absolute value | I1, exit 3 |
+| A node definition source (file, URL response, or gzip once inflated) | 64 MiB, 64 levels deep | D1, exit 4 |
+| A URL source: redirects followed, only to http or https, never https to http | 3 | D1, exit 4 |
+| An Autogrow `min` or `max` in a node definition | 1000 | D1, exit 4 |
+| The slots of one Autogrow group (template inputs times `max`) | 10000 | D1, exit 4 |
+| `learn`: widget values times candidate names of one node, aligned | 250000 cells | the node votes on its length only (`too_large`), no error |
+
+An integer larger than a float holds is no longer an internal error either: in a widget it gets
+the usual range finding, in a canvas coordinate it is past the limit above.
+
 ## Planned
 
 These commands are not in `cwc --help` yet.

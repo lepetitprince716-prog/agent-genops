@@ -1,0 +1,1300 @@
+{
+  "last_node_id": 9,
+  "last_link_id": 13,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        1000,
+        80
+      ],
+      "size": [
+        280,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "ckpt_name",
+          "name": "ckpt_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "ckpt_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            4
+          ]
+        },
+        {
+          "localized_name": "VAE",
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "title": "SDXL base 1.0",
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "sd_xl_base_1.0.safetensors"
+      ],
+      "widgets_values_named": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+      }
+    },
+    {
+      "id": 2,
+      "type": "VAEDecode",
+      "pos": [
+        2520,
+        80
+      ],
+      "size": [
+        240,
+        46
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "samples",
+          "name": "samples",
+          "type": "LATENT",
+          "link": 1
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 3,
+      "type": "EmptyLatentImage",
+      "pos": [
+        520,
+        640
+      ],
+      "size": [
+        400,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "batch_size",
+          "name": "batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "LATENT",
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "title": "Image size",
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 4,
+      "type": "LoraLoader",
+      "pos": [
+        1360,
+        980
+      ],
+      "size": [
+        300,
+        126
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 4,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 4
+        },
+        {
+          "localized_name": "lora_name",
+          "name": "lora_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "lora_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "strength_model",
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "strength_clip",
+          "name": "strength_clip",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_clip"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            5
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "title": "LoRA 1",
+      "properties": {
+        "Node name for S&R": "LoraLoader"
+      },
+      "widgets_values": [
+        "your_lora_a.safetensors",
+        0.8,
+        0.8
+      ],
+      "widgets_values_named": {
+        "lora_name": "your_lora_a.safetensors",
+        "strength_model": 0.8,
+        "strength_clip": 0.8
+      }
+    },
+    {
+      "id": 5,
+      "type": "LoraLoader",
+      "pos": [
+        1780,
+        980
+      ],
+      "size": [
+        300,
+        126
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 4,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 5
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 6
+        },
+        {
+          "localized_name": "lora_name",
+          "name": "lora_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "lora_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "strength_model",
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "strength_clip",
+          "name": "strength_clip",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_clip"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            9
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            7,
+            8
+          ]
+        }
+      ],
+      "title": "LoRA 2",
+      "properties": {
+        "Node name for S&R": "LoraLoader"
+      },
+      "widgets_values": [
+        "your_lora_b.safetensors",
+        0.8,
+        0.8
+      ],
+      "widgets_values_named": {
+        "lora_name": "your_lora_b.safetensors",
+        "strength_model": 0.8,
+        "strength_clip": 0.8
+      }
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [
+        520,
+        360
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 7
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "title": "Negative prompt",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "lowres, blurry, watermark, text, logo, signature"
+      ],
+      "widgets_values_named": {
+        "text": "lowres, blurry, watermark, text, logo, signature"
+      },
+      "color": "#3d1e25",
+      "bgcolor": "#4d262f"
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [
+        520,
+        80
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 8
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "title": "Positive prompt",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "a quiet alpine lake at dawn, thin mist over the water, pine forest on the shore, snow on the far peaks, soft morning light"
+      ],
+      "widgets_values_named": {
+        "text": "a quiet alpine lake at dawn, thin mist over the water, pine forest on the shore, snow on the far peaks, soft morning light"
+      },
+      "color": "#1c3828",
+      "bgcolor": "#234732"
+    },
+    {
+      "id": 8,
+      "type": "KSampler",
+      "pos": [
+        2160,
+        80
+      ],
+      "size": [
+        280,
+        262
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 9
+        },
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 10
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 11
+        },
+        {
+          "localized_name": "latent_image",
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 12
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "steps",
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "cfg",
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sampler_name",
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "scheduler",
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "denoise",
+          "name": "denoise",
+          "type": "FLOAT",
+          "widget": {
+            "name": "denoise"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "LATENT",
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "Sampler",
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        0,
+        "fixed",
+        25,
+        7.0,
+        "dpmpp_2m",
+        "karras",
+        1.0
+      ],
+      "widgets_values_named": {
+        "seed": 0,
+        "control_after_generate": "fixed",
+        "steps": 25,
+        "cfg": 7.0,
+        "sampler_name": "dpmpp_2m",
+        "scheduler": "karras",
+        "denoise": 1.0
+      }
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "pos": [
+        2840,
+        80
+      ],
+      "size": [
+        280,
+        58
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 13
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "sdxl_lora"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "sdxl_lora"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      8,
+      0,
+      2,
+      0,
+      "LATENT"
+    ],
+    [
+      2,
+      1,
+      2,
+      2,
+      1,
+      "VAE"
+    ],
+    [
+      3,
+      1,
+      0,
+      4,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      1,
+      1,
+      4,
+      1,
+      "CLIP"
+    ],
+    [
+      5,
+      4,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      6,
+      4,
+      1,
+      5,
+      1,
+      "CLIP"
+    ],
+    [
+      7,
+      5,
+      1,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      8,
+      5,
+      1,
+      7,
+      0,
+      "CLIP"
+    ],
+    [
+      9,
+      5,
+      0,
+      8,
+      0,
+      "MODEL"
+    ],
+    [
+      10,
+      7,
+      0,
+      8,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      11,
+      6,
+      0,
+      8,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      12,
+      3,
+      0,
+      8,
+      3,
+      "LATENT"
+    ],
+    [
+      13,
+      2,
+      0,
+      9,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "01 Controls",
+      "bounding": [
+        500,
+        0,
+        440,
+        820
+      ],
+      "color": "#4a6b8a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "02 Models",
+      "bounding": [
+        980,
+        0,
+        320,
+        240
+      ],
+      "color": "#6b5a8a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "03 Sampling",
+      "bounding": [
+        2140,
+        0,
+        320,
+        400
+      ],
+      "color": "#8a6f3e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "04 Post-processing",
+      "bounding": [
+        2500,
+        0,
+        280,
+        180
+      ],
+      "color": "#3f7a7a",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "05 Output",
+      "bounding": [
+        2820,
+        0,
+        320,
+        440
+      ],
+      "color": "#8a4f4f",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "06 Optional LoRAs",
+      "bounding": [
+        1340,
+        900,
+        760,
+        280
+      ],
+      "color": "#5c5c5c",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "reroutes": [
+      {
+        "id": 1,
+        "pos": [
+          2120,
+          140
+        ],
+        "linkIds": [
+          2
+        ]
+      },
+      {
+        "id": 2,
+        "pos": [
+          2140,
+          140
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 1
+      },
+      {
+        "id": 3,
+        "pos": [
+          2140,
+          120
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 2
+      },
+      {
+        "id": 4,
+        "pos": [
+          2140,
+          60
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 3
+      },
+      {
+        "id": 5,
+        "pos": [
+          2140,
+          40
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 4
+      },
+      {
+        "id": 6,
+        "pos": [
+          2160,
+          40
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 5
+      },
+      {
+        "id": 7,
+        "pos": [
+          2460,
+          40
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 6
+      },
+      {
+        "id": 8,
+        "pos": [
+          2480,
+          40
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 7
+      },
+      {
+        "id": 9,
+        "pos": [
+          2480,
+          60
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 8
+      },
+      {
+        "id": 10,
+        "pos": [
+          2480,
+          100
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 9
+      },
+      {
+        "id": 11,
+        "pos": [
+          2480,
+          120
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 10
+      },
+      {
+        "id": 12,
+        "pos": [
+          2500,
+          120
+        ],
+        "linkIds": [
+          2
+        ],
+        "parentId": 11
+      },
+      {
+        "id": 13,
+        "pos": [
+          2100,
+          1020
+        ],
+        "linkIds": [
+          8
+        ]
+      },
+      {
+        "id": 14,
+        "pos": [
+          2100,
+          1000
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 13
+      },
+      {
+        "id": 15,
+        "pos": [
+          2100,
+          120
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 14
+      },
+      {
+        "id": 16,
+        "pos": [
+          2100,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 15
+      },
+      {
+        "id": 17,
+        "pos": [
+          2080,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 16
+      },
+      {
+        "id": 18,
+        "pos": [
+          1320,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 17
+      },
+      {
+        "id": 19,
+        "pos": [
+          1300,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 18
+      },
+      {
+        "id": 20,
+        "pos": [
+          1300,
+          80
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 19
+      },
+      {
+        "id": 21,
+        "pos": [
+          1300,
+          60
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 20
+      },
+      {
+        "id": 22,
+        "pos": [
+          1300,
+          40
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 21
+      },
+      {
+        "id": 23,
+        "pos": [
+          1280,
+          40
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 22
+      },
+      {
+        "id": 24,
+        "pos": [
+          500,
+          40
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 23
+      },
+      {
+        "id": 25,
+        "pos": [
+          480,
+          40
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 24
+      },
+      {
+        "id": 26,
+        "pos": [
+          480,
+          60
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 25
+      },
+      {
+        "id": 27,
+        "pos": [
+          480,
+          80
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 26
+      },
+      {
+        "id": 28,
+        "pos": [
+          480,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 27
+      },
+      {
+        "id": 29,
+        "pos": [
+          500,
+          100
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 28
+      },
+      {
+        "id": 30,
+        "pos": [
+          940,
+          100
+        ],
+        "linkIds": [
+          10
+        ]
+      },
+      {
+        "id": 31,
+        "pos": [
+          980,
+          100
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 30
+      },
+      {
+        "id": 32,
+        "pos": [
+          980,
+          80
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 31
+      },
+      {
+        "id": 33,
+        "pos": [
+          980,
+          40
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 32
+      },
+      {
+        "id": 34,
+        "pos": [
+          980,
+          20
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 33
+      },
+      {
+        "id": 35,
+        "pos": [
+          1000,
+          20
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 34
+      },
+      {
+        "id": 36,
+        "pos": [
+          2100,
+          20
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 35
+      },
+      {
+        "id": 37,
+        "pos": [
+          2120,
+          20
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 36
+      },
+      {
+        "id": 38,
+        "pos": [
+          2120,
+          40
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 37
+      },
+      {
+        "id": 39,
+        "pos": [
+          2120,
+          100
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 38
+      },
+      {
+        "id": 40,
+        "pos": [
+          2120,
+          120
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 39
+      },
+      {
+        "id": 41,
+        "pos": [
+          2140,
+          120
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 40
+      }
+    ],
+    "linkExtensions": [
+      {
+        "id": 2,
+        "parentId": 12
+      },
+      {
+        "id": 8,
+        "parentId": 29
+      },
+      {
+        "id": 10,
+        "parentId": 41
+      }
+    ]
+  },
+  "version": 0.4,
+  "models": [
+    {
+      "name": "sd_xl_base_1.0.safetensors",
+      "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+      "directory": "checkpoints"
+    }
+  ]
+}
