@@ -552,11 +552,20 @@ def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[
         split_names(run_git(["ls-files", "--others", "--exclude-standard", "-z"], root).stdout)
     )
     branch_files: list[str] = []
+    removed_branch: list[str] = []
     if merge_base:
         count = int(git_text(["rev-list", "--count", f"{merge_base}..HEAD"], root))
         if count > 0:
             branch_files = list(
                 split_names(run_git(["diff", NO_RENAMES, "--name-only", "-z", f"{merge_base}..HEAD"], root).stdout)
+            )
+            # Paths the branch's commits delete (a committed rename is a deletion and an addition).
+            removed_branch = list(
+                split_names(
+                    run_git(
+                        ["diff", NO_RENAMES, "--name-only", "-z", "--diff-filter=D", f"{merge_base}..HEAD"], root
+                    ).stdout
+                )
             )
     return {
         "staged": staged,
@@ -565,6 +574,7 @@ def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[
         "branch": branch_files,
         "removed_staged": removed_staged,
         "removed_unstaged": removed_unstaged,
+        "removed_branch": removed_branch,
     }
 
 
@@ -655,7 +665,13 @@ def cmd_changed(args: argparse.Namespace) -> int:
         if rc != 0:
             secret_failures.append((label, out))
 
-    removed = {*states["removed_staged"], *states["removed_unstaged"]}
+    # A path the branch deleted is removed unless the working tree has a file there again.
+    present = {*states["staged"], *states["unstaged"], *states["untracked"]}
+    removed = {
+        *states["removed_staged"],
+        *states["removed_unstaged"],
+        *(p for p in states["removed_branch"] if p not in present),
+    }
     all_changed = sorted(
         {*states["staged"], *states["unstaged"], *states["untracked"], *states["branch"], *removed}
     )

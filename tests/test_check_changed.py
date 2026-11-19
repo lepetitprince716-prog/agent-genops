@@ -73,6 +73,38 @@ class RemovalsAndTypeChangesTests(unittest.TestCase):
         )
         self.assertEqual(data["states"]["removed_unstaged"], 1)
 
+    def test_committed_deletion_of_a_guard_test_is_listed_as_removed(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_guard_tests(self)
+        repo.git("checkout", "-q", "-b", "topic")
+        repo.git("rm", "-q", "tests/test_guard_dummy.py")
+        repo.write("tests/test_other.py", PASSING_TEST + "\n# touched\n")
+        repo.git("add", "tests/test_other.py")
+        repo.commit_unchecked("delete one guard test and touch the other")
+        rc, data = changed_json(repo, "--base", "origin/main", "--no-tests")
+        self.assertEqual(rc, 0, json.dumps(data))
+        self.assertEqual(
+            data["guard_changes"],
+            [
+                {"path": "tests/test_guard_dummy.py", "change": "removed"},
+                {"path": "tests/test_other.py", "change": "changed"},
+            ],
+        )
+        self.assertEqual(data["states"]["removed_branch"], 1)
+
+    def test_a_guard_test_deleted_on_the_branch_and_recreated_in_the_tree_is_changed(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_guard_tests(self)
+        repo.git("checkout", "-q", "-b", "topic")
+        repo.git("rm", "-q", "tests/test_guard_dummy.py")
+        repo.commit_unchecked("delete a guard test")
+        repo.write("tests/test_guard_dummy.py", PASSING_TEST + "\n# back again\n")
+        rc, data = changed_json(repo, "--base", "origin/main", "--no-tests")
+        self.assertEqual(rc, 0, json.dumps(data))
+        self.assertEqual(
+            data["guard_changes"], [{"path": "tests/test_guard_dummy.py", "change": "changed"}]
+        )
+
     def test_changed_guard_file_is_listed_as_changed_in_text_output(self) -> None:
         need_betterleaks(self)
         repo = repo_with_guard_tests(self)

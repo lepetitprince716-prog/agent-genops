@@ -49,7 +49,7 @@ macOS). The hooks fail closed if Betterleaks is missing.
 2. Run `./check changed` while working. It scans staged, unstaged, untracked and branch changes, then
    runs the tests that the changed paths select. The output has a `SUMMARY` line, a `STATES` line
    with the counts of changed files, a `GUARD CHANGES` list and a `TESTS` table. `GUARD CHANGES`
-   names the changed guard files, guard tests and root code that select the guard tests. The tests
+   names the changed guard files, guard tests and root code that select the guard tests; a path that no longer exists (deleted or renamed away, staged, unstaged or committed on the branch) is marked `(removed)`, any other `(changed)`. The tests
    are chosen by path: a changed Markdown file runs `doc-links`, a change under `workflows/` or to
    the workflow policy runs `workflow-policy` (this one also runs with `--no-tests`; the other
    suites are then marked `NOT RUN`), a guard change runs `guard-tests`, and a change inside a
@@ -130,7 +130,7 @@ them runs that project's workflow in `.github/workflows/`.
 ### 开 pull request
 
 1. fork 这个仓库，从 `main` 建一个分支。
-2. 开发过程中运行 `./check changed`。它检查暂存、未暂存、未跟踪的文件和分支上的提交，然后跑改动路径选中的测试。输出有一行 `SUMMARY`、一行统计改动文件数的 `STATES`、一份 `GUARD CHANGES` 清单和一张 `TESTS` 表。`GUARD CHANGES` 列出改动了的防护文件、防护测试和根目录代码，正是它们选中了 guard 测试。测试按路径选：改了 Markdown 就跑 `doc-links`；改了 `workflows/` 或工作流策略就跑 `workflow-policy`（这一项连 `--no-tests` 也照跑，其余测试那时标成 `NOT RUN`）；改了防护就跑 `guard-tests`；改了项目文件夹里的内容就跑那个项目的测试。没有“全部跑一遍”的模式：要跑全部防护测试，用 `python3 -B -m unittest discover -s tests`。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
+2. 开发过程中运行 `./check changed`。它检查暂存、未暂存、未跟踪的文件和分支上的提交，然后跑改动路径选中的测试。输出有一行 `SUMMARY`、一行统计改动文件数的 `STATES`、一份 `GUARD CHANGES` 清单和一张 `TESTS` 表。`GUARD CHANGES` 列出改动了的防护文件、防护测试和根目录代码，正是它们选中了 guard 测试；已经不存在的路径（删除或改名走了，不论暂存、未暂存还是已提交在分支上）标 `(removed)`，其余标 `(changed)`。测试按路径选：改了 Markdown 就跑 `doc-links`；改了 `workflows/` 或工作流策略就跑 `workflow-policy`（这一项连 `--no-tests` 也照跑，其余测试那时标成 `NOT RUN`）；改了防护就跑 `guard-tests`；改了项目文件夹里的内容就跑那个项目的测试。没有“全部跑一遍”的模式：要跑全部防护测试，用 `python3 -B -m unittest discover -s tests`。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
 3. 把分支推到你的 fork，向 `main` 开 pull request。
 4. CI 在每次 push 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描。pull request 上用 base 分支的扫描器、规则和 ignore 文件，并把 pull request 自己的提交关掉行内豁免再扫一遍。第一次贡献时，CI 可能要等维护者批准才会运行。
 

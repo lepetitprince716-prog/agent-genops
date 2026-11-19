@@ -19,7 +19,8 @@ Never copy whole files from a private repository without a line-by-line review. 
 1. **While working:** run `./check changed`
    - Scans staged, unstaged, non-ignored untracked files, and unmerged branch commits with both
      `tools/privacy_scan.py` and `tools/secret_scan.sh`, then runs the tests that the changed paths
-     select. The output lists the changed guard files under `GUARD CHANGES`. The workflow policy
+     select. The output lists the changed guard files under `GUARD CHANGES`; a path that no longer exists
+     (deleted or renamed away, staged or committed on the branch) is marked `(removed)`. The workflow policy
      step runs when `workflows/` or its policy changes, also with `--no-tests`.
    - There is no mode that runs every suite. All guard tests: `python3 -B -m unittest discover -s tests`.
    - Contributors without private rules run in contributor mode (`not a release check`).

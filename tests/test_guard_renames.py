@@ -71,6 +71,11 @@ class CheckChangedRenameTests(unittest.TestCase):
         res = repo.check("changed", "--json", "--base", "origin/main", "--no-tests")
         data = json.loads(res.stdout)
         self.assertIn(GUARD_TEST, [g["path"] for g in data["guard_changes"]], combined(res))
+        # The old path no longer exists on the branch: it is shown as removed, as a staged rename is.
+        self.assertIn({"path": GUARD_TEST, "change": "removed"}, data["guard_changes"], combined(res))
+        self.assertEqual(data["states"]["removed_branch"], 1, combined(res))
+        text = repo.check("changed", "--base", "origin/main", "--no-tests")
+        self.assertIn(f"{GUARD_TEST} (removed)", text.stdout, combined(text))
 
 
 class ReleaseRenameTests(unittest.TestCase):
