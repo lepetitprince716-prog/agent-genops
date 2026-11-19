@@ -29,25 +29,36 @@ prints a matched value; it prints the rule that fired and where.
   IP addresses, home paths, Windows user paths, emails, token shapes, MAC addresses, tunnel and
   LAN hostnames, embedded generation metadata in images, and undecodable binaries.
 - Your own patterns go in `~/.config/agent-genops/private_rules.json` (same format). That file
-  stays on your machine. Set `AGENT_GENOPS_REQUIRE_PRIVATE=1` if your hooks should refuse to run
-  without it.
-- Git hooks: `pre-commit` checks your commit identity and the staged files, `commit-msg` checks
-  the message, `pre-push` checks every blob and commit in history. Turn them on once per clone:
+  stays on your machine. Set `git config genops.mode maintainer` in your maintainer clone (or set
+  `AGENT_GENOPS_REQUIRE_PRIVATE=1`) so the hooks and `./check` fail closed if the private rules
+  file is missing, empty, or invalid.
+- Git hooks: `pre-commit` checks your commit identity and staged files/names, `commit-msg` checks
+  the message, `pre-push` checks the candidate commit history, historical paths, and target ref
+  name (with a warning if unrelated local refs have findings). Turn them on once per clone:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-- CI runs the same scanner with the built-in rules on every push and pull request.
+- Sensitive file paths and ref names that match a rule are replaced with redacted aliases in
+  scanner output instead of being printed verbatim. Submodules (`160000`), Git LFS pointers, and
+  active `refs/replace/*` entries fail closed.
+- CI currently runs the built-in privacy and Betterleaks scans on pushes to `main` and on pull
+  requests; it never loads maintainer private rules.
 - Commit with a GitHub noreply address; the identity check rejects anything else.
 - The hooks and the scanner cover the whole repository, the project folders `cwc/`, `rdbg/` and
   `artfetch/` included. Those folders carry no hooks or scanner of their own.
 
-Run it by hand from the repository root at any time:
+Run daily or pre-release checks from the repository root:
 
 ```bash
+./check changed
+./check release --to origin --ref refs/heads/main --commit <full-sha>
 python3 tools/privacy_scan.py --tracked --history
 ```
+
+`./check release` is read-only and never pushes: it runs the trusted baseline scanners and writes a
+redacted verification snapshot outside the repository.
 
 ## Second scan: Betterleaks
 
@@ -113,11 +124,13 @@ the same shape next time.
 [`tools/privacy_scan.py`](tools/privacy_scan.py) 是一个只用标准库的 Python 扫描器。它从不打印命中的内容，只报告是哪条规则、在哪个位置。
 
 - 内置规则在 [`tools/privacy_rules.json`](tools/privacy_rules.json)，覆盖局域网和其他 IP 地址、用户目录路径、Windows 用户路径、邮箱、密钥形态、MAC 地址、隧道和局域网主机名、图片里嵌的生成参数，以及无法解码的二进制文件。
-- 你自己的规则写在 `~/.config/agent-genops/private_rules.json`（格式相同），只留在你的机器上。如果希望没有这个文件时 hook 直接拒绝运行，设置 `AGENT_GENOPS_REQUIRE_PRIVATE=1`。
-- git hook：`pre-commit` 检查提交身份和暂存文件，`commit-msg` 检查提交信息，`pre-push` 检查历史里的每个文件和每次提交。每个克隆打开一次即可（命令见上文英文部分）。
-- CI 在每次 push 和 pull request 时用内置规则跑同一个扫描器。
+- 你自己的规则写在 `~/.config/agent-genops/private_rules.json`（格式相同），只留在你的机器上。维护者克隆可设置 `git config genops.mode maintainer`（或设置 `AGENT_GENOPS_REQUIRE_PRIVATE=1`），确保私有规则缺失、为空或损坏时 hook 与 `./check` 直接拒绝而不静默降级。
+- git hook：`pre-commit` 检查提交身份与暂存文件/路径名，`commit-msg` 检查提交信息，`pre-push` 对即将推送的候选历史、全部历史路径与目标 ref 名执行硬阻断扫描（本地其他未推送 ref 命中时单列告警）。每个克隆打开一次即可（命令见上文英文部分）。
+- 命中规则的文件路径名和 ref 名会以脱敏别名输出，不原样打印。未扫描内容的子模块（`160000`）、Git LFS 指针与 `refs/replace/*` 替换引用会默认拒绝。
+- 当前 CI 在推送到 `main` 和 pull request 时用内置公开规则跑隐私与 Betterleaks 扫描，永远不加载维护者私有规则。
 - 提交时请用 GitHub 的 noreply 邮箱，身份检查会拒绝其他地址。
 - hook 和扫描器管整个仓库，项目文件夹 `cwc/`、`rdbg/`、`artfetch/` 也包括在内。这些文件夹自己不带 hook 和扫描器。
+- 日常开发在仓库根目录运行 `./check changed`，发布前用 `./check release --to origin --ref refs/heads/main --commit <完整SHA>` 生成脱敏清单（只读、绝不执行推送）。
 
 ### 第二道扫描：Betterleaks
 

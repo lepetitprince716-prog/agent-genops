@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Privacy guard for a public repository, implemented with only the stdlib.
 
-It looks for personal data -- LAN addresses, home paths, emails, credentials and
-image-generation metadata -- in staged files, tracked files, git history, a commit
-message or any path, and checks that the configured git identity is a noreply address.
+It looks for personal data -- LAN addresses, home paths, emails, credentials,
+sensitive file/ref names and image-generation metadata -- in staged files,
+unstaged changes, untracked files, tracked files, git history (all refs, one
+candidate commit, or a commit range), a commit message or any path, and checks
+that the configured git identity is a noreply address.
 
 A finding is reported as ``location: rule_id -- why``; the matched value is never
-printed. Exit status: 0 clean, 1 findings, 2 usage or internal error. The guard fails
-closed: a file it cannot read or decode is a finding, not a pass.
+printed, and any path or ref name that matches a rule is replaced with a stable
+redacted alias before output. Exit status: 0 clean, 1 findings, 2 usage or
+internal error. The guard fails closed: a file it cannot read or decode, an
+unscanned submodule, a Git LFS pointer, or active git replace refs are findings
+or errors, never a pass.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import zlib
+from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +37,8 @@ EXIT_CLEAN, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 PUBLIC_RULES = Path(__file__).resolve().with_name("privacy_rules.json")
 PRIVATE_RULES_ENV = "AGENT_GENOPS_PRIVATE_RULES"
 REQUIRE_PRIVATE_ENV = "AGENT_GENOPS_REQUIRE_PRIVATE"
+MAINTAINER_MODE_CONFIG_KEY = "genops.mode"
+MAINTAINER_MODE_VALUE = "maintainer"
 
 DOCUMENT_LISTS = (
     "rules",
@@ -57,6 +65,8 @@ PNG_PIXEL_CHUNKS = (b"IDAT", b"fdAT")
 GENERATION_KEYS = frozenset({"prompt", "workflow", "parameters", "comment", "description"})
 MAX_INFLATED = 64 * 1024 * 1024
 
+LFS_HEADER = b"version https://git-lfs.github.com/spec/v1"
+
 WHY_GENERATION = (
     "image carries generation metadata (prompt, workflow or parameters); "
     "strip it or keep the image out of the repository"
@@ -68,10 +78,21 @@ WHY_NOT_UTF8 = "file is not valid UTF-8, so it cannot be scanned"
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
+WHY_SUBMODULE = (
+    "git submodule (gitlink 160000) points to external commits whose content was not scanned"
+)
+WHY_LFS = (
+    "Git LFS pointer detected; the backing binary asset was not scanned and must be reviewed"
+)
+WHY_REPLACE = (
+    "git replace refs are present in this clone; pack transfer ignores replacements so scanned "
+    "objects would not match what gets pushed"
+)
 WHY_IDENTITY = (
     "email is not on the allowed_emails list; set your GitHub noreply address (Settings > Emails): "
     "git config user.email '<id>+<name>@users.noreply.github.com'"
 )
+WHY_REDACTED_HINT = "name redacted; inspect locally with git status or git log"
 
 
 class ScanError(Exception):
@@ -118,6 +139,16 @@ class RuleSet:
     allow: tuple[re.Pattern[str], ...]
     allowed_emails: tuple[re.Pattern[str], ...]
     binary_suffixes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class LoadedRules:
+    """Compiled rule set with metadata about private rule loading."""
+
+    rules: RuleSet
+    note: str
+    private_loaded: bool
+    private_rule_count: int
 
 
 # --- rules -------------------------------------------------------------------------
@@ -217,21 +248,67 @@ def private_rules_path() -> Path:
     return Path.home() / ".config" / "agent-genops" / "private_rules.json"
 
 
-def load_rules(public_path: Path, use_private: bool) -> tuple[RuleSet, str]:
-    """Load the public rules, merge the private file if present, and say what happened."""
+def read_clone_mode(cwd: Path | None = None) -> str | None:
+    """Read clone-level ``genops.mode`` without modifying git config; None if unset or not in git."""
+    target = cwd or Path.cwd()
+    try:
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "--get", MAINTAINER_MODE_CONFIG_KEY],
+            cwd=target,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if done.returncode != 0:
+        return None
+    return done.stdout.decode("utf-8", "replace").strip().lower() or None
+
+
+def is_maintainer_required(cwd: Path | None = None) -> bool:
+    """True when strict maintainer private-rule enforcement is active."""
+    if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
+        return True
+    return read_clone_mode(cwd) == MAINTAINER_MODE_VALUE
+
+
+def load_rules_detailed(
+    public_path: Path,
+    use_private: bool,
+    *,
+    require_private: bool = False,
+    cwd: Path | None = None,
+) -> LoadedRules:
+    """Load public rules, merge private rules when enabled, and fail closed when required."""
     rules = load_ruleset(public_path)
     if not use_private:
-        return rules, "private rules skipped (--no-private)"
+        if require_private:
+            raise ScanError("private rules are required in maintainer mode; --no-private is not allowed")
+        return LoadedRules(rules, "private rules skipped (--no-private)", False, 0)
+    strict = require_private or is_maintainer_required(cwd)
     path = private_rules_path()
     if not path.is_file():
-        if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
-            raise ScanError(f"{REQUIRE_PRIVATE_ENV}=1 but there is no private rules file at {path}")
-        return rules, "private rules not loaded (0 rules)"
+        if strict:
+            raise ScanError(f"maintainer/private rules required, but no private rules file at {path}")
+        return LoadedRules(rules, "private rules not loaded (0 rules)", False, 0)
     private = load_ruleset(path)
-    return merge_rulesets(rules, private), f"private rules loaded ({len(private.rules)} rules)"
+    if strict and len(private.rules) == 0:
+        raise ScanError(
+            f"{path}: private rules file defines 0 rules; refusing to proceed in maintainer mode"
+        )
+    note = f"private rules loaded ({len(private.rules)} rules)"
+    return LoadedRules(merge_rulesets(rules, private), note, True, len(private.rules))
 
 
-# --- matching ----------------------------------------------------------------------
+def load_rules(
+    public_path: Path, use_private: bool, require_private: bool = False
+) -> tuple[RuleSet, str]:
+    """Load the public rules, merge the private file if present, and say what happened."""
+    loaded = load_rules_detailed(public_path, use_private, require_private=require_private)
+    return loaded.rules, loaded.note
+
+
+# --- matching & redaction ----------------------------------------------------------
 
 
 def blank_allowed(line: str, rules: RuleSet) -> str:
@@ -268,7 +345,108 @@ def scan_values(values: Iterable[str], rules: RuleSet, suffix: str) -> list[Hit]
     return list(found.values())
 
 
-# --- images ------------------------------------------------------------------------
+class NameRedactor:
+    """Check file/ref names against rules and replace sensitive names with stable aliases."""
+
+    def __init__(self, rules: RuleSet) -> None:
+        self.rules = rules
+        self._path_aliases: dict[str, str] = {}
+        self._ref_aliases: dict[str, str] = {}
+        self._hits_cache: dict[str, tuple[Hit, ...]] = {}
+
+    @property
+    def redacted_count(self) -> int:
+        return len(self._path_aliases) + len(self._ref_aliases)
+
+    def name_hits(self, raw: str) -> tuple[Hit, ...]:
+        cached = self._hits_cache.get(raw)
+        if cached is None:
+            # Scan the raw name plus a slash-to-space variant so word-boundary rules fire cleanly.
+            found: dict[str, Hit] = {}
+            for candidate in (raw, raw.replace("/", " ").replace("\\", " ")):
+                for hit in scan_text(candidate, self.rules, ""):
+                    found.setdefault(hit.rule_id, Hit(1, hit.rule_id, hit.why))
+            cached = tuple(found.values())
+            self._hits_cache[raw] = cached
+        return cached
+
+    def safe_path(self, raw: str) -> str:
+        if not raw:
+            return raw
+        if not self.name_hits(raw):
+            return raw
+        alias = self._path_aliases.get(raw)
+        if alias is None:
+            alias = f"<redacted-path#{len(self._path_aliases) + 1}>"
+            self._path_aliases[raw] = alias
+        return alias
+
+    def safe_ref(self, raw: str) -> str:
+        if not raw:
+            return raw
+        if not self.name_hits(raw):
+            return raw
+        alias = self._ref_aliases.get(raw)
+        if alias is None:
+            alias = f"<redacted-ref#{len(self._ref_aliases) + 1}>"
+            self._ref_aliases[raw] = alias
+        return alias
+
+    def scan_path(self, raw: str, prefix: str = "") -> list[Finding]:
+        hits = self.name_hits(raw)
+        if not hits:
+            return []
+        alias = self.safe_path(raw)
+        where = f"{prefix}path {alias}" if prefix else f"path {alias}"
+        return [
+            Finding(where, 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})") for hit in hits
+        ]
+
+    def scan_ref(self, raw: str, prefix: str = "") -> list[Finding]:
+        hits = self.name_hits(raw)
+        if not hits:
+            return []
+        alias = self.safe_ref(raw)
+        where = f"{prefix}ref {alias}" if prefix else f"ref {alias}"
+        return [
+            Finding(where, 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})") for hit in hits
+        ]
+
+    def redact_secret_line(self, line: str) -> str:
+        """Redact sensitive file paths in Betterleaks template lines (``rule path:line commit``)."""
+        stripped = line.rstrip("\r\n")
+        if not stripped:
+            return stripped
+        # Template format: "<rule_id> <file>:<line> <commit>" (commit may be empty on staged/dir).
+        match = re.match(r"^(\s*\S+\s+)(.+?):(\d+)(\s+[0-9a-f]{7,64})?(\s*)$", stripped)
+        if match:
+            head, path_part, line_no, commit_part, tail = match.groups()
+            safe = self.safe_path(path_part)
+            return f"{head}{safe}:{line_no}{commit_part or ''}{tail}"
+        # Fallback: if any token or the whole line hits a rule, redact sensitive tokens.
+        if self.name_hits(stripped):
+            tokens = re.split(r"(\s+)", stripped)
+            out = []
+            for tok in tokens:
+                if tok and not tok.isspace() and self.name_hits(tok):
+                    out.append(self.safe_path(tok))
+                else:
+                    out.append(tok)
+            candidate = "".join(out)
+            if self.name_hits(candidate):
+                return "<redacted-line>"
+            return candidate
+        return stripped
+
+
+# --- images & special files --------------------------------------------------------
+
+
+def is_lfs_pointer(data: bytes) -> bool:
+    """True when ``data`` looks like a Git LFS pointer file rather than real content."""
+    if len(data) > 1024 or not data.startswith(LFS_HEADER):
+        return False
+    return b"oid sha256:" in data and b"\nsize " in data
 
 
 def inflate(raw: bytes) -> bytes:
@@ -372,7 +550,9 @@ def scan_image(data: bytes, rules: RuleSet, suffix: str) -> list[Hit]:
 
 
 def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
-    """Classify a file's bytes (allowed image, binary or text) and scan them."""
+    """Classify a file's bytes (LFS pointer, allowed image, binary or text) and scan them."""
+    if is_lfs_pointer(data):
+        return [Hit(1, "unsupported_lfs_pointer", WHY_LFS)]
     suffix = Path(name).suffix.lower()
     if suffix in rules.binary_suffixes:
         return scan_image(data, rules, suffix)
@@ -388,9 +568,14 @@ def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
 
 
 def git(args: list[str], cwd: Path) -> bytes:
-    """Run git with an argument list and return stdout; any failure is a ScanError."""
+    """Run git with ``--no-replace-objects`` and return stdout; any failure is a ScanError."""
     try:
-        done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=False)
+        done = subprocess.run(
+            ["git", "--no-replace-objects", *args],
+            cwd=cwd,
+            capture_output=True,
+            check=False,
+        )
     except OSError as exc:
         raise ScanError(f"cannot run git: {exc}") from exc
     if done.returncode != 0:
@@ -399,9 +584,9 @@ def git(args: list[str], cwd: Path) -> bytes:
     return done.stdout
 
 
-def repo_root() -> Path:
-    """The top-level directory of the repository containing the current directory."""
-    return Path(os.fsdecode(git(["rev-parse", "--show-toplevel"], Path.cwd()).strip()))
+def repo_root(cwd: Path | None = None) -> Path:
+    """The top-level directory of the repository containing ``cwd`` (or current directory)."""
+    return Path(os.fsdecode(git(["rev-parse", "--show-toplevel"], cwd or Path.cwd()).strip()))
 
 
 def split_names(listing: bytes) -> Iterator[str]:
@@ -416,35 +601,153 @@ def read_worktree(path: Path) -> bytes:
     return path.read_bytes()
 
 
-def scan_worktree_file(where: str, path: Path, rules: RuleSet) -> list[Finding]:
-    """Scan one working-tree file; an unreadable file is itself a finding."""
+def scan_worktree_file(
+    where: str,
+    path: Path,
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "",
+) -> list[Finding]:
+    """Scan one working-tree file and its name; an unreadable file is itself a finding."""
+    red = redactor or NameRedactor(rules)
+    findings = red.scan_path(where, prefix=prefix)
+    safe_where = f"{prefix}{red.safe_path(where)}" if prefix else red.safe_path(where)
     try:
         data = read_worktree(path)
     except OSError:
-        return [Finding(where, 1, "undecodable", WHY_UNREADABLE)]
-    return to_findings(where, scan_bytes(path.name, data, rules))
+        findings.append(Finding(safe_where, 1, "undecodable", WHY_UNREADABLE))
+        return findings
+    findings += to_findings(safe_where, scan_bytes(path.name, data, rules))
+    return findings
 
 
-def scan_staged(root: Path, rules: RuleSet) -> list[Finding]:
-    """Scan the index version of every file about to be committed."""
-    listing = git(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"], root)
-    findings = []
-    for name in split_names(listing):
-        try:
-            data = git(["show", f":./{name}"], root)
-        except ScanError:
-            findings.append(Finding(name, 1, "undecodable", WHY_UNREADABLE))
+def parse_raw_diff_z(raw: bytes) -> list[tuple[str, str, str]]:
+    """Parse ``git diff --raw -z --diff-filter=ACMR`` into ``(new_mode, new_oid, path)``."""
+    entries: list[tuple[str, str, str]] = []
+    parts = raw.split(b"\0")
+    idx = 0
+    while idx < len(parts):
+        meta = parts[idx]
+        idx += 1
+        if not meta:
+            continue
+        # Format: ":old_mode new_mode old_oid new_oid status"
+        fields = meta.decode("ascii").lstrip(":").split()
+        if len(fields) < 5:
+            continue
+        new_mode, new_oid, status = fields[1], fields[3], fields[4]
+        if idx >= len(parts):
+            break
+        first_path = os.fsdecode(parts[idx])
+        idx += 1
+        if status.startswith(("R", "C")):
+            if idx >= len(parts):
+                break
+            second_path = os.fsdecode(parts[idx])
+            idx += 1
+            entries.append((new_mode, new_oid, second_path))
         else:
-            findings += to_findings(name, scan_bytes(name, data, rules))
+            entries.append((new_mode, new_oid, first_path))
+    return entries
+
+
+def scan_staged(
+    root: Path,
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "",
+) -> list[Finding]:
+    """Scan the index version (and names) of every file about to be committed."""
+    red = redactor or NameRedactor(rules)
+    raw = git(["diff", "--cached", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    findings: list[Finding] = []
+    for new_mode, new_oid, name in parse_raw_diff_z(raw):
+        findings += red.scan_path(name, prefix=prefix)
+        safe_where = f"{prefix}{red.safe_path(name)}" if prefix else red.safe_path(name)
+        if new_mode == "160000":
+            findings.append(Finding(safe_where, 1, "unsupported_submodule", WHY_SUBMODULE))
+            continue
+        try:
+            data = git(["cat-file", "blob", new_oid], root)
+        except ScanError:
+            findings.append(Finding(safe_where, 1, "undecodable", WHY_UNREADABLE))
+        else:
+            findings += to_findings(safe_where, scan_bytes(name, data, rules))
     return findings
 
 
-def scan_tracked(root: Path, rules: RuleSet) -> list[Finding]:
-    """Scan every tracked file as it is in the working tree."""
-    findings = []
-    for name in split_names(git(["ls-files", "-z"], root)):
-        findings += scan_worktree_file(name, root / name, rules)
+def scan_unstaged(
+    root: Path,
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "[unstaged] ",
+) -> list[Finding]:
+    """Scan working-tree files that differ from the index (and their names)."""
+    red = redactor or NameRedactor(rules)
+    raw = git(["diff", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    findings: list[Finding] = []
+    for new_mode, _new_oid, name in parse_raw_diff_z(raw):
+        if new_mode == "160000":
+            findings += red.scan_path(name, prefix=prefix)
+            safe_where = f"{prefix}{red.safe_path(name)}"
+            findings.append(Finding(safe_where, 1, "unsupported_submodule", WHY_SUBMODULE))
+            continue
+        findings += scan_worktree_file(name, root / name, rules, redactor=red, prefix=prefix)
     return findings
+
+
+def scan_untracked(
+    root: Path,
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "[untracked] ",
+) -> list[Finding]:
+    """Scan non-ignored untracked files in the working tree (and their names)."""
+    red = redactor or NameRedactor(rules)
+    listing = git(["ls-files", "--others", "--exclude-standard", "-z"], root)
+    findings: list[Finding] = []
+    for name in split_names(listing):
+        findings += scan_worktree_file(name, root / name, rules, redactor=red, prefix=prefix)
+    return findings
+
+
+def scan_tracked(
+    root: Path,
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "",
+) -> list[Finding]:
+    """Scan every tracked file (and its path name) as it is in the working tree."""
+    red = redactor or NameRedactor(rules)
+    listing = git(["ls-files", "--stage", "-z"], root)
+    findings: list[Finding] = []
+    seen: set[str] = set()
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
+        meta, sep, raw_name = entry.partition(b"\t")
+        if not sep:
+            continue
+        mode = meta.decode("ascii").split()[0]
+        name = os.fsdecode(raw_name)
+        if name in seen:
+            continue
+        seen.add(name)
+        if mode == "160000":
+            findings += red.scan_path(name, prefix=prefix)
+            safe_where = f"{prefix}{red.safe_path(name)}" if prefix else red.safe_path(name)
+            findings.append(Finding(safe_where, 1, "unsupported_submodule", WHY_SUBMODULE))
+            continue
+        findings += scan_worktree_file(name, root / name, rules, redactor=red, prefix=prefix)
+    return findings
+
+
+def scan_replace_refs(root: Path) -> list[Finding]:
+    """Fail closed if ``refs/replace/*`` exists in the repository."""
+    out = git(["for-each-ref", "--format=%(refname)", "refs/replace"], root).strip()
+    if out:
+        return [Finding("git refs/replace", 1, "replace_ref", WHY_REPLACE)]
+    return []
 
 
 def check_ident(where: str, ident: str, rules: RuleSet) -> list[Finding]:
@@ -457,19 +760,20 @@ def check_ident(where: str, ident: str, rules: RuleSet) -> list[Finding]:
     return findings + to_findings(where, scan_text(ident, rules, ""))
 
 
-def scan_identity(rules: RuleSet) -> list[Finding]:
+def scan_identity(rules: RuleSet, cwd: Path | None = None) -> list[Finding]:
     """Check the author and committer identities git would use for the next commit."""
     findings = []
+    target = cwd or Path.cwd()
     for var, role in (("GIT_AUTHOR_IDENT", "author"), ("GIT_COMMITTER_IDENT", "committer")):
-        ident = git(["var", var], Path.cwd()).decode("utf-8", "replace").strip()
+        ident = git(["var", var], target).decode("utf-8", "replace").strip()
         findings += check_ident(f"identity {role}", ident, rules)
     return findings
 
 
-def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet) -> list[Finding]:
+def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = "") -> list[Finding]:
     """Scan a commit or tag object: identities by the email list, the message by the rules."""
     head, _, body = data.decode("utf-8", "replace").partition("\n\n")
-    where = f"{kind} {oid[:SHORT_SHA]}"
+    where = f"{prefix}{kind} {oid[:SHORT_SHA]}"
     findings = []
     for line in head.split("\n"):
         field, _, value = line.partition(" ")
@@ -492,24 +796,17 @@ def read_batch(stream: BinaryIO) -> Iterator[tuple[str, str, bytes]]:
         yield oid, kind, data
 
 
-def scan_history(root: Path, rules: RuleSet) -> list[Finding]:
-    """Scan every blob, commit and tag reachable from any ref; no commits means clean."""
-    if git(["rev-parse", "--is-shallow-repository"], root).strip() == b"true":
-        raise ScanError("shallow clone: history is incomplete, run git fetch --unshallow")
-    paths: dict[str, str] = {}
-    for line in git(["rev-list", "--objects", "--all"], root).split(b"\n"):
-        oid, _, path = line.partition(b" ")
-        if OBJECT_ID.fullmatch(oid):
-            paths[oid.decode("ascii")] = os.fsdecode(path)
-    if not paths:
-        return []
-    findings: list[Finding] = []
+def batch_read_objects(root: Path, oids: Iterable[str]) -> Iterator[tuple[str, str, bytes]]:
+    """Stream objects from ``git --no-replace-objects cat-file --batch``."""
+    oid_list = list(oids)
+    if not oid_list:
+        return
     with tempfile.TemporaryFile() as feed:
-        feed.write("".join(f"{oid}\n" for oid in paths).encode("ascii"))
+        feed.write("".join(f"{oid}\n" for oid in oid_list).encode("ascii"))
         feed.seek(0)
         try:
             proc = subprocess.Popen(
-                ["git", "cat-file", "--batch"],
+                ["git", "--no-replace-objects", "cat-file", "--batch"],
                 cwd=root,
                 stdin=feed,
                 stdout=subprocess.PIPE,
@@ -517,19 +814,190 @@ def scan_history(root: Path, rules: RuleSet) -> list[Finding]:
             )
         except OSError as exc:
             raise ScanError(f"cannot run git: {exc}") from exc
+        assert proc.stdout is not None
         with proc:
-            for oid, kind, data in read_batch(proc.stdout):
-                short = oid[:SHORT_SHA]
-                if kind == "blob":
-                    name = paths[oid]
-                    findings += to_findings(f"blob {short} {name}", scan_bytes(name, data, rules))
-                elif kind in ("commit", "tag"):
-                    findings += scan_commit(kind, oid, data, rules)
-                elif kind == "missing":
-                    findings.append(Finding(f"object {short}", 1, "undecodable", WHY_MISSING))
-    if proc.returncode != 0:
-        raise ScanError("git cat-file failed")
+            yield from read_batch(proc.stdout)
+        if proc.returncode != 0:
+            raise ScanError("git cat-file failed")
+
+
+def parse_tree_entries(data: bytes) -> list[tuple[str, str, str]]:
+    """Parse raw git tree object bytes into ``(mode, name, hex_oid)`` tuples."""
+    entries: list[tuple[str, str, str]] = []
+    pos = 0
+    total = len(data)
+    while pos < total:
+        space = data.find(b" ", pos)
+        if space == -1:
+            raise ScanError("malformed git tree object (missing mode separator)")
+        nul = data.find(b"\0", space + 1)
+        if nul == -1 or nul + 21 > total:
+            raise ScanError("malformed git tree object (truncated entry)")
+        mode = data[pos:space].decode("ascii")
+        name = os.fsdecode(data[space + 1 : nul])
+        oid_bytes = data[nul + 1 : nul + 21]
+        entries.append((mode, name, oid_bytes.hex()))
+        pos = nul + 21
+    return entries
+
+
+def extract_commit_tree(data: bytes) -> str | None:
+    """Extract the root tree OID from a raw commit object."""
+    head, _, _ = data.partition(b"\n\n")
+    for line in head.split(b"\n"):
+        if line.startswith(b"tree "):
+            return line[5:].decode("ascii").strip()
+    return None
+
+
+def scan_history_scope(
+    root: Path,
+    rules: RuleSet,
+    *,
+    rev_args: list[str],
+    redactor: NameRedactor | None = None,
+    ref_names: Iterable[str] = (),
+    include_all_tags: bool = False,
+    check_replace: bool = True,
+    prefix: str = "",
+) -> list[Finding]:
+    """Scan commits, tags, all historical tree paths (incl. deleted/renamed/duplicate blobs),
+    submodules, LFS pointers, and ref names for ``rev_args``."""
+    red = redactor or NameRedactor(rules)
+    if git(["rev-parse", "--is-shallow-repository"], root).strip() == b"true":
+        raise ScanError("shallow clone: history is incomplete, run git fetch --unshallow")
+
+    findings: list[Finding] = []
+    if check_replace:
+        findings += scan_replace_refs(root)
+
+    for ref in ref_names:
+        findings += red.scan_ref(ref, prefix=prefix)
+
+    commit_oids = [
+        line.decode("ascii")
+        for line in git(["rev-list", *rev_args], root).split(b"\n")
+        if OBJECT_ID.fullmatch(line)
+    ]
+
+    tag_oids: list[str] = []
+    if include_all_tags:
+        for line in git(
+            ["for-each-ref", "--format=%(objecttype) %(objectname) %(refname)", "refs/tags"],
+            root,
+        ).split(b"\n"):
+            if not line:
+                continue
+            parts = line.decode("utf-8", "replace").split(" ", 2)
+            if len(parts) == 3:
+                obj_type, oid, ref_name = parts
+                findings += red.scan_ref(ref_name, prefix=prefix)
+                if obj_type == "tag":
+                    tag_oids.append(oid)
+
+    if not commit_oids and not tag_oids:
+        return findings
+
+    root_trees: set[str] = set()
+    for oid, kind, data in batch_read_objects(root, commit_oids + tag_oids):
+        short = oid[:SHORT_SHA]
+        if kind in ("commit", "tag"):
+            findings += scan_commit(kind, oid, data, rules, prefix=prefix)
+            if kind == "commit":
+                tree_oid = extract_commit_tree(data)
+                if tree_oid:
+                    root_trees.add(tree_oid)
+        elif kind == "missing":
+            findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
+
+    # Walk every unique (tree_oid, path_prefix) across all historical commits so deleted paths,
+    # renamed endpoints, and multiple paths sharing one blob are all checked.
+    parsed_trees: dict[str, list[tuple[str, str, str]]] = {}
+    visited_tree_paths: set[tuple[str, str]] = set()
+    frontier: list[tuple[str, str]] = [(tree_oid, "") for tree_oid in sorted(root_trees)]
+    blob_paths: dict[str, set[str]] = defaultdict(set)
+    checked_paths: set[str] = set()
+
+    while frontier:
+        missing_trees = sorted({t_oid for t_oid, _ in frontier if t_oid not in parsed_trees})
+        if missing_trees:
+            for oid, kind, data in batch_read_objects(root, missing_trees):
+                if kind == "tree":
+                    parsed_trees[oid] = parse_tree_entries(data)
+                else:
+                    parsed_trees[oid] = []
+                    findings.append(
+                        Finding(
+                            f"{prefix}object {oid[:SHORT_SHA]}",
+                            1,
+                            "undecodable",
+                            WHY_MISSING,
+                        )
+                    )
+        next_frontier: list[tuple[str, str]] = []
+        for tree_oid, path_prefix in frontier:
+            state = (tree_oid, path_prefix)
+            if state in visited_tree_paths:
+                continue
+            visited_tree_paths.add(state)
+            for mode, name, entry_oid in parsed_trees.get(tree_oid, ()):
+                full_path = f"{path_prefix}/{name}" if path_prefix else name
+                if full_path not in checked_paths:
+                    checked_paths.add(full_path)
+                    findings += red.scan_path(full_path, prefix=prefix)
+                if mode in ("40000", "040000"):
+                    next_frontier.append((entry_oid, full_path))
+                elif mode == "160000":
+                    safe = red.safe_path(full_path)
+                    findings.append(
+                        Finding(
+                            f"{prefix}gitlink {entry_oid[:SHORT_SHA]} {safe}",
+                            1,
+                            "unsupported_submodule",
+                            WHY_SUBMODULE,
+                        )
+                    )
+                else:
+                    blob_paths[entry_oid].add(full_path)
+        frontier = next_frontier
+
+    # Read each unique blob once, caching content hits by (oid, suffix).
+    for oid, kind, data in batch_read_objects(root, sorted(blob_paths)):
+        short = oid[:SHORT_SHA]
+        if kind == "missing":
+            findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
+            continue
+        if kind != "blob":
+            continue
+        hits_by_suffix: dict[str, list[Hit]] = {}
+        for full_path in sorted(blob_paths[oid]):
+            suffix = Path(full_path).suffix.lower()
+            if suffix not in hits_by_suffix:
+                hits_by_suffix[suffix] = scan_bytes(full_path, data, rules)
+            hits = hits_by_suffix[suffix]
+            if hits:
+                safe = red.safe_path(full_path)
+                findings += to_findings(f"{prefix}blob {short} {safe}", hits)
+
     return findings
+
+
+def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = None) -> list[Finding]:
+    """Scan every blob, commit, tag, historical path and ref reachable from any ref."""
+    all_refs = [
+        line.decode("utf-8", "replace")
+        for line in git(["for-each-ref", "--format=%(refname)"], root).split(b"\n")
+        if line
+    ]
+    return scan_history_scope(
+        root,
+        rules,
+        rev_args=["--all"],
+        redactor=redactor,
+        ref_names=all_refs,
+        include_all_tags=True,
+        check_replace=True,
+    )
 
 
 # --- files and messages ------------------------------------------------------------
@@ -566,11 +1034,17 @@ def iter_files(paths: list[Path]) -> Iterator[Path]:
             raise ScanError(f"no such path: {top}")
 
 
-def scan_paths(paths: list[Path], rules: RuleSet) -> list[Finding]:
-    """Scan files and directories given on the command line."""
+def scan_paths(
+    paths: list[Path],
+    rules: RuleSet,
+    redactor: NameRedactor | None = None,
+    prefix: str = "",
+) -> list[Finding]:
+    """Scan files and directories given on the command line (including path names)."""
+    red = redactor or NameRedactor(rules)
     findings = []
     for path in iter_files(paths):
-        findings += scan_worktree_file(path.as_posix(), path, rules)
+        findings += scan_worktree_file(path.as_posix(), path, rules, redactor=red, prefix=prefix)
     return findings
 
 
@@ -588,23 +1062,94 @@ def unique(findings: Iterable[Finding]) -> list[Finding]:
     return kept
 
 
-def run_scans(args: argparse.Namespace, rules: RuleSet) -> list[Finding]:
+def run_scans(
+    args: argparse.Namespace, rules: RuleSet, redactor: NameRedactor
+) -> list[Finding]:
     """Run every requested mode and collect the findings."""
     findings: list[Finding] = []
-    if args.staged or args.tracked or args.history:
-        root = repo_root()
-        if args.staged:
-            findings += scan_staged(root, rules)
-        if args.tracked:
-            findings += scan_tracked(root, rules)
-        if args.history:
-            findings += scan_history(root, rules)
+    needs_repo = any(
+        (
+            args.staged,
+            args.unstaged,
+            args.untracked,
+            args.tracked,
+            args.history,
+            args.rev,
+            args.range_spec,
+            args.other_refs_except,
+        )
+    )
+    root = repo_root() if needs_repo else None
+    if args.staged:
+        assert root is not None
+        prefix = "[staged] " if args.source_labels else ""
+        findings += scan_staged(root, rules, redactor=redactor, prefix=prefix)
+    if args.unstaged:
+        assert root is not None
+        prefix = "[unstaged] " if args.source_labels else ""
+        findings += scan_unstaged(root, rules, redactor=redactor, prefix=prefix)
+    if args.untracked:
+        assert root is not None
+        prefix = "[untracked] " if args.source_labels else ""
+        findings += scan_untracked(root, rules, redactor=redactor, prefix=prefix)
+    if args.tracked:
+        assert root is not None
+        findings += scan_tracked(root, rules, redactor=redactor)
+    if args.history:
+        assert root is not None
+        findings += scan_history(root, rules, redactor=redactor)
+    if args.rev:
+        assert root is not None
+        findings += scan_history_scope(
+            root,
+            rules,
+            rev_args=[args.rev],
+            redactor=redactor,
+            ref_names=args.ref_names,
+            include_all_tags=False,
+            check_replace=True,
+        )
+    if args.range_spec:
+        assert root is not None
+        prefix = "[branch] " if args.source_labels else ""
+        findings += scan_history_scope(
+            root,
+            rules,
+            rev_args=[args.range_spec],
+            redactor=redactor,
+            ref_names=args.ref_names,
+            include_all_tags=False,
+            check_replace=True,
+            prefix=prefix,
+        )
+    if args.other_refs_except:
+        assert root is not None
+        excluded = set(args.other_refs_except)
+        other_refs = [
+            line.decode("utf-8", "replace")
+            for line in git(["for-each-ref", "--format=%(refname)"], root).split(b"\n")
+            if line and line.decode("utf-8", "replace") not in excluded
+        ]
+        rev_args = ["--all", "--not", *args.other_refs_except]
+        findings += scan_history_scope(
+            root,
+            rules,
+            rev_args=rev_args,
+            redactor=redactor,
+            ref_names=other_refs,
+            include_all_tags=False,
+            check_replace=False,
+            prefix="[other-refs] ",
+        )
+    if args.ref_names and not (args.rev or args.range_spec):
+        for ref in args.ref_names:
+            findings += redactor.scan_ref(ref)
     if args.identity:
         findings += scan_identity(rules)
     if args.message:
         findings += scan_message(args.message, rules)
     if args.paths:
-        findings += scan_paths(args.paths, rules)
+        findings += scan_paths(args.paths, rules, redactor=redactor)
     return findings
 
 
@@ -613,7 +1158,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="privacy_scan.py",
         description="Scan for personal data before it reaches a public repository. "
-        "Matched values are never printed; a finding is 'location: rule_id -- why'.",
+        "Matched values and sensitive path/ref names are never printed.",
         epilog="exit status: 0 clean, 1 findings, 2 usage or internal error",
         allow_abbrev=False,
     )
@@ -625,7 +1170,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="files or directories to scan (recursive, skips .git)",
     )
     parser.add_argument(
-        "--staged", action="store_true", help="scan staged content (the index)"
+        "--staged", action="store_true", help="scan staged content and names (the index)"
+    )
+    parser.add_argument(
+        "--unstaged",
+        action="store_true",
+        help="scan unstaged working-tree changes relative to the index",
+    )
+    parser.add_argument(
+        "--untracked",
+        action="store_true",
+        help="scan non-ignored untracked files in the working tree",
     )
     parser.add_argument(
         "--tracked",
@@ -635,7 +1190,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--history",
         action="store_true",
-        help="scan every blob, commit and tag reachable from any ref",
+        help="scan every blob, commit, tag, historical path and ref reachable from any ref",
+    )
+    parser.add_argument(
+        "--rev",
+        metavar="COMMIT",
+        help="scan a specific commit and its full reachable history (paths, blobs, messages)",
+    )
+    parser.add_argument(
+        "--range",
+        dest="range_spec",
+        metavar="BASE..HEAD",
+        help="scan commits and historical paths in a commit range",
+    )
+    parser.add_argument(
+        "--other-refs-except",
+        action="append",
+        default=[],
+        metavar="REV",
+        help="scan local history reachable from other refs excluding the given rev(s)",
+    )
+    parser.add_argument(
+        "--ref-name",
+        dest="ref_names",
+        action="append",
+        default=[],
+        metavar="REF",
+        help="check a target ref name against the rules (repeatable)",
     )
     parser.add_argument(
         "--identity",
@@ -658,6 +1239,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-private", action="store_true", help="do not load the private rules file"
     )
+    parser.add_argument(
+        "--require-private",
+        action="store_true",
+        help="fail closed unless non-empty private rules are loaded",
+    )
+    parser.add_argument(
+        "--source-labels",
+        action="store_true",
+        help="prefix staged/unstaged/untracked/branch findings with their source state",
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="emit a structured, redacted JSON report on stdout",
+    )
+    parser.add_argument(
+        "--redact-stream",
+        action="store_true",
+        help="read lines from stdin and print them with sensitive paths redacted",
+    )
     return parser
 
 
@@ -665,20 +1267,90 @@ def main(argv: list[str] | None = None) -> int:
     """Parse arguments, run the scans, print findings; return the exit status."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    modes = [args.staged, args.tracked, args.history, args.identity, args.message, args.paths]
+    if args.redact_stream:
+        sys.stdout.reconfigure(errors="backslashreplace")
+        try:
+            loaded = load_rules_detailed(
+                args.rules,
+                use_private=not args.no_private,
+                require_private=args.require_private,
+            )
+            redactor = NameRedactor(loaded.rules)
+            for line in sys.stdin:
+                print(redactor.redact_secret_line(line))
+            return EXIT_CLEAN
+        except ScanError as exc:
+            print(f"privacy_scan: error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        except Exception as exc:
+            print(f"privacy_scan: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+    modes = [
+        args.staged,
+        args.unstaged,
+        args.untracked,
+        args.tracked,
+        args.history,
+        args.rev,
+        args.range_spec,
+        args.other_refs_except,
+        args.ref_names,
+        args.identity,
+        args.message,
+        args.paths,
+    ]
     if not any(modes):
         parser.error("nothing to scan: give a mode (see --help) or a PATH")
     sys.stdout.reconfigure(errors="backslashreplace")
     try:
-        rules, note = load_rules(args.rules, use_private=not args.no_private)
-        print(f"privacy_scan: {note}", file=sys.stderr)
-        findings = unique(run_scans(args, rules))
+        loaded = load_rules_detailed(
+            args.rules,
+            use_private=not args.no_private,
+            require_private=args.require_private,
+        )
+        if not args.json_output:
+            print(f"privacy_scan: {loaded.note}", file=sys.stderr)
+        redactor = NameRedactor(loaded.rules)
+        findings = unique(run_scans(args, loaded.rules, redactor))
     except ScanError as exc:
-        print(f"privacy_scan: error: {exc}", file=sys.stderr)
+        if args.json_output:
+            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
+        else:
+            print(f"privacy_scan: error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     except Exception as exc:  # keep the exit-status contract: a crash is 2, never 1
-        print(f"privacy_scan: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        if args.json_output:
+            print(
+                json.dumps(
+                    {"status": "error", "error": f"{type(exc).__name__}: {exc}"},
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(f"privacy_scan: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return EXIT_ERROR
+
+    if args.json_output:
+        payload = {
+            "status": "findings" if findings else "clean",
+            "note": loaded.note,
+            "private_loaded": loaded.private_loaded,
+            "private_rule_count": loaded.private_rule_count,
+            "redacted_names": redactor.redacted_count,
+            "findings": [
+                {
+                    "where": f.where,
+                    "line": f.line,
+                    "rule_id": f.rule_id,
+                    "why": f.why,
+                }
+                for f in findings
+            ],
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+        return EXIT_FINDINGS if findings else EXIT_CLEAN
+
     for finding in findings:
         print(finding)
     sys.stdout.flush()  # keep the summary after the findings when both streams share a terminal

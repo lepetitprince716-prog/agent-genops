@@ -6,7 +6,9 @@ Open an issue before a substantial change. Keep pull requests focused.
 
 ## Set up once per clone
 
-You need git, and Python 3.9 or later on your `PATH` as `python3`.
+You need git, Python 3.9 or later on your `PATH` as `python3`, and
+[Betterleaks](https://github.com/betterleaks/betterleaks/releases) (`brew install betterleaks` on
+macOS). The hooks fail closed if Betterleaks is missing.
 
 1. Turn on the hooks: `git config core.hooksPath .githooks`.
 2. Set a GitHub noreply address for this clone. GitHub shows yours under Settings → Emails; it
@@ -31,11 +33,12 @@ You need git, and Python 3.9 or later on your `PATH` as `python3`.
 ## Open a pull request
 
 1. Fork the repository and create a branch from `main`.
-2. Commit, then run `python3 tools/privacy_scan.py --tracked --history` inside the clone. It must
-   end with `privacy_scan: clean`.
+2. Run `./check changed` while working (scans staged, unstaged, untracked and branch changes and
+   runs path-selected tests). Before pushing, you can also run
+   `python3 tools/privacy_scan.py --tracked --history` and `sh tools/secret_scan.sh history`.
 3. Push the branch to your fork and open a pull request against `main`.
-4. CI runs the same scan with the public rules only (`--no-private --tracked --history`). A
-   first-time contributor's run may wait until a maintainer approves it.
+4. CI runs the privacy and Betterleaks scans with the public rules on pushes to `main` and on pull
+   requests. A first-time contributor's run may wait until a maintainer approves it.
 
 Fixing problems before a push:
 
@@ -45,8 +48,10 @@ Fixing problems before a push:
   your branch. Once pushed, say so in the pull request instead.
 - A false positive: an allow entry in your own private rules only silences your local hook, and
   CI still fails. Change `tools/privacy_rules.json` in the pull request and say why, or open an
-  issue.
-- A finding in history that is not yours: do not rewrite history; report it in the pull request.
+  issue without pasting sensitive values.
+- A finding in history that is not yours: do not rewrite history, and **do not paste matched
+  values, secrets, or sensitive file paths into a public pull request or issue**. Notify the
+  maintainer privately so it can be verified and handled safely.
 
 ## Writing rules
 
@@ -77,7 +82,8 @@ them runs that project's workflow in `.github/workflows/`.
 
 ### 每个克隆设置一次
 
-需要 git，以及 `PATH` 上名为 `python3` 的 Python 3.9 或更新版本。
+需要 git、`PATH` 上名为 `python3` 的 Python 3.9 或更新版本，以及
+[Betterleaks](https://github.com/betterleaks/betterleaks/releases)（macOS 可用 `brew install betterleaks`）。缺少 Betterleaks 时，hook 会直接拒绝执行。
 
 1. 打开 hook：`git config core.hooksPath .githooks`。
 2. 给这个克隆设置 GitHub 的 noreply 邮箱。你的地址在 GitHub 的 Settings → Emails 里，形如 `<id>+<name>@users.noreply.github.com`。然后运行 `git config user.email "<id>+<name>@users.noreply.github.com"`。身份检查会拒绝其他任何地址。
@@ -94,15 +100,15 @@ them runs that project's workflow in `.github/workflows/`.
 ### 开 pull request
 
 1. fork 这个仓库，从 `main` 建一个分支。
-2. 提交之后，在克隆里运行 `python3 tools/privacy_scan.py --tracked --history`，最后一行必须是 `privacy_scan: clean`。
+2. 开发过程中运行 `./check changed`（会检查暂存、未暂存、未跟踪文件与分支提交，并按改动路径跑对应测试）。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
 3. 把分支推到你的 fork，向 `main` 开 pull request。
-4. CI 只用公开规则跑同一个扫描（`--no-private --tracked --history`）。第一次贡献时，CI 可能要等维护者批准才会运行。
+4. CI 在推送到 `main` 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描。第一次贡献时，CI 可能要等维护者批准才会运行。
 
 推送之前遇到问题：
 
 - 还没推送的提交里邮箱写错了：先设置 `user.email`，最后一个提交用 `git commit --amend --reset-author --no-edit`，分支上的所有提交用 `git rebase -r main --exec 'git commit --amend --reset-author --no-edit'`。已经推送了，就在 pull request 里说明。
-- 误报：在自己的私有规则里加放行，只能让本地 hook 不报，CI 照样失败。请在 pull request 里修改 `tools/privacy_rules.json` 并写明理由，或者开一个 issue。
-- 历史里有不是你造成的命中：不要改写历史，在 pull request 里报告。
+- 误报：在自己的私有规则里加放行，只能让本地 hook 不报，CI 照样失败。请在 pull request 里修改 `tools/privacy_rules.json` 并写明理由，或者开一个不含敏感内容的 issue。
+- 历史里有不是你造成的命中：不要改写历史，也**不要把命中值、密钥或敏感路径贴到公开 pull request 或 issue 里**；请私下通知维护者核查处理。
 
 ### 写作规则
 
