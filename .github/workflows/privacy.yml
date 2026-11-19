@@ -17,7 +17,8 @@ jobs:
   # Scans run in dedicated jobs apart from repository test execution.
   # On pull requests, the scanner, public rules, wrapper, template, and ignore files are loaded
   # from the exact trusted base branch commit (resolved via `git show-ref --verify`, never by a
-  # short name a pushed tag could shadow), and Python runs in isolated mode (-I -B).
+  # short name a pushed tag could shadow), and Python runs in isolated mode (-I -B). The PR's own
+  # commits are scanned once more with inline allow comments off.
   scan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -120,8 +121,13 @@ jobs:
             if [ -n "$touched" ]; then
               echo "::notice::PR modifies guard/workflow/ignore control-plane files (review independently): $(echo "$touched" | tr '\n' ' ')"
             fi
-            if git --no-replace-objects diff --unified=0 "$base" HEAD | grep -Eq '^\+.*\b(betterleaks|gitleaks):allow\b'; then
-              echo "::notice::PR adds inline betterleaks:allow/gitleaks:allow comment(s); review independently before merging."
+            # Betterleaks honours an inline allow wherever the substring appears on the line
+            # (`# _gitleaks:allow`, `nobetterleaks:allow` and `gitleaks:allowed` included), so count
+            # by substring, not by word.
+            inline_added=$(git --no-replace-objects diff --unified=0 "$base" HEAD |
+              grep -Ec '^\+.*(betterleaks|gitleaks):allow' || true)
+            if [ "$inline_added" -gt 0 ]; then
+              echo "::notice::PR adds $inline_added line(s) with an inline betterleaks:allow/gitleaks:allow comment; the scan of the PR's own commits does not honour them."
             fi
           fi
           SECRET_SCAN_IGNORE_PATH="$ignore_path" \
@@ -129,6 +135,20 @@ jobs:
             SECRET_SCAN_RULES="$rules" \
             SECRET_SCAN_NO_PRIVATE=1 \
             sh "$wrapper" history
+          if [ -n "$BASE_REF" ]; then
+            # The PR's own commits are scanned again with inline allow comments off: a PR cannot
+            # exempt its own finding. Exemptions reviewed into the base (its ignore file, or inline
+            # comments already merged) still apply to the history scan above.
+            SECRET_SCAN_IGNORE_PATH="$ignore_path" \
+              SECRET_SCAN_IGNORE_ALLOW=1 \
+              SECRET_SCAN_REDACT_SCANNER="$redact_scanner" \
+              SECRET_SCAN_RULES="$rules" \
+              SECRET_SCAN_NO_PRIVATE=1 \
+              sh "$wrapper" range "$base..HEAD" || {
+              echo "::error::The PR's own commits hold a secret-scan finding with inline allow comments off. $inline_added added line(s) carry an inline allow comment, which this scan does not honour. An exemption goes into the base branch's .betterleaksignore after review." >&2
+              exit 1
+            }
+          fi
 
   # Repository test code runs in its own job, isolated from the trusted scan jobs above.
   guard-tests:
