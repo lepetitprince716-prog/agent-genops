@@ -146,6 +146,41 @@ class PrivatePathTest(Tree):
         self.save(".ui.json", doc)
         self.assertRefused("abs_path", account)
 
+    def test_a_percent_encoded_home_path_in_a_node_note_is_refused(self):
+        account = "acct" + token()
+        plain = "/" + "Users" + "/" + account + "/models"
+        once = plain.replace("/", "%2F")
+        for label, value in (("once", once), ("twice", once.replace("%", "%25")), ("mixed case", once.replace("%2F", "%2f"))):
+            with self.subTest(encoding=label):
+                doc = self.load(".json")
+                doc["latent"]["_meta"]["ui_note"] = f"weights live in {value}"
+                self.save(".json", doc)
+                self.assertRefused("abs_path", account, value)
+
+    def test_a_drive_relative_windows_path_is_refused(self):
+        account = "acct" + token()
+        for value in ("C:" + "Users" + "\\" + account + "\\notes", "d:" + "Users" + "/" + account + "/notes"):
+            with self.subTest(value=value):
+                doc = self.load(".ui.json")
+                doc["groups"][0]["title"] = value
+                self.save(".ui.json", doc)
+                self.assertRefused("abs_path", account)
+
+    def test_decoding_stops_after_a_bounded_number_of_rounds(self):
+        """A value nested in more encoding layers than the bound is not decoded forever."""
+        value = "/" + "Users" + "/" + "acct" + token()
+        for _ in range(workflow_policy.MAX_DECODE_ROUNDS + 3):
+            value = value.replace("%", "%25").replace("/", "%2F")
+        variants = workflow_policy.decoded_variants(value)
+        self.assertLessEqual(len(variants), workflow_policy.MAX_DECODE_ROUNDS + 1)
+        self.assertEqual(variants[0], value)
+
+    def test_control_prompt_weights_and_plain_percent_signs_are_accepted(self):
+        doc = self.load(".json")
+        doc["latent"]["_meta"]["ui_note"] = "(a:1.2), 100% detail, 50%2 off, x:1"
+        self.save(".json", doc)
+        self.assertNotIn("abs_path", self.rules())
+
     def test_a_lan_address_in_an_extra_property_is_refused(self):
         address = ".".join(["192", "168", str(secrets.randbelow(200) + 1), str(secrets.randbelow(200) + 1)])
         doc = self.load(".ui.json")

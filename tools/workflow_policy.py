@@ -36,7 +36,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 TOOLS = Path(__file__).resolve().parent
 ROOT = TOOLS.parent
@@ -82,6 +82,8 @@ ABS_PATH = re.compile(
     r"(?:^|[^A-Za-z0-9._~-])/(?:Users|home|root|private|tmp|var|mnt|media|Volumes|opt|srv|etc|data|workspace)(?:/|$)"
     r"|(?:^|[^A-Za-z0-9._-])~[A-Za-z0-9._-]*/"
     r"|(?<![A-Za-z0-9])[A-Za-z]:[\\/]"
+    # A drive-relative Windows path (C:Users\name): a drive letter, a folder name, a separator.
+    r"|(?<![A-Za-z0-9])[A-Za-z]:[^\s\\/:]+[\\/]"
     r"|\\\\[A-Za-z0-9]"
 )
 CREDENTIAL_PARAM = re.compile(
@@ -89,6 +91,20 @@ CREDENTIAL_PARAM = re.compile(
 )
 MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(|<img\b", re.I)
 MAX_STRING = 4000
+# Percent-encoding is undone this many times at most; each string is checked as written and as
+# each decoding gives it, so an encoded path cannot slip past the path and privacy checks.
+MAX_DECODE_ROUNDS = 4
+
+
+def decoded_variants(text: str) -> list[str]:
+    """``text`` and each distinct percent-decoding of it, until decoding changes nothing."""
+    variants = [text]
+    for _ in range(MAX_DECODE_ROUNDS):
+        decoded = unquote(variants[-1])
+        if decoded == variants[-1]:
+            break
+        variants.append(decoded)
+    return variants
 
 
 class PolicyError(Exception):
@@ -193,6 +209,22 @@ class Checker:
     def check_string(self, text: str, where: str, place: str, workflow: Workflow | None) -> None:
         if len(text) > MAX_STRING:
             self.add(where, place, "oversize_string", f"a string longer than {MAX_STRING} characters")
+        first = len(self.findings)
+        self.check_content(text, where, place)
+        found = {f.rule for f in self.findings[first:]}
+        for variant in decoded_variants(text)[1:]:
+            probe = Checker(self.policy, self.rules)
+            probe.check_content(variant, where, place)
+            for finding in probe.findings:
+                if finding.rule not in found:
+                    found.add(finding.rule)
+                    self.findings.append(finding)
+        lowered = text.lower()
+        if workflow is not None and lowered.endswith(self.policy.model_extensions) and "://" not in text:
+            self.check_model(text, where, place, workflow)
+
+    def check_content(self, text: str, where: str, place: str) -> None:
+        """The checks on what a string says, run on it as written and on each decoding of it."""
         if DATA_URI.search(text):
             self.add(where, place, "embedded_media", "a data: URI embeds a file")
         if BLOB.search(text):
@@ -204,9 +236,6 @@ class Checker:
         bare = URL.sub(" ", text)
         if ABS_PATH.search(bare):
             self.add(where, place, "abs_path", "an absolute or home path; use a bare file name")
-        lowered = text.lower()
-        if workflow is not None and lowered.endswith(self.policy.model_extensions) and "://" not in text:
-            self.check_model(text, where, place, workflow)
         for hit in privacy_scan.scan_values([text], self.rules, ".json"):
             self.add(where, place, f"privacy:{hit.rule_id}", hit.why)
 
