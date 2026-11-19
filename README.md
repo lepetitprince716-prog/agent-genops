@@ -140,6 +140,15 @@ Also in the repo: [templates/](templates/) (task packet, model card, A/B write-u
 handoff, memory entry, LOCAL.md, subagent definitions) and [tools/](tools/) (the privacy scanner
 this repo runs on itself, plus a GPU kernel classifier and a GEMM probe from the performance page).
 
+Three projects live in folders of their own. Each has its own README with the build and test
+commands.
+
+| Folder | What it is | Start with |
+|---|---|---|
+| [cwc/](cwc/) | `cwc`, a Python tool that turns a ComfyUI API graph into a native canvas workflow: grouped, laid out by a preset, routed with link reroutes, and checked to export the same prompt it was compiled from. Pre-alpha. | [cwc/README.md](cwc/README.md) |
+| [rdbg/](rdbg/) | `rdbg`, a Rust command line that runs PowerShell on a Windows host over the system `ssh`, without shell quoting problems. Early. | [rdbg/README.md](rdbg/README.md) |
+| [artfetch/](artfetch/) | `artfetch`, a Rust command line for multi-source illustration discovery, dataset harvesting, cross-platform deduplication and staging as 1536 px JPEGs. | [artfetch/README.md](artfetch/README.md) |
+
 ## Use the skill
 
 The skill is one folder, [`skills/agent-genops/`](skills/agent-genops/): a `SKILL.md` and a
@@ -223,8 +232,9 @@ ComfyUI 0.42.1 on both boxes, plus loopback-only sidecar instances for newer mod
 
 This repo is public and its history has to stay free of personal data.
 [`tools/privacy_scan.py`](tools/privacy_scan.py) looks for LAN addresses, home paths, emails,
-token shapes and image-generation metadata. It runs in git hooks and in CI. Turn the hooks on
-after cloning:
+token shapes and image-generation metadata. It runs in git hooks and in CI. The hooks and the
+scanner cover the whole repository, the three project folders included; the project folders
+carry no guard of their own. Turn the hooks on after cloning:
 
 ```bash
 git config core.hooksPath .githooks
@@ -241,5 +251,12 @@ or unverified.
 
 ## Contributing and license
 
-Issues and pull requests are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first. Code and
-docs are under the [MIT License](LICENSE).
+Issues and pull requests are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first. The docs, skill,
+templates and tools at the top level are under the [MIT License](LICENSE). Each project folder
+carries its own license files:
+
+- [cwc/](cwc/LICENSE) is under the Apache License 2.0. Files that `cwc` generates belong to whoever
+  owns the workflow they were made from; [cwc/LICENSE-OUTPUTS.md](cwc/LICENSE-OUTPUTS.md) says so.
+- [rdbg/](rdbg/) is under either the [Apache License 2.0](rdbg/LICENSE-APACHE) or the
+  [MIT License](rdbg/LICENSE-MIT), at your option.
+- [artfetch/](artfetch/LICENSE) is under the Apache License 2.0.

@@ -56,12 +56,18 @@ Fixing problems before a push:
 - Mark claims that are unverified or stale.
 - English and Chinese pages are twins. Change both in the same pull request, or open an issue
   for the other language. The Chinese page is written natively, not translated line by line.
+  The project folders (`cwc/`, `rdbg/`, `artfetch/`) are English only.
 - Plain words. No marketing adjectives, no emoji in headings.
 
 ## Code
 
 Standard library first. A new dependency needs a reason in the pull request. Code that talks to
 machines takes hosts, paths and credentials from configuration, never from literals.
+
+The project folders `cwc/`, `rdbg/` and `artfetch/` have their own README with the build and
+test commands, run from inside the folder. `cwc/` uses only the Python standard library; the two
+Rust projects use crates, and a new crate needs a reason too. A pull request that touches one of
+them runs that project's workflow in `.github/workflows/`.
 
 ---
 
@@ -103,9 +109,11 @@ machines takes hosts, paths and credentials from configuration, never from liter
 - 规则要附理由：背后的事故、测量或决定。没有记录理由的，就写明没有，不要编。
 - 数字要附日期、硬件和软件版本。
 - 没核实或已过期的说法要标出来。
-- 中英文页面是一对。同一个 pull request 里两边一起改，或者为另一种语言开个 issue。中文页按中文习惯来写，不逐句翻译。
+- 中英文页面是一对。同一个 pull request 里两边一起改，或者为另一种语言开个 issue。中文页按中文习惯来写，不逐句翻译。项目文件夹（`cwc/`、`rdbg/`、`artfetch/`）只有英文。
 - 用平实的说法，不用营销腔，标题里不放 emoji。
 
 ### 代码
 
 优先用标准库。新增依赖要在 pull request 里说明理由。和机器打交道的代码，主机、路径、凭据都从配置里读，不写死在代码里。
+
+项目文件夹 `cwc/`、`rdbg/`、`artfetch/` 各有自己的 README，里面写了构建和测试的命令，要在文件夹里面运行。`cwc/` 只用 Python 标准库；两个 Rust 项目用 crate，新增 crate 同样要说明理由。改动涉及某个项目的 pull request，会运行 `.github/workflows/` 里该项目的工作流。

@@ -121,6 +121,14 @@
 
 另外还有 [templates/](templates/)（任务包、模型卡、A/B 记录、出图单、交接、记忆条目、LOCAL.md、subagent 定义）和 [tools/](tools/)（这个仓库自己在用的隐私扫描工具，以及性能那一页用到的 GPU 内核分类工具和矩阵乘探针）。
 
+另有三个项目，各自放在自己的文件夹里，各有自己的 README，里面写了构建和测试的命令。
+
+| 文件夹 | 是什么 | 从哪里开始 |
+|---|---|---|
+| [cwc/](cwc/) | `cwc`，Python 工具，把 ComfyUI 的 API 工作流转成原生画布工作流：分好组，按预设排版，用链接转接点走线，并检查导出的提示词和编译前一致。pre-alpha。 | [cwc/README.md](cwc/README.md) |
+| [rdbg/](rdbg/) | `rdbg`，Rust 命令行，通过系统的 `ssh` 在 Windows 主机上运行 PowerShell，不会碰到 shell 引号问题。早期阶段。 | [rdbg/README.md](rdbg/README.md) |
+| [artfetch/](artfetch/) | `artfetch`，Rust 命令行，用于多来源的插画发现、数据集收集、跨平台去重，以及整理成 1536 px 的 JPEG。 | [artfetch/README.md](artfetch/README.md) |
+
 ## 使用 skill
 
 skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一份 `SKILL.md`，加一个按需打开的 `references/` 目录。
@@ -189,7 +197,7 @@ agent 这边：Claude Code，主会话用 Opus 5.5，subagent 用 Haiku、Sonnet
 
 ## 保持仓库干净
 
-这个仓库是公开的，提交历史里不能有个人信息。[`tools/privacy_scan.py`](tools/privacy_scan.py) 会检查局域网地址、用户目录路径、邮箱、密钥形态的字符串，以及图片里嵌着的生成参数。它挂在 git hook 和 CI 上。克隆后打开 hook：
+这个仓库是公开的，提交历史里不能有个人信息。[`tools/privacy_scan.py`](tools/privacy_scan.py) 会检查局域网地址、用户目录路径、邮箱、密钥形态的字符串，以及图片里嵌着的生成参数。它挂在 git hook 和 CI 上。hook 和扫描器管整个仓库，三个项目文件夹也包括在内；项目文件夹自己不带护栏。克隆后打开 hook：
 
 ```bash
 git config core.hooksPath .githooks
@@ -203,4 +211,8 @@ git config core.hooksPath .githooks
 
 ## 参与和许可
 
-欢迎提 issue 和 pull request，动手前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)。代码和文档都采用 [MIT 许可](LICENSE)。
+欢迎提 issue 和 pull request，动手前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)。顶层的文档、skill、模板和工具采用 [MIT 许可](LICENSE)。每个项目文件夹带有自己的许可文件：
+
+- [cwc/](cwc/LICENSE) 采用 Apache License 2.0。`cwc` 生成的文件归生成它们所依据的工作流的所有者，见 [cwc/LICENSE-OUTPUTS.md](cwc/LICENSE-OUTPUTS.md)。
+- [rdbg/](rdbg/) 可任选 [Apache License 2.0](rdbg/LICENSE-APACHE) 或 [MIT 许可](rdbg/LICENSE-MIT)。
+- [artfetch/](artfetch/LICENSE) 采用 Apache License 2.0。

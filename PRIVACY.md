@@ -40,8 +40,10 @@ git config core.hooksPath .githooks
 
 - CI runs the same scanner with the built-in rules on every push and pull request.
 - Commit with a GitHub noreply address; the identity check rejects anything else.
+- The hooks and the scanner cover the whole repository, the project folders `cwc/`, `rdbg/` and
+  `artfetch/` included. Those folders carry no hooks or scanner of their own.
 
-Run it by hand at any time:
+Run it by hand from the repository root at any time:
 
 ```bash
 python3 tools/privacy_scan.py --tracked --history
@@ -115,6 +117,7 @@ the same shape next time.
 - git hook：`pre-commit` 检查提交身份和暂存文件，`commit-msg` 检查提交信息，`pre-push` 检查历史里的每个文件和每次提交。每个克隆打开一次即可（命令见上文英文部分）。
 - CI 在每次 push 和 pull request 时用内置规则跑同一个扫描器。
 - 提交时请用 GitHub 的 noreply 邮箱，身份检查会拒绝其他地址。
+- hook 和扫描器管整个仓库，项目文件夹 `cwc/`、`rdbg/`、`artfetch/` 也包括在内。这些文件夹自己不带 hook 和扫描器。
 
 ### 第二道扫描：Betterleaks
 
