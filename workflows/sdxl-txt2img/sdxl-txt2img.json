@@ -1,0 +1,123 @@
+{
+  "_workflow": {
+    "format": 1,
+    "title": "SDXL text to image",
+    "locale": "en",
+    "layout": {
+      "preset": "bento"
+    },
+    "models": [
+      {
+        "name": "sd_xl_base_1.0.safetensors",
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+        "directory": "checkpoints"
+      }
+    ]
+  },
+  "ckpt": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    },
+    "_meta": {
+      "title": "SDXL base 1.0"
+    }
+  },
+  "pos": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "ckpt",
+        "CLIP"
+      ],
+      "text": "a quiet alpine lake at dawn, thin mist over the water, pine forest on the shore, snow on the far peaks, soft morning light"
+    },
+    "_meta": {
+      "title": "Positive prompt",
+      "ui_role": "cockpit",
+      "ui_expose": [
+        "text"
+      ]
+    }
+  },
+  "neg": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "ckpt",
+        "CLIP"
+      ],
+      "text": "text, watermark"
+    },
+    "_meta": {
+      "title": "Negative prompt",
+      "ui_role": "cockpit"
+    }
+  },
+  "latent": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Image size",
+      "ui_role": "cockpit"
+    }
+  },
+  "sampler": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "ckpt",
+        "MODEL"
+      ],
+      "positive": [
+        "pos",
+        0
+      ],
+      "negative": [
+        "neg",
+        0
+      ],
+      "latent_image": [
+        "latent",
+        0
+      ],
+      "seed": 0,
+      "steps": 25,
+      "cfg": 8.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1.0
+    },
+    "_meta": {
+      "title": "Sampler",
+      "ui_seed": "fixed"
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "sampler",
+        0
+      ],
+      "vae": [
+        "ckpt",
+        "VAE"
+      ]
+    }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "decode",
+        0
+      ],
+      "filename_prefix": "sdxl_txt2img"
+    }
+  }
+}

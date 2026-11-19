@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "top_files": ["README.md"],
+  "url_hosts": ["huggingface.co", "github.com", "comfyanonymous.github.io"],
+  "model_extensions": [".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".sft", ".onnx"],
+  "workflows": {
+    "sdxl-txt2img": {
+      "files": ["sdxl-txt2img.json", "sdxl-txt2img.ui.json", "sdxl-txt2img.api.json", "README.md"],
+      "nodes": ["CheckpointLoaderSimple", "CLIPTextEncode", "EmptyLatentImage", "KSampler", "VAEDecode", "SaveImage"],
+      "models": ["sd_xl_base_1.0.safetensors"]
+    }
+  }
+}
