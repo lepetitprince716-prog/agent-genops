@@ -35,15 +35,24 @@ def input_errors(findings: list[Finding]) -> CwcError:
 
 
 def read_file(path: str | os.PathLike[str], what: str) -> bytes:
-    """The bytes of an input file; a file larger than any input may be is refused unread."""
+    """The bytes of an input file; one larger than any input may be is refused.
+
+    The size is checked first, so a large regular file is refused unread. The read itself is
+    bounded too, because ``st_size`` says nothing for a pipe or a device (it is 0) and a file
+    can grow after the check: it stops one byte past the limit.
+    """
     file = Path(path)
     try:
         size = file.stat().st_size
         if size > MAX_PNG_BYTES:
             raise input_error(Code.I3, f"{what} {file} is {size} bytes; the limit is {MAX_PNG_BYTES}")
-        return file.read_bytes()
+        with file.open("rb") as handle:
+            data = handle.read(MAX_PNG_BYTES + 1)
     except OSError as exc:
         raise input_error(Code.I1, f"cannot read {what} {file}: {exc.strerror or exc}") from None
+    if len(data) > MAX_PNG_BYTES:
+        raise input_error(Code.I3, f"{what} {file} runs past the limit of {MAX_PNG_BYTES} bytes")
+    return data
 
 
 def parse_json(data: bytes, what: str) -> Any:
