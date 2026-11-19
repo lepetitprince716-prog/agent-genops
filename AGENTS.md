@@ -58,9 +58,13 @@ Never copy whole files from a private repository without a line-by-line review. 
      `--verify-manifest` is refused unless the same remote is approved again.
    - Prints a redacted release manifest and stores a verification snapshot outside the repository
      (`~/.cache/agent-genops/release-manifests`, or `--manifest-dir`; a directory inside the
-     repository is refused). It also lists the changed control files: the launcher, `.gitignore`, the two
-     ignore files, `.githooks/`, `.github/workflows/`, `tests/`, and the scanner, rules, wrapper,
-     template, release check and workflow policy files under `tools/`.
+     repository is refused). The commits and files it lists are counted from `change_base`: the
+     remote's current commit on an existing branch; on a new branch, the commit where the candidate
+     meets the trusted baseline, or the whole tree (`change_base` empty) when they share no commit.
+     The scans still cover all the history named above. It also lists the changed control files:
+     the launcher, `.gitignore`, the two ignore files, `.githooks/`, `.github/workflows/`, `tests/`,
+     and the scanner, rules, wrapper, template, release check and workflow policy files under
+     `tools/`.
    - `--verify-manifest <file>` re-runs the whole release check against the live remote and compares
      it with the snapshot, field by field. Pass `--allow-new-ref`, `--bootstrap-self-judge` and each
      `--approve-exemption` again, exactly as for the first run; the snapshot does not carry them over.

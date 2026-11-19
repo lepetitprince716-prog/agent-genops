@@ -875,10 +875,30 @@ def inspect_control_plane_and_allows(
     return control_changes, sorted(set(inline_allows))
 
 
+def release_change_base(root: Path, remote_old_sha: str, trusted_sha: str, candidate_sha: str) -> str:
+    """The commit the listed changes are counted from, or ``""`` for the whole tree.
+
+    An existing ref: the remote's current commit there (the push is a fast-forward of it). A new
+    ref: where the candidate meets the trusted baseline, which is the baseline itself when the
+    candidate is built on it; an orphan candidate shares no commit with it and lists its whole
+    tree. Only the listing for a person uses this; the scans cover the same commits as before."""
+    if remote_old_sha != ZERO_OID:
+        return remote_old_sha
+    meet = run_git(["merge-base", trusted_sha, candidate_sha], root, check=False)
+    if meet.returncode == 1 and not meet.stdout.strip():
+        return ""
+    if meet.returncode != 0:
+        err = meet.stderr.decode("utf-8", "replace").strip()
+        raise CheckError(f"git merge-base failed: {err}")
+    return meet.stdout.decode("ascii").split()[0]
+
+
 def collect_release_diff_summary(
-    root: Path, remote_old_sha: str, candidate_sha: str
+    root: Path, change_base: str, candidate_sha: str
 ) -> tuple[int, list[dict[str, str]]]:
-    if remote_old_sha == ZERO_OID:
+    """Commits reachable from the candidate and not from ``change_base``, and the files that differ
+    between the two; with no base, every commit and the whole tree."""
+    if not change_base:
         commit_count = int(git_text(["rev-list", "--count", candidate_sha], root))
         names = list(
             split_names(run_git(["ls-tree", "-r", "--name-only", "-z", candidate_sha], root).stdout)
@@ -886,8 +906,8 @@ def collect_release_diff_summary(
         files = [{"status": "A", "path": n} for n in sorted(names)]
         return commit_count, files
 
-    commit_count = int(git_text(["rev-list", "--count", f"{remote_old_sha}..{candidate_sha}"], root))
-    raw = run_git(["diff", NO_RENAMES, "--name-status", "-z", remote_old_sha, candidate_sha], root).stdout
+    commit_count = int(git_text(["rev-list", "--count", f"{change_base}..{candidate_sha}"], root))
+    raw = run_git(["diff", NO_RENAMES, "--name-status", "-z", change_base, candidate_sha], root).stdout
     parts = raw.split(b"\0")
     files: list[dict[str, str]] = []
     idx = 0
@@ -1348,12 +1368,13 @@ def prepare_release(
             unverified_notes.append("non-candidate local ref scan errored; inspect locally")
 
     control_changes, inline_allows = inspect_control_plane_and_allows(root, audit_base, commit)
-    commit_count, changed_files = collect_release_diff_summary(root, remote_old_sha, commit)
+    change_base = release_change_base(root, remote_old_sha, judge.trusted_sha, commit)
+    commit_count, changed_files = collect_release_diff_summary(root, change_base, commit)
 
     return ReleaseResult(
         [],
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "status": "awaiting_user_approval_not_pushed",
             "action": "push_single_branch_only",
             "remote": remote,
@@ -1369,6 +1390,7 @@ def prepare_release(
             "self_judged": judge.self_judged,
             "rehearsal_remote": rehearsal_remote,
             "policy_version": policy_version,
+            "change_base": change_base,
             "commit_count": commit_count,
             "changed_files": changed_files,
             "privacy_scan": {"status": "clean", "private_rules_loaded": private_rule_count},
@@ -1677,6 +1699,20 @@ def run_as_trusted_checker(args: argparse.Namespace) -> int:
     return 0
 
 
+def change_base_label(manifest: dict[str, Any]) -> str:
+    """What the listed commits and files are counted from, for the terminal summary."""
+    base = manifest["change_base"]
+    if not base:
+        return "in the whole tree (no commit in common with the trusted baseline)"
+    if base == manifest["remote_old_sha"]:
+        what = f"the remote's {manifest['target_ref']}"
+    elif base == manifest["trusted_sha"]:
+        what = "the trusted baseline"
+    else:
+        what = "where the candidate meets the trusted baseline"
+    return f"since {base[:12]} ({what})"
+
+
 def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_output: bool) -> None:
     commit = manifest["candidate_sha"]
     manifest_dir.mkdir(parents=True, exist_ok=True)
@@ -1710,7 +1746,10 @@ def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_
         )
     print("Request: push one branch only; no visibility change, no tag, no release")
     print(f"Target: {manifest['push_url']} · {manifest['target_ref']} · {old_label} -> {commit}")
-    print(f"Changes: {manifest['commit_count']} commit(s) / {len(changed_files)} file(s); {file_preview or '(no file differences)'}")
+    print(
+        f"Changes {change_base_label(manifest)}: {manifest['commit_count']} commit(s) / {len(changed_files)} file(s); "
+        f"{file_preview or '(no file differences)'}"
+    )
     print(
         f"Privacy: maintainer rules loaded ({manifest['privacy_scan']['private_rules_loaded']}); history, paths and ref passed; "
         f"Betterleaks passed; workflow policy {manifest['workflow_policy']}; policy version {manifest['policy_version']}"
