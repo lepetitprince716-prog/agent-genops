@@ -14,6 +14,7 @@ from typing import Any
 
 from cwc.nodedefs.types import NodeDef
 from cwc.prompt.model import Prompt
+from cwc.report import Finding
 
 
 class Role(str, Enum):
@@ -78,3 +79,6 @@ class Authoring:
     widget_values: dict[str, dict[str, Any]] = field(default_factory=dict)
     # numeric id -> every persisted widget value by widget name, defaults filled in
     # (pseudo-widgets included), ready for instantiate to lay out in widget order.
+    notices: list[Finding] = field(default_factory=list)
+    # info findings about the authoring (keys accepted but without effect yet); they go into
+    # the report of a successful compile, apart from the warnings normalize returns

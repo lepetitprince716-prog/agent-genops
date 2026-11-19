@@ -22,7 +22,7 @@ from cwc.nodedefs.types import NodeDef
 from cwc.layout.presets import load_presets
 from cwc.pipeline import AUTO, PRESET_GUIDE, Compiled, compile_document
 from cwc.render.command import command as render_command
-from cwc.report import CwcError, ExitCode, Mode, Report, Severity, sort_findings
+from cwc.report import Code, CwcError, ExitCode, Mode, Report, Severity, sort_findings
 from cwc.resources import read_bytes
 
 CLOSEST = 3
@@ -273,13 +273,18 @@ def _success_line(compiled: Compiled, ui_path: str, warnings: int) -> str:
     )
 
 
+# Authoring checks (E1 to E7) speak about what the author wrote, so they reach the terminal at
+# every severity. Infos from the canvas checks stay in the report.
+AUTHORING_CODES = frozenset(code for code in Code if code.value.startswith("E"))
+
+
 def _print_findings(report: Report, err: TextIO) -> None:
-    """Every error and warning on stderr, with its hint: a caller that reads only the
-    terminal must not take a run with an ignored key for a clean one."""
+    """Every error and warning on stderr, with its hint, and the authoring infos: a caller that
+    reads only the terminal must not take a run with an ignored key for a clean one."""
     for finding in sort_findings(report.findings):
-        if finding.severity is Severity.INFO:
+        if finding.severity is Severity.INFO and finding.code not in AUTHORING_CODES:
             continue
-        label = finding.code.value if finding.severity is Severity.ERROR else f"{finding.code.value} warning"
+        label = finding.code.value if finding.severity is Severity.ERROR else f"{finding.code.value} {finding.severity.value}"
         err.write(f"{label}: {finding.message}\n")
         if finding.hint:
             err.write(f"  hint: {finding.hint}\n")

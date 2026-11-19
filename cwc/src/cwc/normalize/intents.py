@@ -12,7 +12,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Callable
 
-from cwc.normalize.diagnostics import Findings
+from cwc.normalize.diagnostics import Findings, no_effect
 from cwc.normalize.types import NodeIntent, Role, SeedMode
 from cwc.report import Code
 
@@ -57,6 +57,9 @@ def _seed(value: Any) -> SeedMode | None:
     return SeedMode(value) if isinstance(value, str) and value in {m.value for m in SeedMode} else None
 
 
+# Keys parsed and checked, but read by nothing that shapes the canvas or the prompts yet.
+NO_EFFECT_KEYS = ("ui_locked", "ui_expose", "ui_note")
+
 # key -> (parser returning None on a bad value, expected-value text)
 _KEYS: dict[str, tuple[Callable[[Any], Any], str]] = {
     "title": (_string, "a string"),
@@ -83,6 +86,8 @@ def parse_intent(author_id: str, meta: dict[str, Any], out: Findings) -> NodeInt
             out.error(Code.E7, f"node {author_id!r}: _meta.{key} must be {expected}, got {value!r}", [author_id])
             continue
         fields[key] = parsed
+        if key in NO_EFFECT_KEYS:
+            no_effect(out, f"node {author_id!r}: _meta.{key}", [author_id])
     return NodeIntent(**fields)
 
 

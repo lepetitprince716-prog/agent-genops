@@ -132,6 +132,7 @@ def compile_document(
     report.metrics["geometry"] = geometry.metrics
     report.metrics["route"] = _route_metrics(routes)
     report.extend(warnings)
+    report.extend(authoring.notices)
     return Compiled(authoring, canvas, report, laid, routes, plan.counts)
 
 

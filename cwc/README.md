@@ -52,6 +52,9 @@ Inputs that used to pass and now do not, or now warn:
 
 - A `_meta` key that starts with `ui_` but is not one of cwc's keys is an error (E7, exit 3)
   that names the closest key. It used to be a warning, and the misspelt key did nothing.
+- A key cwc accepts but does not use yet (`ui_locked`, `ui_expose`, `ui_note`,
+  `_workflow.title`, `_workflow.locale`, `_workflow.groups.<id>.note`) gets an info line (E7)
+  on stderr and in the report of a successful compile. The exit code and `ok` do not change.
 
 `--nodedefs URL` reads `<URL>/api/object_info` from a running ComfyUI server. It follows at most
 three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge

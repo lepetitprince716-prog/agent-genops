@@ -9,7 +9,8 @@ is. This guide lists what cwc accepts beyond that.
 
 1. Write the graph. Check input names and outputs with `cwc node TYPE`.
 2. `cwc compile GRAPH.json -o out` and read stderr: every error and warning comes with a hint,
-   and a successful run ends with one summary line.
+   an `E7 info` line names each key that has no effect yet, and a successful run ends with one
+   summary line.
 3. `cwc render out/GRAPH.ui.json -o GRAPH.svg` to look at the canvas without ComfyUI.
 
 ## Relaxations of the API format
@@ -33,6 +34,9 @@ is. This guide lists what cwc accepts beyond that.
 | `ui_locked` | `true` or a list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
 | `ui_expose` | list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
 | `ui_note` | string | Accepted, no effect on the canvas yet. |
+
+The keys marked "no effect yet" each print one `E7 info` line on stderr and in the report when
+they are set. It does not change the exit code or `ok`.
 
 A key starting with `ui_` that is not in this table is an error that names the closest key. A
 key from the table written without `ui_` (`optional`, `group`, `role`) is ignored with a warning

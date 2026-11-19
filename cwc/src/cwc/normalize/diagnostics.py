@@ -21,12 +21,25 @@ class Findings:
     def warning(self, code: Code, message: str, nodes: Iterable[str] = (), hint: str = "", data: dict[str, Any] | None = None) -> None:
         self._add(code, Severity.WARNING, message, nodes, hint, data)
 
+    def info(self, code: Code, message: str, nodes: Iterable[str] = (), hint: str = "", data: dict[str, Any] | None = None) -> None:
+        self._add(code, Severity.INFO, message, nodes, hint, data)
+
     def _add(self, code: Code, severity: Severity, message: str, nodes: Iterable[str], hint: str, data: dict[str, Any] | None) -> None:
         self.items.append(Finding(code, severity, message, tuple(nodes), hint, dict(data or {})))
 
     @property
     def has_errors(self) -> bool:
         return any(f.severity is Severity.ERROR for f in self.items)
+
+
+def no_effect(out: Findings, path: str, nodes: Iterable[str] = ()) -> None:
+    """An info finding for an authoring key cwc accepts and checks but does not use yet."""
+    out.info(
+        Code.E7,
+        f"{path} is accepted, but has no effect on the canvas in this version of cwc",
+        nodes,
+        data={"key": path},
+    )
 
 
 def listing(values: Iterable[Any], limit: int = HINT_LIST_LIMIT) -> str:

@@ -41,7 +41,8 @@ def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool =
     """Check an authoring document (E1 to E7) and build its strict prompts.
 
     Raises ``CwcError(INPUT_ERROR, findings)`` when any finding is an error; otherwise
-    returns the result with the warnings, sorted.
+    returns the result with the warnings, sorted. Info findings ride on ``Authoring.notices``
+    and are left out of a failed run.
     """
     out = Findings()
     raw_workflow, nodes = split_document(doc, out)
@@ -69,6 +70,8 @@ def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool =
         )
     check_group_purity(intents, out)
     _check_unknown_bypass(nodes, resolved, intents, outputs, out)
+    notices = sort_findings(f for f in out.items if f.severity is Severity.INFO)
+    out.items = [f for f in out.items if f.severity is not Severity.INFO]
     if out.has_errors:
         raise CwcError(ExitCode.INPUT_ERROR, sort_findings(out.items))
 
@@ -102,6 +105,7 @@ def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool =
         widget_values={
             ids[n.author_id]: values for n in by_numeric if (values := outputs[n.author_id].widget_values) is not None
         },
+        notices=notices,
     )
     return authoring, sort_findings(out.items)
 
