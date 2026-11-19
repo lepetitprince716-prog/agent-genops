@@ -1214,8 +1214,11 @@ def read_commit_encoding(cwd: Path | None = None) -> str | None:
 
 
 def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
-    """Scan a commit message file; lines starting with ``#`` are comments.
+    """Scan a commit message file, every line of it.
 
+    A line starting with ``#`` is not skipped: git keeps it in the stored message unless the
+    commit is cleaned up (``git commit -F FILE`` without ``--cleanup`` does not strip it), and
+    what an editor's template adds there (branch, file names) is as public as the commit.
     There is no commit object yet, so the bytes are read in i18n.commitEncoding (UTF-8 when it
     is not set), the encoding git will store them under."""
     try:
@@ -1226,8 +1229,7 @@ def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
     views, readable = message_views(data, read_commit_encoding())
     findings = [] if readable else [Finding(where, 1, "undecodable", WHY_BAD_ENCODING)]
     for text in views:
-        kept = "\n".join("" if line.startswith("#") else line for line in text.split("\n"))
-        findings += to_findings(where, scan_text(kept, rules, ""))
+        findings += to_findings(where, scan_text(text, rules, ""))
     return unique(findings)
 
 
@@ -1445,7 +1447,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--message",
         type=Path,
         metavar="FILE",
-        help="scan a commit message file (lines starting with # are ignored)",
+        help="scan a commit message file, every line of it",
     )
     parser.add_argument(
         "--rules",

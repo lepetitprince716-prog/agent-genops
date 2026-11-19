@@ -564,6 +564,59 @@ class MaintainerRulesTests(TemplateCase):
                 self.assertEqual(repo.remote_tip(), remote_before)
 
 
+class MessageCommentLineTests(TemplateCase):
+    """A line starting with # stays in the message when git does not strip it, so it is scanned."""
+
+    def message_file(self, repo: Repo, text: str) -> Path:
+        path = repo.base / "message.txt"
+        path.write_text(text)
+        return path
+
+    def test_commit_f_keeps_hash_lines_and_the_hook_refuses_a_marker_in_one(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        message = self.message_file(repo, f"subject\n\n# a note about {MARKER}\n")
+        committed = repo.run("git", "commit", "-q", "-F", str(message))
+        self.assert_refused(committed, "synthetic_private_marker")
+        self.assertNotIn(MARKER, combined(committed))
+        self.assertEqual(repo.head(), before)
+        # What git stores for -F without --cleanup: the # line is part of the message, which is
+        # why the hook has to read it.
+        repo.git("-c", NO_HOOKS, "commit", "-q", "-F", str(message))
+        self.assertIn("# a note about", repo.git("log", "-1", "--format=%B"))
+
+    def test_commit_f_refuses_a_token_in_a_hash_line(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        token = registry_token()
+        message = self.message_file(repo, f"subject\n\n# value {token}\n")
+        committed = repo.run("git", "commit", "-q", "-F", str(message))
+        self.assert_refused(committed, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(committed))
+        self.assertEqual(repo.head(), before)
+
+    def test_an_editor_commit_with_git_comments_is_not_refused(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        seen = repo.base / "editor-saw.txt"
+        editor = repo.base / "editor.sh"
+        editor.write_text(
+            "#!/bin/sh\n"
+            f"cp \"$1\" {seen}\n"
+            "{ printf 'a clean subject\\n'; cat \"$1\"; } > \"$1.new\" && mv \"$1.new\" \"$1\"\n"
+        )
+        editor.chmod(0o755)
+        env = dict(repo.env, GIT_EDITOR=str(editor))
+        committed = repo.run("git", "commit", "-q", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        shown = seen.read_text()
+        self.assertIn("# Please enter the commit message", shown)
+        self.assertIn("#\tnew file:   note.txt", shown)
+        self.assertEqual(repo.git("log", "-1", "--format=%s"), "a clean subject")
+
+
 class SubmoduleTests(TemplateCase):
     """A staged gitlink cannot be scanned, so it is refused."""
 

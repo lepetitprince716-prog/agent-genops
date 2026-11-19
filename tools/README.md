@@ -39,7 +39,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 | `--other-refs-except REV` | local history reachable from the other refs, leaving out the given revs (repeatable); the pre-push hook uses it for its warning |
 | `--ref-name REF` | check a target ref name against the rules (repeatable) |
 | `--identity` | the email in `GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` must match `allowed_emails` |
-| `--message FILE` | a commit message file; lines starting with `#` are ignored |
+| `--message FILE` | a commit message file; every line is scanned, `#` lines too |
 | `--rules FILE` | use another public rules file |
 | `--no-private` | do not load the private rules |
 | `--require-private` | fail unless non-empty private rules are loaded |
@@ -206,7 +206,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `--other-refs-except REV` | 其余 ref 可达的本地历史，排除给定的 rev（可重复）；pre-push 用它做告警 |
 | `--ref-name REF` | 按规则检查目标 ref 名（可重复） |
 | `--identity` | `GIT_AUTHOR_IDENT` 和 `GIT_COMMITTER_IDENT` 里的邮箱必须匹配 `allowed_emails` |
-| `--message FILE` | 一个提交说明文件，`#` 开头的行忽略 |
+| `--message FILE` | 一个提交说明文件，每一行都扫，`#` 开头的也算 |
 | `--rules FILE` | 换用另一份公开规则 |
 | `--no-private` | 不加载私有规则 |
 | `--require-private` | 没有加载到非空的私有规则就失败 |
