@@ -46,6 +46,8 @@ ZERO_OID = "0" * 40
 # use it); the release check runs the baseline's copy of this constant, not the candidate's.
 REMOTE_TIMEOUT_S = 30.0
 REMOTE_TIMEOUT_ENV = "AGENT_GENOPS_REMOTE_TIMEOUT_S"
+# After a timeout stops git's process group, how long to wait for its pipes to close before giving up on them.
+REMOTE_DRAIN_S = 2.0
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # Betterleaks honours an inline allow wherever the substring appears on a line
 # (`# _gitleaks:allow` and `nobetterleaks:allow` included), so it is counted the same way.
@@ -179,7 +181,9 @@ def run_git_remote(args: list[str], cwd: Path) -> subprocess.CompletedProcess[by
     """A git call that talks to the remote: refused, never left hanging, past ``remote_timeout()``.
 
     git and its transport (ssh, a credential helper) run in a session of their own, and the whole
-    group is stopped on timeout, so no transport process outlives the check."""
+    group is stopped on timeout, so no transport process outlives the check. A process that left
+    the group and still holds git's pipes gets ``REMOTE_DRAIN_S`` to let go; then the pipes are
+    closed on this side and the call is refused all the same."""
     timeout = remote_timeout()
     cmd = ["git", "--no-replace-objects", *args]
     try:
@@ -195,7 +199,15 @@ def run_git_remote(args: list[str], cwd: Path) -> subprocess.CompletedProcess[by
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        proc.communicate()
+        try:
+            proc.communicate(timeout=REMOTE_DRAIN_S)
+        except subprocess.TimeoutExpired:
+            # A process that left the group (setsid) still holds git's pipes: stop reading them.
+            # git itself was in the group, so it is dead and the wait below returns.
+            for stream in (proc.stdout, proc.stderr):
+                if stream is not None:
+                    stream.close()
+            proc.wait()
         raise CheckError(
             f"git {args[0]} did not answer within {timeout:g} s; the remote was not checked, so nothing is approved"
         ) from None

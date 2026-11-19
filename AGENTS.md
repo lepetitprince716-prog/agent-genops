@@ -34,7 +34,8 @@ Never copy whole files from a private repository without a line-by-line review. 
    - The trusted baseline is the commit that the remote's `main` holds now, read with
      `git ls-remote`. If the local `refs/remotes/<remote>/main` is another commit, the check
      refuses and tells you to run `git fetch <remote>`. A remote that does not answer within 30 s
-     is refused too (exit 2).
+     is refused too (exit 2). The check then stops git and its transport, waits 2 s more for their
+     output, and gives up on any process that left the group and still holds it.
    - The checker, scanners, rules and wrapper are exported from the trusted commit and run from
      there. The working tree supplies only the launcher.
    - The candidate's own exemptions do not count. Betterleaks uses the baseline's ignore file, and
