@@ -34,7 +34,6 @@ cwc compile docs/images/src/hires.json -o out
 ```
 
 ```text
-E8 info: accepted, but no effect on the canvas in this version of cwc: _workflow.title; _workflow.locale; `cwc guide` says what each key does
 G9 warning: the canvas extent is 2560 x 820, aspect ratio 3.12; it should be 1 to 2.8
 cwc compile: ok; preset bento; 7 groups, 0 optional modules, 1 warning; preview: cwc render out/hires.ui.json -o hires.svg
 wrote out/hires.ui.json
@@ -44,8 +43,8 @@ wrote out/hires.report.json
 
 Drop `out/hires.ui.json` onto the ComfyUI canvas to open it. `hires.api.json` is the prompt
 the canvas exports, with any optional modules bypassed; `hires.report.json` holds the findings
-and measurements of the checks. The first three lines go to stderr: two keys of the example
-that do nothing yet, a layout warning (this canvas is wide and flat), and the summary.
+and measurements of the checks. The first two lines go to stderr: a layout warning (this
+canvas is wide and flat) and the summary.
 
 ## For agents
 

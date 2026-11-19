@@ -28,7 +28,6 @@ cwc compile docs/images/src/hires.json -o out
 ```
 
 ```text
-E8 info: accepted, but no effect on the canvas in this version of cwc: _workflow.title; _workflow.locale; `cwc guide` says what each key does
 G9 warning: the canvas extent is 2560 x 820, aspect ratio 3.12; it should be 1 to 2.8
 cwc compile: ok; preset bento; 7 groups, 0 optional modules, 1 warning; preview: cwc render out/hires.ui.json -o hires.svg
 wrote out/hires.ui.json
@@ -36,7 +35,7 @@ wrote out/hires.api.json
 wrote out/hires.report.json
 ```
 
-把 `out/hires.ui.json` 拖到 ComfyUI 画布上就能打开。`hires.api.json` 是这张画布导出的 prompt，可选模块处于旁路状态；`hires.report.json` 是各项检查的结论和测量值。前三行写在 stderr：示例里两个暂时没有效果的键、一条布局警告（这张画布又宽又扁），以及摘要。
+把 `out/hires.ui.json` 拖到 ComfyUI 画布上就能打开。`hires.api.json` 是这张画布导出的 prompt，可选模块处于旁路状态；`hires.report.json` 是各项检查的结论和测量值。前两行写在 stderr：一条布局警告（这张画布又宽又扁）和摘要。
 
 ## 给 agent 用
 
