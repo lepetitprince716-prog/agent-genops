@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -140,7 +141,10 @@ class AttributeTests(unittest.TestCase):
                 refused_by_secret_scan(self, self.repo.secret("staged"), token)
                 self.repo.unchecked_commit(f"{label} with a token")
 
-    def test_ignore_files_still_apply_to_content_marked_binary(self) -> None:
+    def test_no_exemption_applies_to_content_marked_binary(self) -> None:
+        # Read again through stdin, a finding has no path and its line is counted in a stream of
+        # whatever other binary content the mode covers, so an exemption there could cover
+        # another file's token. Neither a ":rule:line" fingerprint nor an inline comment applies.
         self.repo.add_file("app.cfg", f"key = {self.token}\n")
         report = self.repo.base / "stdin.json"
         self.repo.run(
@@ -152,8 +156,7 @@ class AttributeTests(unittest.TestCase):
         # Read through stdin, a finding's fingerprint is ":<rule>:<line>"; cover any line.
         prints = [f":{rule}:{line}" for rule in rules for line in range(1, 50)]
         self.repo.add_file(".betterleaksignore", "\n".join(prints) + "\n")
-        allowed = self.repo.secret("staged")
-        self.assertEqual(allowed.returncode, 0, combined(allowed))
+        refused_by_secret_scan(self, self.repo.secret("staged"), self.token)
         empty = self.repo.base / "empty.ignore"
         empty.write_text("")
         explicit = {"SECRET_SCAN_IGNORE_PATH": str(empty)}
@@ -161,8 +164,7 @@ class AttributeTests(unittest.TestCase):
         inline = f"key = {self.token}  # betterleaks:allow\n"
         self.repo.add_file(".betterleaksignore", "")
         self.repo.add_file("app.cfg", inline)
-        allowed = self.repo.secret("staged")
-        self.assertEqual(allowed.returncode, 0, combined(allowed))
+        refused_by_secret_scan(self, self.repo.secret("staged"), self.token)
         refused_by_secret_scan(
             self, self.repo.secret("staged", extra_env={"SECRET_SCAN_IGNORE_ALLOW": "1"}), self.token
         )
@@ -177,6 +179,25 @@ class AttributeTests(unittest.TestCase):
         link.symlink_to(f"key = {self.token}")
         link.replace(self.repo.path / "app.cfg")
         refused_by_secret_scan(self, self.repo.secret("unstaged"), self.token)
+
+    def test_a_nul_byte_deep_in_a_file_that_git_is_told_to_diff_as_text_is_scanned(self) -> None:
+        # Betterleaks' git run works in a scratch clone that does not carry a committed
+        # .gitattributes, so for it a NUL byte makes the file binary and it skips the file.
+        # Here git itself is told to treat *.dat as text, so its --numstat does not flag the
+        # file, and only the NUL test on the head of the content selects it for the second
+        # pass. The NUL sits well past the first few hundred bytes, inside the 8000 that git's
+        # own binary check reads.
+        self.repo.add_file(".gitattributes", "*.dat diff\n")
+        token = registry_token()
+        filler = b"ordinary text line\n" * 280  # 5320 bytes
+        (self.repo.path / "item.dat").write_bytes(filler + b"\x00\nkey = " + token.encode() + b"\n")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("text by attribute, with a NUL byte")
+        numstat = self.repo.git("show", "--numstat", "--format=", "HEAD")
+        self.assertTrue(numstat.endswith("item.dat") and not numstat.startswith("-"), numstat)
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
 
     def test_committed_content_marked_binary_is_scanned_in_every_git_mode(self) -> None:
         self.repo.add_file("app.cfg", f"key = {self.token}\n")
@@ -234,6 +255,64 @@ class AttributeTests(unittest.TestCase):
                 # Out of the index; the untracked copy left behind is read by no mode used here.
                 self.repo.git("rm", "-q", "--cached", name)
                 self.repo.unchecked_commit(f"drop {name}")
+
+
+class AttributesOutsideTheCommitTests(unittest.TestCase):
+    """Attributes a commit does not carry hide nothing from the modes that walk history.
+
+    git reads attributes from the clone's info/attributes, from core.attributesFile (by default
+    $HOME/.config/git/attributes) and from the system file as well as from .gitattributes. A
+    text file one of them marks binary or -diff is skipped by Betterleaks' git mode, so the
+    second pass has to select it by git's own judgment, as the staged mode does.
+    """
+
+    SOURCES = (("info", "*.cfg binary\n"), ("user", "* -diff\n"), ("attributes_file", "*.cfg binary\n"))
+
+    def committed_token(self) -> tuple[Repo, str]:
+        repo = Repo(self)
+        # git reads $XDG_CONFIG_HOME/git/attributes instead of $HOME/.config/git/attributes when
+        # it is set; drop it so the file written under the test's HOME is the one git reads.
+        repo.env.pop("XDG_CONFIG_HOME", None)
+        token = registry_token()
+        repo.add_file("app.cfg", f"key = {token}\n")
+        repo.unchecked_commit("config")
+        self.assertFalse(self.judged_binary(repo))
+        return repo, token
+
+    def judged_binary(self, repo: Repo) -> bool:
+        numstat = repo.git("show", "--numstat", "--format=", "HEAD")
+        return numstat.startswith("-\t-\tapp.cfg")
+
+    def place(self, repo: Repo, source: str, line: str) -> None:
+        if source == "info":
+            target = repo.path / ".git" / "info" / "attributes"
+        elif source == "user":
+            target = repo.home / ".config" / "git" / "attributes"
+        else:
+            target = repo.base / "elsewhere.attributes"
+            repo.git("config", "core.attributesFile", str(target))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(line)
+        # Without this the test would pass with the attribute never read.
+        self.assertTrue(self.judged_binary(repo), source)
+
+    def test_history_modes_read_text_that_an_outside_attribute_marks_binary(self) -> None:
+        for source, line in self.SOURCES:
+            repo, token = self.committed_token()
+            self.place(repo, source, line)
+            for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+                with self.subTest(source=source, args=args):
+                    refused_by_secret_scan(self, repo.secret(*args), token)
+
+    def test_push_refuses_text_that_the_user_attributes_file_marks_binary(self) -> None:
+        repo, token = self.committed_token()
+        self.place(repo, "user", "* binary\n")
+        pushed = repo.push("main")
+        refused_by_secret_scan(self, pushed, token)
+        self.assertNotEqual(
+            repo.git("rev-parse", "HEAD"),
+            repo.git("--git-dir", str(repo.remote), "rev-parse", "main"),
+        )
 
 
 class CommitHeaderTests(unittest.TestCase):
@@ -573,6 +652,106 @@ class ImageAndBinaryTests(unittest.TestCase):
         token = registry_token()
         data = b"GIF89a\nkey = " + token.encode() + b"\n"
         self.secret_refused_everywhere("pic.gif", data, token)
+
+    def test_a_fingerprint_accepted_for_one_binary_file_exempts_no_other(self) -> None:
+        # A ":rule:line" fingerprint carries no path and no commit. Accepted once for a fixture,
+        # it would cover a real token in another file that lands on the same stream line.
+        fixture = b"GIF89a\x00\x00\nfixture " + registry_token().encode() + b"\n"
+        token = registry_token()
+        other = b"GIF89a\x00\x01\nreal " + token.encode() + b"\n"
+        report = self.repo.base / "fixture.json"
+        self.repo.run(
+            "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
+            "-f", "json", "-r", str(report), stdin=("\n" + fixture.decode() + "\n"),
+            cwd=self.repo.base,
+        )
+        prints = sorted({item["Fingerprint"] for item in json.loads(report.read_text())})
+        self.assertTrue(prints)
+        self.assertTrue(all(fp.startswith(":") for fp in prints), prints)
+        self.add_bytes("fixture.gif", fixture)
+        self.repo.add_file(".betterleaksignore", "\n".join(prints) + "\n")
+        self.repo.unchecked_commit("fixture with an accepted false positive")
+        # Betterleaks itself, given the second file as the wrapper streams it, takes the
+        # fingerprint as covering that token: without the wrapper's rule it would pass.
+        control = self.repo.run(
+            "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
+            stdin=("\n" + other.decode() + "\n"),
+        )
+        self.assertEqual(control.returncode, 0, combined(control))
+        self.add_bytes("other.gif", other)
+        refused_by_secret_scan(self, self.repo.secret("staged"), token)
+        self.repo.unchecked_commit("another binary file")
+        for args in (("range", "HEAD~1..HEAD"), ("rev", "HEAD")):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
+
+    def test_a_symlink_replaced_by_a_binary_file_with_a_token_is_found_in_the_history_modes(self) -> None:
+        # A type change (git status T) is a changed file like any other: the pass over what
+        # Betterleaks skips as binary has to take it, not only added and modified files.
+        token = registry_token()
+        link = self.repo.path / "item.dat"
+        link.symlink_to("nowhere")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("a symlink")
+        link.unlink()
+        link.write_bytes(b"\x00key = " + token.encode() + b"\n")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("a binary file in its place")
+        kinds = self.repo.git("diff", "--raw", "--no-renames", "HEAD~1", "HEAD")
+        self.assertIn(" T\titem.dat", kinds)
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
+
+    def test_the_unstaged_mode_reads_binary_content_from_a_subdirectory(self) -> None:
+        # git prints the paths of a diff relative to the top of the repository; run from a
+        # subdirectory, opening them as given found no file and the pass skipped it.
+        token = registry_token()
+        (self.repo.path / "docs").mkdir()
+        self.repo.add_file("docs/guide.txt", "guide\n")
+        self.repo.add_file("top.dat", "\0placeholder\n")
+        self.repo.unchecked_commit("tracked files")
+        (self.repo.path / "top.dat").write_bytes(b"\x00key = " + token.encode() + b"\n")
+        for name in (".", "docs"):
+            with self.subTest(directory=name):
+                refused_by_secret_scan(self, self.unstaged_from(self.repo.path / name), token)
+
+    def unstaged_from(self, where: Path) -> subprocess.CompletedProcess[str]:
+        return self.repo.run("sh", str(self.repo.path / "tools" / "secret_scan.sh"), "unstaged", cwd=where)
+
+    def test_the_unstaged_mode_from_a_subdirectory_passes_clean_changes(self) -> None:
+        self.repo.add_file("docs/guide.txt", "guide\n")
+        self.repo.add_file("top.dat", "\0placeholder\n")
+        self.repo.unchecked_commit("tracked files")
+        (self.repo.path / "top.dat").write_bytes(b"\x00still nothing to see\n")
+        scanned = self.unstaged_from(self.repo.path / "docs")
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+
+    def test_the_unstaged_mode_fails_on_a_listed_file_it_cannot_open(self) -> None:
+        # A file git lists as changed and that is gone (removed between the two reads) must not
+        # pass as clean. No ordinary state of the working tree reaches this (a deleted file is
+        # not listed, and git itself refuses an unreadable one), so a git that names a file
+        # which is not there stands in for the race. Fault injection: the wrapper changes only
+        # the one --numstat answer.
+        real_git = shutil.which("git", path=self.repo.env["PATH"])
+        self.assertIsNotNone(real_git)
+        bin_dir = self.repo.base / "fake-bin"
+        bin_dir.mkdir()
+        wrapper = bin_dir / "git"
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            'case " $* " in\n'
+            "  *' --numstat '*) printf '1\\t0\\tghost.txt\\0'; exit 0 ;;\n"
+            "esac\n"
+            f'exec "{real_git}" "$@"\n'
+        )
+        wrapper.chmod(0o755)
+        env = dict(self.repo.env)
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+        scanned = self.repo.run("sh", "tools/secret_scan.sh", "unstaged", env=env)
+        self.assertEqual(scanned.returncode, 1, combined(scanned))
+        self.assertIn("secret_scan: binary content:", combined(scanned))
+        self.assertIn("nothing was passed as clean", combined(scanned))
 
     def test_real_images_stay_clean(self) -> None:
         for suffix in self.suffixes:

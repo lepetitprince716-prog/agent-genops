@@ -385,6 +385,59 @@ class MergeOnlyContentTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, combined(result))
 
 
+class BinaryLogFormTests(unittest.TestCase):
+    """The second pass over binary content walks history from git log -z --raw --numstat."""
+
+    NAMES = (b"with space.bin", b"new\nline.bin", b'quo"te.bin', b"caf\xe9.bin")
+
+    def merge_adding(self, repo: Repo, data: bytes) -> None:
+        """A merge whose tree alone adds one blob under four awkward names, one not UTF-8."""
+        repo.git("checkout", "-q", "-b", "side")
+        repo.add_file("side.txt", "side\n")
+        repo.unchecked_commit("side")
+        repo.git("checkout", "-q", "main")
+        repo.add_file("main.txt", "main\n")
+        repo.unchecked_commit("main work")
+        env = dict(repo.env, GIT_INDEX_FILE=str(repo.base / "merge.index"))
+
+        def git(*args: bytes | str, stdin: bytes | None = None) -> bytes:
+            return subprocess.run(
+                ["git", *args], cwd=repo.path, env=env, input=stdin, capture_output=True, check=True
+            ).stdout.strip()
+
+        blob = git("hash-object", "-w", "--stdin", stdin=data)
+        git("read-tree", "HEAD")
+        for name in self.NAMES:
+            git("update-index", "--add", "--cacheinfo", b"100644," + blob + b"," + name)
+        tree = git("write-tree")
+        merge = git("commit-tree", tree, "-p", "main", "-p", "side", "-m", "merge side")
+        # The working tree is left as it is: this file system may refuse a name not in UTF-8.
+        repo.git("update-ref", "refs/heads/main", merge.decode())
+
+    def test_awkward_names_in_a_merge_are_read_once(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        self.merge_adding(repo, b"\x00\x01\nkey = " + token.encode() + b"\n")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertNotEqual(result.returncode, 0, combined(result))
+                self.assertNotEqual(result.returncode, 2, combined(result))
+                self.assertNotIn(token, combined(result))
+                # One blob under four names: one finding, from the pass over binary content.
+                pathless = [line for line in combined(result).splitlines()
+                            if line.startswith("  ") and " :" in line]
+                self.assertEqual(len(pathless), 1, combined(result))
+
+    def test_awkward_names_in_a_clean_merge_pass(self) -> None:
+        repo = Repo(self)
+        self.merge_adding(repo, b"\x00\x01\nnothing to see\n")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertEqual(result.returncode, 0, combined(result))
+
+
 class ExplicitIgnoreFileTests(unittest.TestCase):
     """R4: with SECRET_SCAN_IGNORE_PATH set, that file is the only ignore list."""
 
