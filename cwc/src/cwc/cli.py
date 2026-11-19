@@ -89,6 +89,28 @@ def _value(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+OPTIONS_SHOWN = 20  # dropdown values printed per input in text; --json lists them all
+
+
+def _dropdown(nd: NodeDef, widget: str | None) -> tuple[Any, ...] | None:
+    """The values of the dropdown widget called ``widget``, or None when it is no dropdown."""
+    spec = nd.input(widget) if widget is not None else None
+    return spec.combo_values if spec is not None and spec.widget else None
+
+
+def _options_field(nd: NodeDef, widget: str | None) -> dict[str, Any]:
+    values = _dropdown(nd, widget)
+    return {} if values is None else {"options": list(values)}
+
+
+def _options_line(name: str, values: tuple[Any, ...]) -> str:
+    if not values:
+        return f"  {name} options: none in these definitions; --nodedefs reads a server's list"
+    shown = ", ".join(_value(v) for v in values[:OPTIONS_SHOWN])
+    more = f" ({OPTIONS_SHOWN} of {len(values)}; --json lists all)" if len(values) > OPTIONS_SHOWN else ""
+    return f"  {name} options: {shown}{more}"
+
+
 def _node_json(nd: NodeDef) -> dict[str, Any]:
     return {
         "type": nd.type,
@@ -101,10 +123,18 @@ def _node_json(nd: NodeDef) -> dict[str, Any]:
         "layout_complete": nd.layout_complete,
         "names_complete": nd.names_complete,
         "inputs": [
-            {"name": s.name, "type": s.type, "widget": s.widget, "optional": s.optional} for s in slot_layout(nd)
+            {"name": s.name, "type": s.type, "widget": s.widget, "optional": s.optional, **_options_field(nd, s.widget)}
+            for s in slot_layout(nd)
         ],
         "widgets": [
-            {"name": w.name, "kind": w.kind.value, "input": w.input_name, "default": w.default, "to_prompt": w.to_prompt}
+            {
+                "name": w.name,
+                "kind": w.kind.value,
+                "input": w.input_name,
+                "default": w.default,
+                "to_prompt": w.to_prompt,
+                **_options_field(nd, w.name),
+            }
             for w in nd.widgets
         ],
         "outputs": [{"name": o.name, "type": o.type, "is_list": o.is_list} for o in nd.outputs],
@@ -117,8 +147,12 @@ def _node_text(nd: NodeDef) -> list[str]:
         f"{nd.type}  ({nd.display_name or nd.type})  tier: {nd.tier.value}  category: {nd.category or '-'}",
         "inputs:  " + (", ".join(f"{s.name}{'?' if s.optional else ''}: {s.type}" for s in sockets) or "-"),
         "widgets: " + (", ".join(f"{w.name or '<unnamed>'}={_value(w.default)}" for w in nd.widgets) or "-"),
-        "outputs: " + (", ".join(f"{o.name}: {o.type}{'[]' if o.is_list else ''}" for o in nd.outputs) or "-"),
     ]
+    for w in nd.widgets:
+        values = _dropdown(nd, w.name)
+        if w.name is not None and values is not None:
+            lines.append(_options_line(w.name, values))
+    lines.append("outputs: " + (", ".join(f"{o.name}: {o.type}{'[]' if o.is_list else ''}" for o in nd.outputs) or "-"))
     if not nd.layout_complete:
         lines.append("layout:  incomplete (compile needs a truth or template entry for this type)")
     elif not nd.names_complete:

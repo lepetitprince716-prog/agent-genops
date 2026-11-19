@@ -7,7 +7,7 @@ is. This guide lists what cwc accepts beyond that.
 
 ## Steps
 
-1. Write the graph. Check input names and outputs with `cwc node TYPE`.
+1. Write the graph. Check input names, outputs and the values of each dropdown with `cwc node TYPE`.
 2. `cwc compile GRAPH.json -o out` and read stderr: every error and warning comes with a hint,
    one `E8 info` line names the keys that have no effect yet, and a successful run ends with one
    summary line.

@@ -34,7 +34,8 @@ cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
 cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 ```
 
-- `node` shows one node definition or searches the definitions.
+- `node` shows one node definition (inputs, widgets with defaults, the values of each
+  dropdown, outputs) or searches the definitions.
 - `compile` turns an authoring graph into a canvas and its API prompts.
   `--preset` takes one of `bento`, `swimlanes`, `cockpit-split`, `tower-preview`,
   `stepped`, or `auto`, which chooses by the number of nodes, optional modules and control
