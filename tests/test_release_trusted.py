@@ -19,7 +19,9 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
+import release_check  # noqa: E402
 from test_release_check import SYNTH_MARKER, SyntheticRepo, combined  # noqa: E402
 
 # A privacy scanner that answers "clean" to everything (it names the flags the old checker
@@ -120,16 +122,63 @@ class TrustedBaselineSourceTests(unittest.TestCase):
         self.assertIn("git fetch", combined(res))
         self.assertEqual(manifests(repo), [])
 
-    def test_the_caller_cannot_name_another_trusted_commit(self) -> None:
+    def test_the_command_line_cannot_name_another_trusted_commit(self) -> None:
+        """The launcher ignores the internal options a caller types; the real baseline judges."""
         need_betterleaks(self)
         repo = SyntheticRepo(self, maintainer=True)
         weak = self.weak_commit(repo)
         cand = marker_candidate(repo)
-        for trusted in (weak, "refs/heads/weak"):
-            with self.subTest(trusted=trusted):
-                res = release(repo, cand, "--trusted-ref", trusted)
-                self.assertEqual(res.returncode, 2, combined(res))
+        res = release(repo, cand, "--trusted-sha", weak, "--checker-sha", weak)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("privacy", combined(res))
+        self.assertNotIn(SYNTH_MARKER, combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_no_environment_variable_names_another_trusted_commit(self) -> None:
+        """Every variable the checker reads is set to the weak commit; the marker is still caught."""
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        weak = self.weak_commit(repo)
+        cand = marker_candidate(repo)
+        names = sorted(value for key, value in vars(release_check).items() if key.endswith("_ENV"))
+        self.assertTrue(names, "the checker reads no environment variable by a *_ENV constant any more")
+        for name in names:
+            with self.subTest(variable=name):
+                saved = repo.env.get(name)
+                repo.env[name] = weak
+                try:
+                    res = release(repo, cand)
+                finally:
+                    if saved is None:
+                        del repo.env[name]
+                    else:
+                        repo.env[name] = saved
+                self.assertIn(res.returncode, (1, 2), combined(res))
                 self.assertEqual(manifests(repo), [])
+
+    def test_the_internal_options_do_not_let_a_weak_commit_judge(self) -> None:
+        """Past the launcher, in a working tree identical to the weak commit's tools: the check
+        compares the commit it was told with the remote's main, and the remote's main is not it."""
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        trusted = repo.head()
+        weak = self.weak_commit(repo)
+        repo.git("checkout", "-q", weak)
+        cand = marker_candidate(repo)
+        res = release(repo, cand, "--as-trusted-checker", "--trusted-sha", weak, "--checker-sha", weak)
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertIn("moved during the check", combined(res))
+        self.assertEqual(manifests(repo), [])
+
+        res = release(repo, cand, "--as-trusted-checker", "--trusted-sha", weak, "--checker-sha", trusted)
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertIn("must come from the trusted baseline", combined(res))
+        self.assertEqual(manifests(repo), [])
+
+        res = release(repo, cand, "--as-trusted-checker", "--trusted-sha", "refs/heads/weak", "--checker-sha", "refs/heads/weak")
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertIn("internal to ./check release", combined(res))
+        self.assertEqual(manifests(repo), [])
 
     def test_control_the_remote_main_as_baseline_passes_a_clean_candidate(self) -> None:
         need_betterleaks(self)
@@ -160,13 +209,24 @@ OLD_CHECKER = (
     "sys.exit(0)\n"
 )
 
-# Appended to a candidate's tools/release_check.py: every privacy scan answers "clean", and the
-# control-plane list is emptied. Both only matter if the candidate's checker is what judges.
+# Put into a candidate's tools/release_check.py, before its entry point: every privacy scan answers
+# "clean", and the control-plane list is emptied. Both only matter if the candidate's checker is what
+# judges. After the entry point they would never run (the file ends in ``sys.exit(main())``).
 CHECKER_OVERRIDE_SCAN = (
     "\n\ndef run_privacy_subprocess(*_args, **_kwargs):\n"
     '    return 0, {"status": "clean", "findings": [], "private_loaded": True, "private_rule_count": 1}, ""\n'
 )
 CHECKER_OVERRIDE_CONTROL = '\n\nCONTROL_PLANE_EXACT = frozenset()\nCONTROL_PLANE_PREFIXES = ("\\0",)\n'
+
+
+MAIN_GUARD = '\nif __name__ == "__main__":'
+
+
+def override_checker(checker: Path, override: str) -> None:
+    """Add ``override`` to the checker's module body so it takes effect when the file runs as a script."""
+    source = checker.read_text(encoding="utf-8")
+    assert source.count(MAIN_GUARD) == 1, "release_check.py no longer ends in one entry-point guard"
+    checker.write_text(source.replace(MAIN_GUARD, override + MAIN_GUARD), encoding="utf-8")
 
 
 def push_baseline(repo: SyntheticRepo, message: str, *paths: str) -> str:
@@ -194,7 +254,7 @@ class TrustedCheckerTests(unittest.TestCase):
         need_betterleaks(self)
         repo = SyntheticRepo(self, maintainer=True)
         checker = repo.work / "tools" / "release_check.py"
-        checker.write_text(checker.read_text(encoding="utf-8") + CHECKER_OVERRIDE_SCAN, encoding="utf-8")
+        override_checker(checker, CHECKER_OVERRIDE_SCAN)
         repo.write("docs/notes.md", f"# Notes\n{SYNTH_MARKER}\n")
         repo.git("add", "tools/release_check.py", "docs/notes.md")
         cand = repo.commit_unchecked("weaken the checker and slip a marker")
@@ -208,7 +268,7 @@ class TrustedCheckerTests(unittest.TestCase):
         need_betterleaks(self)
         repo = SyntheticRepo(self, maintainer=True)
         checker = repo.work / "tools" / "release_check.py"
-        checker.write_text(checker.read_text(encoding="utf-8") + CHECKER_OVERRIDE_CONTROL, encoding="utf-8")
+        override_checker(checker, CHECKER_OVERRIDE_CONTROL)
         repo.write("tests/test_guard_extra.py", "import unittest\n")
         repo.git("add", "tools/release_check.py", "tests/test_guard_extra.py")
         cand = repo.commit_unchecked("empty the control-plane list")
