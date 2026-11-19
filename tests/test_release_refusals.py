@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_release_check import ROOT, SyntheticRepo, combined  # noqa: E402
 from test_release_trusted import (  # noqa: E402
-    clean_candidate, manifests, need_betterleaks, push_baseline, release,
+    clean_candidate, manifests, need_betterleaks, push_baseline, release, verify,
 )
 
 # Answers "clean" and never says it loaded the private rules (it names the flags a scanner is
@@ -69,6 +69,56 @@ class RefusedRequestTests(unittest.TestCase):
         self.assertEqual(res.returncode, 2, combined(res))
         self.assertIn("must come from the candidate", combined(res))
         self.assertEqual(manifests(repo), [])
+
+
+class RehearsalRemoteTests(unittest.TestCase):
+    """--allowed-url (or genops.allowedPushUrl) points the check at any remote the caller names,
+    so whatever that remote's main holds is the baseline. Such a manifest says so."""
+
+    def test_a_manifest_for_a_named_remote_is_marked_a_rehearsal(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        cand = clean_candidate(repo)
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        manifest = json.loads(res.stdout)["manifest"]
+        self.assertIs(manifest["rehearsal_remote"], True)
+        self.assertTrue(any("rehearsal" in note for note in manifest["unverified_items"]), manifest)
+
+        text = release(repo, clean_candidate(repo, "Another clean change."))
+        self.assertEqual(text.returncode, 0, combined(text))
+        self.assertIn("REHEARSAL", text.stdout)
+        self.assertIn("does not clear a release", text.stdout)
+
+    def test_verifying_a_rehearsal_manifest_needs_the_remote_named_again(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        cand = clean_candidate(repo)
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        path = Path(json.loads(res.stdout)["manifest_path"])
+        repo.git("config", "--unset", "genops.allowedPushUrl")
+
+        bare = repo.check("release", "--verify-manifest", str(path))
+        self.assertEqual(bare.returncode, 2, combined(bare))
+        self.assertIn("not approved", combined(bare))
+        self.assertNotIn("VALID", combined(bare).replace("INVALID", ""))
+
+        named = verify(repo, path)
+        self.assertEqual(named.returncode, 0, combined(named))
+        self.assertIn("VALID", named.stdout)
+
+    def test_a_manifest_that_drops_the_mark_is_invalid(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        cand = clean_candidate(repo)
+        res = release(repo, cand, "--json")
+        manifest = json.loads(res.stdout)["manifest"]
+        edited = repo.base / "edited.json"
+        edited.write_text(json.dumps({**manifest, "rehearsal_remote": False}, indent=2) + "\n", encoding="utf-8")
+        ver = verify(repo, edited)
+        self.assertEqual(ver.returncode, 1, combined(ver))
+        self.assertIn("rehearsal_remote", combined(ver))
 
 
 if __name__ == "__main__":

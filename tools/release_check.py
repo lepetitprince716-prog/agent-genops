@@ -1233,7 +1233,8 @@ def prepare_release(
         raise CheckError("shallow clone cannot prepare a release manifest")
     _priv_loaded, private_rule_count, _priv_note = validate_private_rules_file(require_non_empty=True)
 
-    fetch_url, push_url, _ = check_remote_policy(root, remote, allowed_url)
+    fetch_url, push_url, approved_urls = check_remote_policy(root, remote, allowed_url)
+    rehearsal_remote = approved_urls != DEFAULT_ALLOWED_URLS
     remote_old_sha, remote_refs = query_remote_ref_sha(root, remote, ref)
     trusted_label, live_trusted = resolve_trusted_baseline(root, remote, remote_refs)
     if live_trusted != judge.trusted_sha:
@@ -1259,6 +1260,12 @@ def prepare_release(
     rules = judge.tools / "privacy_rules.json"
     secret = judge.tools / "secret_scan.sh"
     unverified_notes: list[str] = []
+    if rehearsal_remote:
+        unverified_notes.append(
+            f"rehearsal: the remote ({push_url}) is not the repository's own, so its main is the trusted baseline "
+            "only because the caller named that remote with --allowed-url or genops.allowedPushUrl; "
+            "this manifest does not clear a release to the repository"
+        )
     if judge.self_judged:
         unverified_notes.append(
             f"bootstrap: the candidate's own checker and scanners ({judge.checker_sha[:12]}) judged it, "
@@ -1346,6 +1353,7 @@ def prepare_release(
             "trusted_sha": judge.trusted_sha,
             "checker_sha": judge.checker_sha,
             "self_judged": judge.self_judged,
+            "rehearsal_remote": rehearsal_remote,
             "policy_version": policy_version,
             "commit_count": commit_count,
             "changed_files": changed_files,
@@ -1676,6 +1684,11 @@ def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_
     file_preview = ", ".join(f"{f['status']} {f['path']}" for f in changed_files[:20])
     if len(changed_files) > 20:
         file_preview += f", ... (+{len(changed_files) - 20} more)"
+    if manifest["rehearsal_remote"]:
+        print(
+            f"Note: REHEARSAL. The remote {manifest['push_url']} is not the repository's own; its main is the trusted baseline "
+            "(set with --allowed-url or genops.allowedPushUrl). This manifest does not clear a release to the repository."
+        )
     if manifest["self_judged"]:
         print(
             f"Note: the candidate judged itself. The trusted baseline {manifest['trusted_sha'][:12]} could not judge, "

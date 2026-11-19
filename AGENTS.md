@@ -49,6 +49,11 @@ Never copy whole files from a private repository without a line-by-line review. 
      scanners judge the candidate. The manifest then has `self_judged: true` and an entry in
      `unverified_items`, the terminal says that the candidate judged itself, and the result needs an
      independent review.
+   - `--allowed-url` (and the `genops.allowedPushUrl` setting) approves a remote other than the
+     repository's own, for rehearsals against a local bare repository. That remote's main is then the
+     trusted baseline, so the manifest has `rehearsal_remote: true` and an entry in `unverified_items`,
+     the terminal says REHEARSAL, and the manifest does not clear a release to the repository.
+     `--verify-manifest` is refused unless the same remote is approved again.
    - Prints a redacted release manifest and stores a verification snapshot outside the repository
      (`~/.cache/agent-genops/release-manifests`, or `--manifest-dir`; a directory inside the
      repository is refused). It also lists the changed control files: the launcher, `.gitignore`, the two
