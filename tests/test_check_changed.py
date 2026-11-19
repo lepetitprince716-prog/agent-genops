@@ -102,5 +102,67 @@ class RemovalsAndTypeChangesTests(unittest.TestCase):
         self.assertIn("staged=1", res.stdout)
 
 
+ROOT = Path(__file__).resolve().parent.parent
+WORKFLOW_README = "workflows/sdxl-txt2img/README.md"
+
+
+def repo_with_workflows(testcase: unittest.TestCase) -> SyntheticRepo:
+    """A synthetic repository holding the real standard workflows, their registry and the
+    policy tool, plus a passing stand-in for tests/test_workflow_policy.py."""
+    repo = SyntheticRepo(testcase, maintainer=True)
+    for name in ("workflow_policy.py", "workflow_policy.json"):
+        shutil.copy2(ROOT / "tools" / name, repo.work / "tools" / name)
+    shutil.copytree(ROOT / "workflows", repo.work / "workflows")
+    repo.write("tests/test_workflow_policy.py", PASSING_TEST)
+    repo.git("add", "tools", "workflows", "tests")
+    repo.commit_unchecked("add workflows and the policy tool")
+    repo.git("push", "-q", "origin", "main")
+    return repo
+
+
+def step(data: dict, name: str) -> dict:
+    return next(t for t in data["tests"] if t["name"] == name)
+
+
+class WorkflowPolicyStepTests(unittest.TestCase):
+    def test_a_policy_violation_in_workflows_fails_check_changed(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_workflows(self)
+        repo.write("workflows/sdxl-txt2img/stray.json", "{}\n")
+        repo.git("add", "workflows")
+        rc, data = changed_json(repo, "--no-tests")
+        self.assertEqual(rc, 1, json.dumps(data))
+        self.assertEqual(data["status"], "fail")
+        self.assertEqual(step(data, "workflow-policy")["status"], "FAIL", json.dumps(data["tests"]))
+        self.assertIn("finding(s)", step(data, "workflow-policy")["detail"])
+
+    def test_a_clean_change_to_workflows_runs_the_policy_and_the_guard_tests(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_workflows(self)
+        readme = repo.work / WORKFLOW_README
+        readme.write_text(readme.read_text(encoding="utf-8") + "\nOne more sentence.\n", encoding="utf-8")
+        rc, data = changed_json(repo)
+        self.assertEqual(rc, 0, json.dumps(data))
+        self.assertEqual(step(data, "workflow-policy")["status"], "PASS", json.dumps(data["tests"]))
+        self.assertEqual(step(data, "guard-tests")["status"], "PASS", json.dumps(data["tests"]))
+        self.assertIn(WORKFLOW_README, [c["path"] for c in data["guard_changes"]])
+
+    def test_an_unreadable_registry_fails_check_changed(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_workflows(self)
+        repo.write("tools/workflow_policy.json", "{not json")
+        rc, data = changed_json(repo, "--no-tests")
+        self.assertEqual(rc, 1, json.dumps(data))
+        self.assertEqual(step(data, "workflow-policy")["status"], "ERROR", json.dumps(data["tests"]))
+
+    def test_the_policy_is_not_run_for_unrelated_changes(self) -> None:
+        need_betterleaks(self)
+        repo = repo_with_workflows(self)
+        repo.write("docs/guide.md", "# Guide\n\nA clean edit.\n")
+        rc, data = changed_json(repo)
+        self.assertEqual(rc, 0, json.dumps(data))
+        self.assertEqual(step(data, "workflow-policy")["status"], "NOT RUN")
+
+
 if __name__ == "__main__":
     unittest.main()

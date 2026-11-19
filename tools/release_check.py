@@ -72,7 +72,8 @@ CONTROL_PLANE_EXACT = frozenset(
 CONTROL_PLANE_PREFIXES = (".githooks/", ".github/workflows/")
 DOC_SUFFIXES = frozenset({".md", ".svg", ".txt"})
 DOC_EXACT = frozenset({"LICENSE", "LICENSE-APACHE", "LICENSE-MIT"})
-GUARD_TEST_PREFIXES = (".githooks/", "tools/", "tests/")
+GUARD_TEST_PREFIXES = (".githooks/", "tools/", "tests/", "workflows/")
+WORKFLOW_POLICY_PATHS = frozenset({"tools/workflow_policy.py", "tools/workflow_policy.json"})
 GUARD_TEST_EXACT = frozenset(
     {
         "check",
@@ -379,12 +380,17 @@ def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[
     run_cwc = any(p.startswith("cwc/") for p in changed_paths)
     run_rdbg = any(p.startswith("rdbg/") for p in changed_paths)
     run_artfetch = any(p.startswith("artfetch/") for p in changed_paths)
+    run_policy = any(p.startswith("workflows/") or p in WORKFLOW_POLICY_PATHS for p in changed_paths)
     run_guard = bool(guard_trigger_paths(root, changed_paths))
 
     return {
         "doc-links": (
             run_doc_links,
             f"{len(md_files)} markdown file(s) changed" if run_doc_links else "no markdown changes",
+        ),
+        "workflow-policy": (
+            run_policy,
+            "workflows/ or its policy changed" if run_policy else "workflows/ and its policy untouched",
         ),
         "guard-tests": (
             run_guard,
@@ -399,6 +405,23 @@ def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[
     }
 
 
+def run_workflow_policy(root: Path) -> StepResult:
+    """Run tools/workflow_policy.py: exit 0 is clean, 1 findings, anything else an error."""
+    t0 = time.monotonic()
+    script = root / "tools" / "workflow_policy.py"
+    if not script.is_file():
+        return StepResult("workflow-policy", "ERROR", 0.0, "tools/workflow_policy.py is missing")
+    proc = subprocess.run(
+        [sys.executable, "-I", "-B", str(script)], cwd=root, capture_output=True, text=True, check=False
+    )
+    dt = time.monotonic() - t0
+    tail = "\n".join((proc.stdout + "\n" + proc.stderr).strip().splitlines()[-15:])
+    if proc.returncode == 0:
+        return StepResult("workflow-policy", "PASS", dt, "workflows/ matches its policy")
+    status = "FAIL" if proc.returncode == 1 else "ERROR"
+    return StepResult("workflow-policy", status, dt, tail or f"exit {proc.returncode}")
+
+
 def run_test_suite(root: Path, suite: str, md_files: list[str]) -> StepResult:
     t0 = time.monotonic()
     if suite == "doc-links":
@@ -407,6 +430,9 @@ def run_test_suite(root: Path, suite: str, md_files: list[str]) -> StepResult:
         if broken:
             return StepResult(suite, "FAIL", dt, "\n".join(broken))
         return StepResult(suite, "PASS", dt, f"checked {len(set(md_files))} markdown file(s)")
+
+    if suite == "workflow-policy":
+        return run_workflow_policy(root)
 
     cmd_map: dict[str, tuple[list[str], Path]] = {
         "guard-tests": ([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], root),
@@ -566,7 +592,7 @@ def cmd_changed(args: argparse.Namespace) -> int:
     md_files = [p for p in all_changed if p.lower().endswith(".md")]
     test_results: list[StepResult] = []
     for suite, (should_run, reason) in suite_plan.items():
-        if args.no_tests:
+        if args.no_tests and suite != "workflow-policy":
             test_results.append(StepResult(suite, "NOT RUN", 0.0, "skipped by --no-tests"))
         elif should_run:
             test_results.append(run_test_suite(root, suite, md_files))
@@ -1208,7 +1234,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--contributor", action="store_true", help="run contributor mode (public rules only)"
     )
     p_changed.add_argument("--base", help="base ref/commit for scanning unmerged branch commits")
-    p_changed.add_argument("--no-tests", action="store_true", help="skip test suites (marked NOT RUN)")
+    p_changed.add_argument("--no-tests", action="store_true", help="skip the test suites (marked NOT RUN); the workflow policy check still runs")
     p_changed.add_argument("--json", dest="json_output", action="store_true", help="emit JSON report")
 
     p_release = sub.add_parser(
