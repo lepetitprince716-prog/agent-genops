@@ -37,8 +37,9 @@ macOS). The hooks fail closed if Betterleaks is missing.
    runs path-selected tests). Before pushing, you can also run
    `python3 tools/privacy_scan.py --tracked --history` and `sh tools/secret_scan.sh history`.
 3. Push the branch to your fork and open a pull request against `main`.
-4. CI runs the privacy and Betterleaks scans with the public rules on pushes to `main` and on pull
-   requests. A first-time contributor's run may wait until a maintainer approves it.
+4. CI runs the privacy and Betterleaks scans with the public rules on every push and pull request
+   (using the trusted base branch's scanner, rules, and ignore files on pull requests). A
+   first-time contributor's run may wait until a maintainer approves it.
 
 Fixing problems before a push:
 
@@ -102,7 +103,7 @@ them runs that project's workflow in `.github/workflows/`.
 1. fork 这个仓库，从 `main` 建一个分支。
 2. 开发过程中运行 `./check changed`（会检查暂存、未暂存、未跟踪文件与分支提交，并按改动路径跑对应测试）。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
 3. 把分支推到你的 fork，向 `main` 开 pull request。
-4. CI 在推送到 `main` 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描。第一次贡献时，CI 可能要等维护者批准才会运行。
+4. CI 在每次 push 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描（PR 阶段从受信任 base 分支加载扫描器、规则与 ignore 文件）。第一次贡献时，CI 可能要等维护者批准才会运行。
 
 推送之前遇到问题：
 

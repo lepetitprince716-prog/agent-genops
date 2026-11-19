@@ -43,8 +43,10 @@ git config core.hooksPath .githooks
 - Sensitive file paths and ref names that match a rule are replaced with redacted aliases in
   scanner output instead of being printed verbatim. Submodules (`160000`), Git LFS pointers, and
   active `refs/replace/*` entries fail closed.
-- CI currently runs the built-in privacy and Betterleaks scans on pushes to `main` and on pull
-  requests; it never loads maintainer private rules.
+- CI runs the built-in privacy and Betterleaks scans on every push (branches and tags) and pull
+  request, in jobs separate from repository test execution; on pull requests the scanner, rules,
+  wrapper, template, and ignore files are loaded from the exact trusted base branch commit. CI
+  never loads maintainer private rules.
 - Commit with a GitHub noreply address; the identity check rejects anything else.
 - The hooks and the scanner cover the whole repository, the project folders `cwc/`, `rdbg/` and
   `artfetch/` included. Those folders carry no hooks or scanner of their own.
@@ -127,7 +129,7 @@ the same shape next time.
 - 你自己的规则写在 `~/.config/agent-genops/private_rules.json`（格式相同），只留在你的机器上。维护者克隆可设置 `git config genops.mode maintainer`（或设置 `AGENT_GENOPS_REQUIRE_PRIVATE=1`），确保私有规则缺失、为空或损坏时 hook 与 `./check` 直接拒绝而不静默降级。
 - git hook：`pre-commit` 检查提交身份与暂存文件/路径名，`commit-msg` 检查提交信息，`pre-push` 对即将推送的候选历史、全部历史路径与目标 ref 名执行硬阻断扫描（本地其他未推送 ref 命中时单列告警）。每个克隆打开一次即可（命令见上文英文部分）。
 - 命中规则的文件路径名和 ref 名会以脱敏别名输出，不原样打印。未扫描内容的子模块（`160000`）、Git LFS 指针与 `refs/replace/*` 替换引用会默认拒绝。
-- 当前 CI 在推送到 `main` 和 pull request 时用内置公开规则跑隐私与 Betterleaks 扫描，永远不加载维护者私有规则。
+- CI 在每次 push（全部分支与标签）和 pull request 时用内置公开规则跑隐私与 Betterleaks 扫描，且扫描 job 与测试 job 分开运行；PR 阶段从受信任 base 分支精确提取扫描器、规则、包装脚本、模板和 ignore 文件。CI 永远不加载维护者私有规则。
 - 提交时请用 GitHub 的 noreply 邮箱，身份检查会拒绝其他地址。
 - hook 和扫描器管整个仓库，项目文件夹 `cwc/`、`rdbg/`、`artfetch/` 也包括在内。这些文件夹自己不带 hook 和扫描器。
 - 日常开发在仓库根目录运行 `./check changed`，发布前用 `./check release --to origin --ref refs/heads/main --commit <完整SHA>` 生成脱敏清单（只读、绝不执行推送）。

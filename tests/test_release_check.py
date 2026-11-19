@@ -739,6 +739,71 @@ class ReleaseAndCheckTests(unittest.TestCase):
         res = repo.run("sh", "tools/secret_scan.sh", "history", env=env)
         self.assertNotEqual(res.returncode, 0, combined(res))
 
+    # --- Stage C: privacy.yml trusted-base contract & tag-shadow resistance ---
+
+    def test_stage_c_privacy_workflow_contract_and_tag_shadow_resistance(self) -> None:
+        workflow_path = ROOT / ".github" / "workflows" / "privacy.yml"
+        self.assertTrue(workflow_path.is_file(), "privacy.yml must exist")
+        wf_text = workflow_path.read_text(encoding="utf-8")
+        # Trigger covers all pushes and pull requests; isolated Python and no persisted creds.
+        self.assertIn("persist-credentials: false", wf_text)
+        self.assertIn("python3 -I -B", wf_text)
+        self.assertIn("show-ref --verify --hash", wf_text)
+        self.assertIn("SECRET_SCAN_IGNORE_PATH=", wf_text)
+        self.assertIn("guard-tests:", wf_text)
+        self.assertNotIn("branches: [main]", wf_text)
+
+        # Simulate a malicious PR that adds a tag named `origin/main` pointing at a weakened
+        # commit; exact `show-ref --verify --hash refs/remotes/origin/main` must still resolve
+        # the real base commit rather than the shadowing tag.
+        repo = SyntheticRepo(self, maintainer=True)
+        real_base = repo.head()
+        repo.git("checkout", "-q", "-b", "pr-evil")
+        repo.write("tools/privacy_scan.py", "import sys\nsys.exit(0)\n")
+        repo.write("docs/guide.md", "email = " + "leaked" + "@" + "private-domain.test\n")
+        repo.git("add", "tools/privacy_scan.py", "docs/guide.md")
+        evil_head = repo.commit_unchecked("evil PR trying to shadow origin/main with a tag")
+        repo.git("tag", "origin/main", evil_head)
+
+        resolved = repo.git(
+            "--no-replace-objects", "show-ref", "--verify", "--hash", "refs/remotes/origin/main"
+        ).stdout.strip()
+        self.assertEqual(resolved, real_base)
+        self.assertNotEqual(resolved, evil_head)
+
+        # Running the base-extracted privacy_scan.py in isolated mode (-I -B) must catch the leak.
+        with tempfile.TemporaryDirectory(prefix="genops-pr-base-") as td:
+            td_path = Path(td)
+            (td_path / "privacy_scan.py").write_bytes(
+                subprocess.run(
+                    ["git", "--no-replace-objects", "show", f"{resolved}:tools/privacy_scan.py"],
+                    cwd=repo.work,
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )
+            (td_path / "privacy_rules.json").write_bytes(
+                subprocess.run(
+                    ["git", "--no-replace-objects", "show", f"{resolved}:tools/privacy_rules.json"],
+                    cwd=repo.work,
+                    capture_output=True,
+                    check=True,
+                ).stdout
+            )
+            scan = repo.run(
+                sys.executable,
+                "-I",
+                "-B",
+                str(td_path / "privacy_scan.py"),
+                "--rules",
+                str(td_path / "privacy_rules.json"),
+                "--no-private",
+                "--tracked",
+                "--history",
+            )
+            self.assertEqual(scan.returncode, 1, combined(scan))
+            self.assertIn("email", combined(scan))
+
 
 if __name__ == "__main__":
     unittest.main()
