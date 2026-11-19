@@ -31,6 +31,11 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.
 
+`--nodedefs URL` reads `<URL>/api/object_info` from a running ComfyUI server. It follows at most
+three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge
+where the server or a redirect points: a server on this machine or the local network is the usual
+source, so name only a server you trust.
+
 ## Planned
 
 These commands are not in `cwc --help` yet.

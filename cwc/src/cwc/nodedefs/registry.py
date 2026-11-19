@@ -21,6 +21,7 @@ import difflib
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
 from dataclasses import replace
@@ -41,8 +42,28 @@ BUILTINS_FILE = "frontend_builtins.json"
 OBJECT_INFO_PATH = "/api/object_info"
 URL_TIMEOUT = 30  # seconds
 URL_SCHEMES = ("http://", "https://")
+MAX_REDIRECTS = 3  # redirects followed for one URL; a real server behind a proxy needs one or two
 
 ObjectInfo = Mapping[str, Mapping[str, Any]]
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """The standard redirect handler, narrowed: at most ``MAX_REDIRECTS`` redirects, only to http or
+    https, and never from https to http. The target's address is not judged, because a ComfyUI
+    server on this machine or the local network is the usual source."""
+
+    max_redirections = MAX_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old, new = urllib.parse.urlsplit(req.full_url).scheme, urllib.parse.urlsplit(newurl).scheme
+        if new not in ("http", "https"):
+            raise urllib.error.URLError(f"redirect to a {new} URL refused: only http and https are followed")
+        if old == "https" and new == "http":
+            raise urllib.error.URLError("redirect from https to http refused")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_SafeRedirect)
 
 
 def _missing(message: str) -> CwcError:
@@ -126,7 +147,7 @@ def read_source(source: str) -> Any:
     if source.startswith(URL_SCHEMES):
         url = source.rstrip("/") + OBJECT_INFO_PATH
         try:
-            with urllib.request.urlopen(url, timeout=URL_TIMEOUT) as response:
+            with _OPENER.open(url, timeout=URL_TIMEOUT) as response:
                 data = response.read(MAX_JSON_BYTES + 1)
         except urllib.error.HTTPError as exc:
             exc.close()
