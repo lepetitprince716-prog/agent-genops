@@ -46,8 +46,10 @@
 # betterleaks failure. Secret values are never printed (--redact); a finding is one line,
 # "rule path:line commit", with sensitive paths redacted by the privacy scanner; when that cannot
 # redact, a placeholder is printed in place of the finding.
-# Validation is off (it would send candidates to the network) and the repository's own
-# Betterleaks config is not loaded (--unsafe-auto-load-config is not used).
+# Validation is off (it would send candidates to the network). The rules are Betterleaks' default
+# rules, named with --config: the repository's own Betterleaks config is not loaded
+# (--unsafe-auto-load-config is not used), and a config named in the environment
+# (BETTERLEAKS_CONFIG, GITLEAKS_CONFIG and their _TOML forms) is cleared before the scan.
 set -eu
 
 usage() {
@@ -83,6 +85,14 @@ g() {
 work=$(mktemp -d "${TMPDIR:-/tmp}/secret-scan.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT TERM HUP
+
+# Betterleaks takes its config from --config, else from these variables (the names its 1.10.1
+# --help lists, and the only ones its binary holds). One left in the shell for another project
+# would replace the rules and allowlists here, so they are cleared and the default rules are
+# named explicitly.
+unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG BETTERLEAKS_CONFIG_TOML GITLEAKS_CONFIG_TOML
+config="$work/config.toml"
+printf '[extend]\nuseDefault = true\n' >"$config"
 
 ignore_path=${SECRET_SCAN_IGNORE_PATH:-}
 src=.
@@ -148,7 +158,7 @@ bl() {
   if [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
     set -- "$@" --ignore-gitleaks-allow
   fi
-  set -- "$@" --redact --no-banner --no-color --log-level warn \
+  set -- "$@" --config "$config" --redact --no-banner --no-color --log-level warn \
     --report-format template --report-template "$template" --report-path -
   if [ -n "$iso" ] && [ "$sub" != dir ]; then
     (

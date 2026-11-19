@@ -98,7 +98,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 ### Secret scan wrapper
 
-`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off and without loading the repository's own Betterleaks config. A finding is one line, `rule path:line commit`. It takes one mode:
+`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off, and always with Betterleaks' default rules: it loads neither the repository's own Betterleaks config nor one named in the environment (`BETTERLEAKS_CONFIG`, `GITLEAKS_CONFIG` and their `_TOML` forms are cleared). A finding is one line, `rule path:line commit`. It takes one mode:
 
 | Mode | Scans |
 | --- | --- |
@@ -253,7 +253,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 #### 密钥扫描包装脚本
 
-`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，也不加载仓库自己的 Betterleaks 配置。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
+`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，始终用 Betterleaks 的默认规则：不加载仓库自己的 Betterleaks 配置，也不用环境变量指定的配置（`BETTERLEAKS_CONFIG`、`GITLEAKS_CONFIG` 及其 `_TOML` 形式会被清掉）。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
 
 | 模式 | 扫描对象 |
 | --- | --- |
