@@ -1546,7 +1546,7 @@ def run_as_trusted_checker(args: argparse.Namespace) -> int:
     )
     if result.blocked or result.manifest is None:
         if judge.self_judged:
-            print("注意：候选自己判自己（引导模式），结论要独立复核。")
+            print("Note: the candidate judged itself (bootstrap mode); the result needs an independent review.")
         for line in result.blocked:
             print(line)
         return 1
@@ -1578,33 +1578,33 @@ def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_
         file_preview += f", ... (+{len(changed_files) - 20} more)"
     if manifest["self_judged"]:
         print(
-            f"注意：候选自己判自己——可信基线 {manifest['trusted_sha'][:12]} 判不了，"
-            f"检查器和扫描器用的是候选 {manifest['checker_sha'][:12]} 自己的，要独立复核。"
+            f"Note: the candidate judged itself. The trusted baseline {manifest['trusted_sha'][:12]} could not judge, "
+            f"so the checker and scanners are the candidate's own ({manifest['checker_sha'][:12]}); get an independent review."
         )
-    print("请求：仅推送一个分支；不改可见性，不建 tag，不发 release")
-    print(f"目标：{manifest['push_url']} · {manifest['target_ref']} · {old_label} -> {commit}")
-    print(f"改动：{manifest['commit_count']} 个提交 / {len(changed_files)} 个文件；{file_preview or '(无文件差异)'}")
+    print("Request: push one branch only; no visibility change, no tag, no release")
+    print(f"Target: {manifest['push_url']} · {manifest['target_ref']} · {old_label} -> {commit}")
+    print(f"Changes: {manifest['commit_count']} commit(s) / {len(changed_files)} file(s); {file_preview or '(no file differences)'}")
     print(
-        f"隐私：维护者规则已加载（{manifest['privacy_scan']['private_rules_loaded']} 条）；历史、路径和 ref 通过；"
-        f"Betterleaks 通过；工作流策略 {manifest['workflow_policy']}；策略版本 {manifest['policy_version']}"
+        f"Privacy: maintainer rules loaded ({manifest['privacy_scan']['private_rules_loaded']}); history, paths and ref passed; "
+        f"Betterleaks passed; workflow policy {manifest['workflow_policy']}; policy version {manifest['policy_version']}"
         f"（trusted={manifest['trusted_sha'][:12]}，checker={manifest['checker_sha'][:12]}）"
     )
     print(
-        f"需人决定：控制面改动 {len(control_changes)}；新增行内豁免 {len(inline_allows)}；"
-        f"非候选本地 ref 告警 {len(other_warnings)}；未验证项 {len(unverified_notes)}"
+        f"For a person to decide: control-plane changes {len(control_changes)}; new inline exemptions {len(inline_allows)}; "
+        f"warnings on other local refs {len(other_warnings)}; unverified items {len(unverified_notes)}"
     )
     if control_changes:
-        print(f"  控制面变更（需独立复核）：{', '.join(control_changes)}")
+        print(f"  Control-plane changes (review independently): {', '.join(control_changes)}")
     if inline_allows:
-        print(f"  新增行内豁免（需独立复核）：{', '.join(inline_allows)}")
+        print(f"  New inline exemptions (review independently): {', '.join(inline_allows)}")
     if manifest["approved_exemptions"]:
-        print(f"  经用户逐条批准的豁免：{len(manifest['approved_exemptions'])} 条（指纹记在清单文件里）")
+        print(f"  Exemptions the user approved one by one: {len(manifest['approved_exemptions'])} (fingerprints are in the manifest file)")
     if other_warnings:
-        print(f"  本地其他未推 ref 告警（不影响本次候选）：{len(other_warnings)} 条（详见本机扫描）")
+        print(f"  Warnings on other unpushed local refs (they do not affect this candidate): {len(other_warnings)} (see the local scan)")
     for note in unverified_notes:
-        print(f"  未验证项：{note}")
-    print("当前状态：等待用户同意；尚未推送。目标、SHA 或策略版本变化时本清单作废。")
-    print(f"仓外核对记录：{manifest_file}")
+        print(f"  Unverified item: {note}")
+    print("Status: waiting for the user's approval; nothing has been pushed. This manifest is void if the target, the SHA or the policy version changes.")
+    print(f"Record kept outside the repository: {manifest_file}")
 
 
 def cmd_release(args: argparse.Namespace) -> int:

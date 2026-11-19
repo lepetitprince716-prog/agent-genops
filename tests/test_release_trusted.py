@@ -243,7 +243,7 @@ class TrustedCheckerTests(unittest.TestCase):
 
         text = release(repo, cand, "--bootstrap-self-judge")
         self.assertEqual(text.returncode, 0, combined(text))
-        self.assertIn("候选自己判自己", text.stdout)
+        self.assertIn("the candidate judged itself", text.stdout)
 
     def test_a_bootstrapped_candidate_is_still_scanned_by_its_own_scanners(self) -> None:
         need_betterleaks(self)
