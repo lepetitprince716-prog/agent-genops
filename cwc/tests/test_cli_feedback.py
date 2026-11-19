@@ -113,5 +113,68 @@ class InputTypoTest(Folder):
         self.assertIn("E2: node 'sampler': KSampler has no input 'zzzz'\n", err)
 
 
+
+def fancy(doc):
+    """txt2img with its sampler replaced by a type cwc has no definition for."""
+    doc = copy.deepcopy(doc)
+    doc["sampler"]["class_type"] = "MyFancySampler"
+    return doc
+
+
+FANCY_INFO = {
+    "MyFancySampler": {
+        "input": {
+            "required": {
+                "model": ["MODEL"],
+                "positive": ["CONDITIONING"],
+                "negative": ["CONDITIONING"],
+                "latent_image": ["LATENT"],
+                "steps": ["INT", {"default": 20, "min": 1, "max": 100}],
+                "cfg": ["FLOAT", {"default": 7.0, "min": 0.0, "max": 30.0}],
+                "sampler_name": [["euler", "dpmpp_2m"]],
+                "scheduler": [["normal", "karras"]],
+            }
+        },
+        "input_order": {"required": ["model", "positive", "negative", "latent_image", "steps", "cfg", "sampler_name", "scheduler"]},
+        "output": ["LATENT"],
+        "output_is_list": [False],
+        "output_name": ["LATENT"],
+        "name": "MyFancySampler",
+        "display_name": "My fancy sampler",
+        "category": "sampling",
+        "output_node": False,
+    }
+}
+
+
+class UnknownTypeHintTest(Folder):
+    def test_the_hint_names_the_two_ways_through(self):
+        code, _, err = run("compile", self.graph(fancy(TXT2IMG)), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        lines = err.splitlines()
+        hint = lines[lines.index("E1: node 'sampler': unknown type 'MyFancySampler'") + 1]
+        self.assertTrue(hint.startswith("  hint: "), hint)
+        self.assertIn("--allow-unknown", hint)
+        self.assertIn("--nodedefs", hint)
+        self.assertIn("/api/object_info", hint)
+        self.assertNotIn("cwc snapshot", err)
+
+    def test_no_hint_names_a_command_cwc_does_not_have(self):
+        doc = fancy(TXT2IMG)
+        doc["sampler"]["_meta"]["ui_optional"] = True
+        for argv in ((), ("--allow-unknown",)):
+            with self.subTest(argv=argv):
+                _, _, err = run("compile", self.graph(doc), "-o", self.out, *argv)
+                self.assertIn("hint: ", err)
+                self.assertNotIn("cwc snapshot", err)
+
+    def test_the_nodedefs_the_hint_describes_make_the_type_known(self):
+        info = self.dir / "object_info.json"
+        info.write_text(json.dumps(FANCY_INFO), encoding="utf-8")
+        code, _, err = run("compile", self.graph(fancy(TXT2IMG)), "-o", self.out, "--nodedefs", info)
+        self.assertNotIn("E1", err)
+        self.assertEqual(code, ExitCode.OK, err)
+
+
 if __name__ == "__main__":
     unittest.main()

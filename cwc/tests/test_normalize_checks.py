@@ -53,7 +53,7 @@ class CheckCase(unittest.TestCase):
 
 
 class E1UnknownTypeTest(CheckCase):
-    def test_unknown_type_lists_close_names_and_the_snapshot_command(self):
+    def test_unknown_type_lists_close_names_and_the_ways_through(self):
         doc = txt2img()
         doc["sampler"]["class_type"] = "KSamplr"
         finding = self.errors(doc)[0]
@@ -61,7 +61,8 @@ class E1UnknownTypeTest(CheckCase):
         self.assertEqual(finding.nodes, ("sampler",))
         self.assertEqual(finding.data["closest"][0], "KSampler")
         self.assertEqual(len(finding.data["closest"]), 3)
-        self.assertIn("cwc snapshot", finding.hint)
+        self.assertIn("--nodedefs", finding.hint)
+        self.assertIn("--allow-unknown", finding.hint)
 
     def test_known_types_pass(self):
         self.passes(txt2img())

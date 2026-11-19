@@ -229,7 +229,7 @@ def _check_omitted(node: RawNode, nodedef: NodeDef, surf: Surface, aid: str, out
                 f"node {aid!r}: {target.name!r} is omitted, but the widget layout of {nodedef.type} is not "
                 "reliable enough to fill its default",
                 [aid],
-                hint=f"write every widget input of this node, or add a frontend truth snapshot for {nodedef.type} (`cwc snapshot`)",
+                hint="write every widget input of this node",
             )
 
 
