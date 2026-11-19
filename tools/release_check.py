@@ -42,7 +42,11 @@ CONTRIBUTOR_MODE_VALUE = "contributor"
 
 ZERO_OID = "0" * 40
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-INLINE_ALLOW_RE = re.compile(r"\b(?:betterleaks|gitleaks):allow\b")
+# Betterleaks honours an inline allow wherever the substring appears on a line
+# (`# _gitleaks:allow` and `nobetterleaks:allow` included), so it is counted the same way.
+INLINE_ALLOW_RE = re.compile(r"(?:betterleaks|gitleaks):allow")
+# A Betterleaks fingerprint of a finding in git history: <commit>:<path>:<rule>:<line>.
+FINGERPRINT_RE = re.compile(r"[0-9a-f]{40}:[^\r\n]+:[^:\s]+:[0-9]+")
 MD_LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 HTML_LINK_RE = re.compile(r"""(?:href|src|srcset)=["']([^"']+)["']""")
 
@@ -1019,6 +1023,95 @@ def run_release_workflow_policy(root: Path, judge: Judge, commit: str, dest: Pat
     raise CheckError(f"workflow policy check failed (exit {proc.returncode}): {detail[-800:]}")
 
 
+def parse_approvals(values: list[str] | None) -> list[str]:
+    """Each --approve-exemption is one Betterleaks fingerprint, nothing wider."""
+    out: list[str] = []
+    for value in values or []:
+        if not FINGERPRINT_RE.fullmatch(value):
+            raise CheckError(
+                "--approve-exemption takes one Betterleaks fingerprint <40-hex commit>:<path>:<rule>:<line> "
+                f"per flag, got: {value!r}"
+            )
+        out.append(value)
+    return sorted(dict.fromkeys(out))
+
+
+def count_findings(scan_output: str) -> int | None:
+    """Findings secret_scan.sh printed (one indented line each); None when redaction failed."""
+    lines = [line for line in scan_output.splitlines() if line.startswith("  ")]
+    if any("<redacted:" in line for line in lines):
+        return None
+    return len(lines)
+
+
+def candidate_ignore_bytes(root: Path, commit: str) -> bytes:
+    """The ignore entries the candidate carries itself (any of the ignore file names)."""
+    content = b""
+    for name in IGNORE_FILES:
+        proc = run_git(["cat-file", "blob", f"{commit}:{name}"], root, check=False)
+        if proc.returncode == 0:
+            content += proc.stdout if proc.stdout.endswith(b"\n") or not proc.stdout else proc.stdout + b"\n"
+    return content
+
+
+def scan_own_commits(
+    root: Path,
+    judge: Judge,
+    secret: Path,
+    scanner: Path,
+    rules: Path,
+    ignore_path: Path,
+    ignore_bytes: bytes,
+    audit_base: str,
+    commit: str,
+    dest: Path,
+) -> list[str]:
+    """Scan ``audit_base..commit`` with the trusted ignore file (plus approvals) and inline allow
+    comments off. Returns the report lines when it finds something, else an empty list.
+
+    On findings it scans once more honouring what the candidate adds itself (its inline allow
+    comments and its own ignore file) to say how many of them those exemptions would hide."""
+    spec = f"{audit_base}..{commit}"
+    rc, out = run_secret_subprocess(
+        secret, ["range", spec], root, redact_scanner=scanner, rules_path=rules,
+        no_private=False, ignore_path=ignore_path, ignore_allow=True,
+    )
+    if rc in (2, 3):
+        raise CheckError(out or f"secret_scan error (exit {rc})")
+    if rc == 0:
+        return []
+    found = count_findings(out)
+    own_dir = dest / "_candidate_ignore"
+    own_dir.mkdir(parents=True, exist_ok=True)
+    own_ignore = own_dir / ".betterleaksignore"
+    trusted = ignore_bytes if ignore_bytes.endswith(b"\n") or not ignore_bytes else ignore_bytes + b"\n"
+    own_ignore.write_bytes(trusted + candidate_ignore_bytes(root, commit))
+    rc_own, out_own = run_secret_subprocess(
+        secret, ["range", spec], root, redact_scanner=scanner, rules_path=rules,
+        no_private=False, ignore_path=own_ignore,
+    )
+    if rc_own in (2, 3):
+        raise CheckError(out_own or f"secret_scan error (exit {rc_own})")
+    left = 0 if rc_own == 0 else count_findings(out_own)
+    if found is None or left is None:
+        hidden = "an unknown number (path redaction failed)"
+        found_text = "an unknown number of"
+    else:
+        hidden = str(max(found - left, 0))
+        found_text = str(found)
+    return [
+        "RELEASE BLOCKED: candidate failed Betterleaks scan of its own commits "
+        f"({audit_base[:12]}..{commit[:12]}, trusted ignore file, inline allow comments off; "
+        "no approval manifest generated).",
+        f"  {found_text} finding(s); {hidden} of them would be hidden by exemptions the candidate adds itself "
+        "(inline allow comments or its own ignore file), which this check does not honour.",
+        "  To release anyway the user approves each finding by its fingerprint "
+        "(<commit>:<path>:<rule>:<line>), and the check runs again with one "
+        "--approve-exemption <fingerprint> per finding; the manifest records them.",
+        *(f"  {line}" for line in out.splitlines()),
+    ]
+
+
 @dataclass
 class ReleaseResult:
     blocked: list[str]  # report lines when the release is blocked; empty when it passes
@@ -1038,9 +1131,11 @@ def prepare_release(
     commit: str,
     allow_new_ref: bool,
     allowed_url: str | None,
+    approvals: list[str],
 ) -> ReleaseResult:
     """Every release check for one ``(remote, ref, commit)``; writes nothing to the repository."""
     validate_target_ref(root, ref)
+    approvals = parse_approvals(approvals)
     if not FULL_SHA_RE.fullmatch(commit):
         raise CheckError(f"--commit must be a full 40-char commit SHA, got: {commit!r}")
     verified_commit = git_optional(
@@ -1091,8 +1186,9 @@ def prepare_release(
 
     with tempfile.TemporaryDirectory(prefix="genops-release-") as td:
         td_path = Path(td)
-        ignore_path, ignore_bytes = write_trusted_ignore(root, judge.trusted_sha, [], td_path)
+        ignore_path, ignore_bytes = write_trusted_ignore(root, judge.trusted_sha, approvals, td_path)
         policy_version = compute_policy_version(judge, ignore_bytes)
+        audit_base = remote_old_sha if remote_old_sha != ZERO_OID else judge.trusted_sha
 
         p_rc, p_payload, p_err = run_privacy_subprocess(
             scanner, rules, ["--rev", commit, "--ref-name", ref], root, require_private=True, no_private=False
@@ -1109,6 +1205,12 @@ def prepare_release(
             )
         if p_rc != 0:
             raise CheckError(f"privacy_scan exited {p_rc}")
+
+        # The candidate's own commits first, with inline allow comments off: an exemption the
+        # candidate adds cannot clear itself.
+        own = scan_own_commits(root, judge, secret, scanner, rules, ignore_path, ignore_bytes, audit_base, commit, td_path)
+        if own:
+            return blocked(*own)
 
         s_rc, s_out = run_secret_subprocess(
             secret,
@@ -1143,7 +1245,6 @@ def prepare_release(
         elif o_rc != 0:
             unverified_notes.append("non-candidate local ref scan errored; inspect locally")
 
-    audit_base = remote_old_sha if remote_old_sha != ZERO_OID else judge.trusted_sha
     control_changes, inline_allows = inspect_control_plane_and_allows(root, audit_base, commit)
     commit_count, changed_files = collect_release_diff_summary(root, remote_old_sha, commit)
 
@@ -1172,6 +1273,7 @@ def prepare_release(
             "workflow_policy": wf_status,
             "control_plane_changes": control_changes,
             "inline_allow_additions": inline_allows,
+            "approved_exemptions": approvals,
             "non_candidate_ref_warnings": other_warnings,
             "unverified_items": unverified_notes,
         },
@@ -1239,7 +1341,9 @@ def verify_manifest_file(root: Path, judge: Judge, manifest_path: Path, args: ar
         if live_trusted != judge.trusted_sha:
             raise CheckError(f"the remote's {BASELINE_BRANCH} moved during the check; retry")
         with tempfile.TemporaryDirectory(prefix="genops-verify-") as td:
-            _path, ignore_bytes = write_trusted_ignore(root, judge.trusted_sha, [], Path(td))
+            _path, ignore_bytes = write_trusted_ignore(
+                root, judge.trusted_sha, parse_approvals(args.approve_exemption), Path(td)
+            )
         live_policy = compute_policy_version(judge, ignore_bytes)
         if live_policy != expected_policy:
             mismatches.append(f"policy version changed: manifest={expected_policy}, live={live_policy}")
@@ -1285,6 +1389,7 @@ def recheck_manifest(root: Path, judge: Judge, data: dict[str, Any], args: argpa
             commit=data["candidate_sha"],
             allow_new_ref=bool(args.allow_new_ref),
             allowed_url=args.allowed_url,
+            approvals=args.approve_exemption or [],
         )
     except CheckError as exc:
         return [f"the release check cannot run again for this manifest: {exc}"]
@@ -1334,6 +1439,8 @@ def forwarded_release_args(args: argparse.Namespace) -> list[str]:
         out.append("--json")
     if args.bootstrap_self_judge:
         out.append(BOOTSTRAP_FLAG)
+    for fingerprint in args.approve_exemption or []:
+        out += ["--approve-exemption", fingerprint]
     return out
 
 
@@ -1435,6 +1542,7 @@ def run_as_trusted_checker(args: argparse.Namespace) -> int:
         commit=args.commit,
         allow_new_ref=args.allow_new_ref,
         allowed_url=args.allowed_url,
+        approvals=args.approve_exemption or [],
     )
     if result.blocked or result.manifest is None:
         if judge.self_judged:
@@ -1489,6 +1597,8 @@ def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_
         print(f"  控制面变更（需独立复核）：{', '.join(control_changes)}")
     if inline_allows:
         print(f"  新增行内豁免（需独立复核）：{', '.join(inline_allows)}")
+    if manifest["approved_exemptions"]:
+        print(f"  经用户逐条批准的豁免：{len(manifest['approved_exemptions'])} 条（指纹记在清单文件里）")
     if other_warnings:
         print(f"  本地其他未推 ref 告警（不影响本次候选）：{len(other_warnings)} 条（详见本机扫描）")
     for note in unverified_notes:
@@ -1555,6 +1665,16 @@ def build_parser() -> argparse.ArgumentParser:
             "only when the trusted baseline cannot judge (no release checker that speaks the protocol, "
             "or no workflow policy checker): let the candidate's own checker and scanners judge it; "
             "the manifest says so and needs an independent review"
+        ),
+    )
+    p_release.add_argument(
+        "--approve-exemption",
+        action="append",
+        metavar="FINGERPRINT",
+        help=(
+            "a secret-scan finding the user approved, as its Betterleaks fingerprint "
+            "<commit>:<path>:<rule>:<line>; one flag per finding, recorded in the manifest, "
+            "and passed again to --verify-manifest"
         ),
     )
     # Internal: ./check release hands the check to the checker exported from the judging commit.

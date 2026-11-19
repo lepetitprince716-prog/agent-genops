@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import string
@@ -421,6 +422,113 @@ class ManifestReverifyTests(unittest.TestCase):
         res = verify(repo, edited)
         self.assertEqual(res.returncode, 1, combined(res))
         self.assertIn("control_plane_changes", combined(res))
+
+
+def registry_token() -> str:
+    """A token shape only Betterleaks knows (the public privacy rules do not)."""
+    return "np" + "m_" + random_text(36)
+
+
+def finding_fingerprint(repo: SyntheticRepo, path: str) -> str:
+    """The fingerprint Betterleaks gives the one finding in PATH, read from a real run with
+    inline allow comments off."""
+    proc = repo.run(
+        "betterleaks", "git", ".", "--ignore-gitleaks-allow", "--redact", "--no-banner",
+        "--log-level", "error", "--report-format", "json", "--report-path", "-",
+    )
+    found = [f["Fingerprint"] for f in json.loads(proc.stdout or "[]") if f.get("File") == path]
+    if len(found) != 1:
+        raise AssertionError(f"expected one finding in {path}, got {len(found)}")
+    return found[0]
+
+
+HIDDEN_RE = r"(\d+) of them would be hidden by exemptions the candidate adds itself"
+
+
+class ReleaseInlineExemptionTests(unittest.TestCase):
+    """R11: the release check scans the candidate's own commits with inline allow comments off
+    and the trusted ignore file; an exemption passes only when approved one by one."""
+
+    def token_candidate(self, repo: SyntheticRepo, comment: str) -> tuple[str, str]:
+        token = registry_token()
+        repo.write("docs/deploy.txt", f"value: {token}  {comment}\n".replace("  \n", "\n"))
+        repo.git("add", "docs/deploy.txt")
+        return repo.commit_unchecked("deploy notes"), token
+
+    def test_an_inline_exemption_the_candidate_adds_does_not_hide_a_finding(self) -> None:
+        need_betterleaks(self)
+        for comment in ("# betterleaks:allow", "# gitleaks:allow", "# _gitleaks:allow", "# nobetterleaks:allow"):
+            with self.subTest(comment=comment):
+                repo = SyntheticRepo(self, maintainer=True)
+                cand, token = self.token_candidate(repo, comment)
+                res = release(repo, cand)
+                self.assertEqual(res.returncode, 1, combined(res))
+                self.assertRegex(combined(res), HIDDEN_RE)
+                self.assertEqual(re.search(HIDDEN_RE, combined(res)).group(1), "1")
+                self.assertNotIn(token, combined(res))
+                self.assertEqual(manifests(repo), [])
+
+    def test_an_ignore_entry_the_candidate_adds_is_named_as_its_own_exemption(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        self.token_candidate(repo, "")
+        repo.write(".betterleaksignore", finding_fingerprint(repo, "docs/deploy.txt") + "\n")
+        repo.git("add", ".betterleaksignore")
+        cand = repo.commit_unchecked("ignore the deploy token")
+        res = release(repo, cand)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertEqual(re.search(HIDDEN_RE, combined(res)).group(1), "1", combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_an_approved_exemption_passes_is_recorded_and_must_be_approved_again_to_verify(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        cand, token = self.token_candidate(repo, "# betterleaks:allow")
+        fingerprint = finding_fingerprint(repo, "docs/deploy.txt")
+        res = release(repo, cand, "--approve-exemption", fingerprint, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        self.assertNotIn(token, combined(res))
+        payload = json.loads(res.stdout)
+        manifest = payload["manifest"]
+        self.assertEqual(manifest["approved_exemptions"], [fingerprint])
+        self.assertEqual(manifest["inline_allow_additions"], ["docs/deploy.txt"])
+        path = payload["manifest_path"]
+        args = ("release", "--verify-manifest", path, "--allowed-url", str(repo.remote))
+        again = repo.check(*args)
+        self.assertEqual(again.returncode, 1, combined(again))
+        approved = repo.check(*args, "--approve-exemption", fingerprint)
+        self.assertEqual(approved.returncode, 0, combined(approved))
+
+    def test_a_malformed_approval_is_refused(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        cand, _token = self.token_candidate(repo, "# betterleaks:allow")
+        for bad in ("docs/deploy.txt:1", "*", f"{cand}:docs/deploy.txt:rule:1\n{cand}:x:y:2"):
+            with self.subTest(bad=bad):
+                res = release(repo, cand, "--approve-exemption", bad)
+                self.assertEqual(res.returncode, 2, combined(res))
+                self.assertEqual(manifests(repo), [])
+
+    def test_inline_allow_lines_are_counted_as_betterleaks_reads_them(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        repo.write("docs/guide.md", "# Guide\n\nlimit = 3  # nobetterleaks:allow\n")
+        repo.git("add", "docs/guide.md")
+        cand = repo.commit_unchecked("an allow comment with no secret")
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        self.assertEqual(json.loads(res.stdout)["manifest"]["inline_allow_additions"], ["docs/guide.md"])
+
+    def test_control_an_exemption_already_on_the_baseline_does_not_block_later_releases(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        token = registry_token()
+        repo.write("docs/deploy.txt", f"value: {token}  # betterleaks:allow\n")
+        push_baseline(repo, "a reviewed exemption on main", "docs/deploy.txt")
+        cand = clean_candidate(repo)
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        self.assertEqual(json.loads(res.stdout)["manifest"]["approved_exemptions"], [])
 
 
 if __name__ == "__main__":
