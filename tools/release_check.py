@@ -361,6 +361,17 @@ def is_unclassified_executable(root: Path, rel: str) -> bool:
     return False
 
 
+def guard_trigger_paths(root: Path, changed_paths: list[str]) -> list[str]:
+    """The changed paths that select the guard tests: guard files, guard tests, root code."""
+    return [
+        p
+        for p in changed_paths
+        if p in GUARD_TEST_EXACT
+        or p.startswith(GUARD_TEST_PREFIXES)
+        or is_unclassified_executable(root, p)
+    ]
+
+
 def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[bool, str]]:
     """Map changed paths to test suites, returning ``{suite: (should_run, reason)}``."""
     md_files = [p for p in changed_paths if p.lower().endswith(".md")]
@@ -368,14 +379,7 @@ def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[
     run_cwc = any(p.startswith("cwc/") for p in changed_paths)
     run_rdbg = any(p.startswith("rdbg/") for p in changed_paths)
     run_artfetch = any(p.startswith("artfetch/") for p in changed_paths)
-    guard_triggers = [
-        p
-        for p in changed_paths
-        if p in GUARD_TEST_EXACT
-        or p.startswith(GUARD_TEST_PREFIXES)
-        or is_unclassified_executable(root, p)
-    ]
-    run_guard = bool(guard_triggers)
+    run_guard = bool(guard_trigger_paths(root, changed_paths))
 
     return {
         "doc-links": (
@@ -424,13 +428,24 @@ def run_test_suite(root: Path, suite: str, md_files: list[str]) -> StepResult:
 
 
 def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[str]]:
+    """Changed paths per state. ``staged``/``unstaged`` hold what still has content (added,
+    copied, modified, renamed, type-changed); deletions are listed apart, since there is
+    nothing to scan in them but they still decide which tests run."""
     staged = list(
         split_names(
-            run_git(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"], root).stdout
+            run_git(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout
         )
     )
     unstaged = list(
-        split_names(run_git(["diff", "--name-only", "-z", "--diff-filter=ACMR"], root).stdout)
+        split_names(run_git(["diff", "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout)
+    )
+    removed_staged = list(
+        split_names(
+            run_git(["diff", "--cached", "--name-only", "-z", "--diff-filter=D"], root).stdout
+        )
+    )
+    removed_unstaged = list(
+        split_names(run_git(["diff", "--name-only", "-z", "--diff-filter=D"], root).stdout)
     )
     untracked = list(
         split_names(run_git(["ls-files", "--others", "--exclude-standard", "-z"], root).stdout)
@@ -447,6 +462,8 @@ def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[
         "unstaged": unstaged,
         "untracked": untracked,
         "branch": branch_files,
+        "removed_staged": removed_staged,
+        "removed_unstaged": removed_unstaged,
     }
 
 
@@ -486,7 +503,7 @@ def cmd_changed(args: argparse.Namespace) -> int:
     branch_range = f"{merge_base}..HEAD" if (merge_base and states["branch"]) else None
 
     scan_args: list[str] = ["--source-labels"]
-    if states["staged"]:
+    if states["staged"] or states["removed_staged"]:
         scan_args.extend(["--staged", "--identity"])
     if states["unstaged"]:
         scan_args.append("--unstaged")
@@ -514,7 +531,7 @@ def cmd_changed(args: argparse.Namespace) -> int:
 
     secret_failures: list[tuple[str, str]] = []
     secret_checks: list[tuple[str, list[str]]] = []
-    if states["staged"]:
+    if states["staged"] or states["removed_staged"]:
         secret_checks.append(("staged", ["staged"]))
     if states["unstaged"]:
         secret_checks.append(("unstaged", ["files", *states["unstaged"]]))
@@ -537,9 +554,14 @@ def cmd_changed(args: argparse.Namespace) -> int:
         if rc != 0:
             secret_failures.append((label, out))
 
+    removed = {*states["removed_staged"], *states["removed_unstaged"]}
     all_changed = sorted(
-        set(states["staged"] + states["unstaged"] + states["untracked"] + states["branch"])
+        {*states["staged"], *states["unstaged"], *states["untracked"], *states["branch"], *removed}
     )
+    guard_changes = [
+        {"path": p, "change": "removed" if p in removed else "changed"}
+        for p in guard_trigger_paths(root, all_changed)
+    ]
     suite_plan = select_test_suites(root, all_changed)
     md_files = [p for p in all_changed if p.lower().endswith(".md")]
     test_results: list[StepResult] = []
@@ -565,6 +587,7 @@ def cmd_changed(args: argparse.Namespace) -> int:
             "rules_note": rules_note,
             "base": base_label,
             "states": {k: len(v) for k, v in states.items()},
+            "guard_changes": guard_changes,
             "privacy": {"status": privacy_status, "findings": privacy_findings},
             "secrets": {
                 "status": "clean" if not secret_failures else "findings",
@@ -595,9 +618,13 @@ def cmd_changed(args: argparse.Namespace) -> int:
     print(
         "STATES: "
         f"staged={len(states['staged'])} unstaged={len(states['unstaged'])} "
-        f"untracked={len(states['untracked'])} branch={len(states['branch'])}"
-        + (f" (base={base_label})" if base_label else "")
+        f"untracked={len(states['untracked'])} branch={len(states['branch'])} "
+        f"removed={len(removed)}" + (f" (base={base_label})" if base_label else "")
     )
+    if guard_changes:
+        print("GUARD CHANGES (these select the guard tests):")
+        for item in guard_changes:
+            print(f"  {item['path']} ({item['change']})")
     if privacy_findings:
         print("PRIVACY FINDINGS:")
         for item in privacy_findings:
