@@ -210,11 +210,22 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
         out.write(json_bytes(_summary(report.ok, exit_code, written, report)).decode("utf-8"))
     else:
         out.writelines(f"wrote {path}\n" for path in written.values())
-        for finding in sort_findings(report.blocking()):
-            err.write(f"{finding.code.value}: {finding.message}\n")
-        if not report.ok:
-            err.write(f"{TOOL_NAME} compile: {counts['error']} error(s); see {written['report']}\n")
+    _print_findings(report, err)
+    if not report.ok:
+        err.write(f"{TOOL_NAME} compile: {counts['error']} error(s); see {written['report']}\n")
     return exit_code
+
+
+def _print_findings(report: Report, err: TextIO) -> None:
+    """Every error and warning on stderr, with its hint: a caller that reads only the
+    terminal must not take a run with an ignored key for a clean one."""
+    for finding in sort_findings(report.findings):
+        if finding.severity is Severity.INFO:
+            continue
+        label = finding.code.value if finding.severity is Severity.ERROR else f"{finding.code.value} warning"
+        err.write(f"{label}: {finding.message}\n")
+        if finding.hint:
+            err.write(f"  hint: {finding.hint}\n")
 
 
 def _summary(ok: bool, exit_code: ExitCode, outputs: dict[str, str], report: Report) -> dict[str, Any]:
@@ -224,6 +235,8 @@ def _summary(ok: bool, exit_code: ExitCode, outputs: dict[str, str], report: Rep
         "exit_code": int(exit_code),
         "outputs": outputs,
         "findings": {severity.value: counts[severity.value] for severity in Severity},
+        # the report's own list, so a program needs no second read for what went wrong
+        "finding_list": [f.to_json() for f in sort_findings(report.findings)],
     }
 
 
