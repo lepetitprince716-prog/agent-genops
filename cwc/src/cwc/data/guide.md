@@ -30,7 +30,7 @@ is. This guide lists what cwc accepts beyond that.
 | `ui_role` | `cockpit`, `pipeline` or `plumbing` | `cockpit` moves the node into the Controls group. `pipeline` keeps it out of Controls (prompts and the empty latent go there by themselves otherwise). `plumbing` collapses the node, and it no longer gets a stage group of its own. |
 | `ui_optional` | `true` or `false` | `true` makes the node part of an optional module: bypassed in the canvas (mode 4), in its own group, and left out of `GRAPH.api.json` with links passed around it. `--all-enabled` also writes `GRAPH.full.api.json` with it on. Linked optional nodes form one module; give them the same `ui_group` to name it. |
 | `ui_seed` | `fixed` or `randomize` | Sets the node's `control_after_generate` widget. The default is `randomize`. Only for nodes that have that widget. |
-| `ui_order` | integer | Read when ordering nodes inside the Controls group. No effect was seen in a compile yet, so do not rely on it. |
+| `ui_order` | integer | Orders the Controls group's members of one kind, lower first, members without it last. The kinds keep their own order (positive prompt, negative prompt, reference image, size and batch, seed, other), and a member fed by another member stays after it, so `ui_order` decides only among, say, two `other` controls side by side. Elsewhere it matters only when more than 12 nodes of one group sit at the same step of the data flow and are cut into chunks. |
 | `ui_locked` | `true` or a list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
 | `ui_expose` | list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
 | `ui_note` | string | Accepted, no effect on the canvas yet. |

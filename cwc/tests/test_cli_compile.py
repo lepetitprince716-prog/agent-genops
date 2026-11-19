@@ -269,6 +269,47 @@ class StaleOutputTest(Folder):
         self.assertIn("earlier run", " ".join(out.split()))
 
 
+def with_primitives(steps_order=None, cfg_order=None):
+    """txt2img with steps and cfg set from two primitive nodes in the Controls group: two
+    members of the same control kind, neither feeding the other."""
+    doc = copy.deepcopy(TXT2IMG)
+    doc["steps_p"] = {"class_type": "PrimitiveInt", "inputs": {"value": 28}, "_meta": {"title": "Steps", "ui_role": "cockpit"}}
+    doc["cfg_p"] = {"class_type": "PrimitiveFloat", "inputs": {"value": 4.0}, "_meta": {"title": "CFG", "ui_role": "cockpit"}}
+    for key, order in (("steps_p", steps_order), ("cfg_p", cfg_order)):
+        if order is not None:
+            doc[key]["_meta"]["ui_order"] = order
+    doc["sampler"]["inputs"]["steps"] = ["steps_p", 0]
+    doc["sampler"]["inputs"]["cfg"] = ["cfg_p", 0]
+    return doc
+
+
+class UiOrderTest(Folder):
+    """``ui_order`` orders Controls members of one control kind and one step of the data flow,
+    lower first; it does not move a member ahead of another kind (the guide says so)."""
+
+    def tops(self, doc, preset="bento"):
+        self.assertEqual(run("compile", self.graph(doc), "-o", self.out, "--preset", preset)[0], ExitCode.OK)
+        return {node["title"]: node["pos"][1] for node in self.read(".ui.json")["nodes"] if node.get("title")}
+
+    def test_a_lower_order_comes_first_in_every_preset(self):
+        for preset in ("bento", "stepped", "swimlanes", "cockpit-split", "tower-preview"):
+            with self.subTest(preset=preset):
+                plain = self.tops(with_primitives(), preset)
+                self.assertLess(plain["CFG"], plain["Steps"])  # by id without ui_order
+                swapped = self.tops(with_primitives(1, 2), preset)
+                self.assertLess(swapped["Steps"], swapped["CFG"])
+                alone = self.tops(with_primitives(steps_order=5), preset)  # members without one go last
+                self.assertLess(alone["Steps"], alone["CFG"])
+
+    def test_it_does_not_move_a_member_ahead_of_another_kind(self):
+        doc = with_primitives(-5, -4)
+        doc["pos"]["_meta"]["ui_order"] = 9
+        tops = self.tops(doc)
+        self.assertLess(tops["Positive prompt"], tops["Negative prompt"])
+        self.assertLess(tops["Negative prompt"], tops["Steps"])
+        self.assertLess(tops["Canvas size"], tops["Steps"])
+
+
 def authored(doc, preset):
     doc = copy.deepcopy(doc)
     doc["_workflow"] = {**doc["_workflow"], "layout": {"preset": preset}}
