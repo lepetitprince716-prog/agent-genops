@@ -47,7 +47,15 @@ def _parser() -> argparse.ArgumentParser:
 
     build = commands.add_parser("compile", help="compile an authoring graph into a canvas and its API prompts")
     build.add_argument("graph", metavar="GRAPH.json", help="authoring file (API prompt with cwc relaxations)")
-    build.add_argument("-o", "--out", required=True, metavar="DIR", help="output folder")
+    build.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        metavar="DIR",
+        help="output folder; a run removes the outputs of an earlier run of the same graph name that it does "
+        "not write itself (a failed run leaves only its report), so an old canvas is never taken for a new one, "
+        "and names on stderr what it removed",
+    )
     build.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
     build.add_argument(
         "--preset",
@@ -257,13 +265,18 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
         report, exit_code = Report(Mode.COMPILE, findings=list(exc.findings)), exc.exit_code
     files["report"] = json_bytes(report.to_json())
 
+    removed: list[Path] = []  # outputs of an earlier run that this run does not replace
     try:
         Path(args.out).mkdir(parents=True, exist_ok=True)
         for kind, path in paths.items():
             if kind in files:
                 write_atomic(path, files[kind])
             else:
-                path.unlink(missing_ok=True)
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    continue
+                removed.append(path)
     except OSError as exc:
         leftover = _remove_artefacts(paths.values())  # never leave a canvas and a report of different runs
         message = f"cannot write to {args.out}: {exc.strerror or exc}"
@@ -283,6 +296,9 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     else:
         out.writelines(f"wrote {path}\n" for path in written.values())
     _print_findings(report, err)
+    if removed:
+        names = ", ".join(str(path) for path in removed)
+        err.write(f"{TOOL_NAME} compile: removed {names} from an earlier run, which this run does not replace\n")
     if not report.ok:
         err.write(f"{TOOL_NAME} compile: {counts['error']} error(s); see {written['report']}\n")
     elif compiled is not None:

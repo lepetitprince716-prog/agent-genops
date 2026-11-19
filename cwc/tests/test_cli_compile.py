@@ -220,6 +220,55 @@ class CompileTest(Folder):
         return json.loads((self.out / f"{name}.report.json").read_text(encoding="utf-8"))
 
 
+class StaleOutputTest(Folder):
+    """A run removes the outputs of an earlier run of the same graph that it does not write
+    itself, so an old canvas is never taken for this run's, and says on stderr what it removed."""
+
+    def removed_line(self, err):
+        lines = [line for line in err.splitlines() if line.startswith("cwc compile: removed ")]
+        self.assertEqual(len(lines), 1, err)
+        return lines[0]
+
+    def test_a_failed_run_names_the_outputs_it_removed(self):
+        path = self.graph(with_lora(TXT2IMG))
+        self.assertEqual(run("compile", path, "-o", self.out, "--all-enabled")[0], ExitCode.OK)
+        doc = with_lora(TXT2IMG)
+        doc["decode"]["class_type"] = "VAEDecodeNope"
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual([p.name for p in self.out.iterdir()], ["graph.report.json"])
+        line = self.removed_line(err)
+        for name in ("graph.ui.json", "graph.api.json", "graph.full.api.json"):
+            self.assertIn(str(self.out / name), line)
+        self.assertNotIn("graph.report.json", line)
+        self.assertTrue(err.rstrip("\n").splitlines()[-1].startswith("cwc compile: 1 error(s)"), err)
+
+    def test_a_successful_run_names_the_full_prompt_it_removed(self):
+        path = self.graph(with_lora(TXT2IMG))
+        self.assertEqual(run("compile", path, "-o", self.out, "--all-enabled")[0], ExitCode.OK)
+        code, _, err = run("compile", path, "-o", self.out, "--json")
+        self.assertEqual(code, ExitCode.OK)
+        line = self.removed_line(err)
+        self.assertIn(str(self.out / "graph.full.api.json"), line)
+        self.assertNotIn("graph.ui.json", line)
+
+    def test_nothing_to_remove_prints_nothing(self):
+        code, _, err = run("compile", self.graph(TXT2IMG), "-o", self.out)
+        self.assertEqual(code, ExitCode.OK)
+        self.assertNotIn("removed", err)
+        doc = copy.deepcopy(TXT2IMG)
+        doc["decode"]["class_type"] = "VAEDecodeNope"
+        code, _, err = run("compile", self.graph(doc, "other.json"), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertNotIn("removed", err)  # graph.* belongs to another graph name
+
+    def test_the_help_says_so(self):
+        code, out, _ = run("compile", "--help")
+        self.assertEqual(code, ExitCode.OK)
+        self.assertIn("removes", " ".join(out.split()))
+        self.assertIn("earlier run", " ".join(out.split()))
+
+
 def authored(doc, preset):
     doc = copy.deepcopy(doc)
     doc["_workflow"] = {**doc["_workflow"], "layout": {"preset": preset}}

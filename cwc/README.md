@@ -53,6 +53,11 @@ in `finding_list` next to the `findings` counts. A successful run ends with one 
 the preset (and why, under `auto`), the number of groups, optional modules and warnings, and
 the `cwc render` command that previews the canvas.
 
+`compile` writes `<name>.ui.json`, `<name>.api.json`, with `--all-enabled` `<name>.full.api.json`,
+and always `<name>.report.json`, where `<name>` is the graph file's name. It removes the files of
+that name an earlier run left and this run does not write: a failed run leaves only its report,
+so an old canvas is never taken for the new one. One stderr line names what it removed.
+
 Inputs that used to pass and now do not, or now warn:
 
 - A `_meta` key that starts with `ui_` but is not one of cwc's keys is an error (E7, exit 3)
