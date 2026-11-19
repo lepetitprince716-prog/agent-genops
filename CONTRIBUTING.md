@@ -28,7 +28,9 @@ macOS). The hooks fail closed if Betterleaks is missing.
 - `identity author:1: lan_hostname -- ...`: git has no email set and guessed one from your
   machine's name. Set `user.email` as in step 2.
 - Any finding stops the commit. If the finding is in the message, the message is still in
-  `.git/COMMIT_EDITMSG`; fix it and commit again.
+  `.git/COMMIT_EDITMSG`; fix it and commit again. The message is checked as git will store
+  it: after an editor, git's own comment lines and the `-v` diff are left out; with `-m` or
+  `-F`, every line counts, `#` lines too.
 - A refusal about `.betterleaksignore` or `.gitleaksignore`: the file in your working tree differs
   from the staged version (or from the pushed commit). Stage it, or restore it.
 
@@ -119,7 +121,7 @@ them runs that project's workflow in `.github/workflows/`.
 - `privacy_scan: private rules not loaded (0 rules)`：正常。私有规则文件是维护者用的，贡献者不需要。
 - `identity author:1: email -- ...`：按第 2 步设置 `user.email`。
 - `identity author:1: lan_hostname -- ...`：git 没设邮箱，用你的机器名猜了一个。按第 2 步设置 `user.email`。
-- 有任何命中，提交都会被拦下。命中在提交信息里时，信息还留在 `.git/COMMIT_EDITMSG`，改好再提交一次。
+- 有任何命中，提交都会被拦下。命中在提交信息里时，信息还留在 `.git/COMMIT_EDITMSG`，改好再提交一次。提交信息按 git 存下来的样子检查：开了编辑器时，git 自己的注释行和 `-v` 的 diff 不算；用 `-m` 或 `-F` 时每一行都算，`#` 开头的也算。
 - 提示 `.betterleaksignore` 或 `.gitleaksignore` 的拒绝：工作区里的这个文件和暂存区的版本（或被推送的提交）不一致。把它暂存，或者还原。
 
 ### 贡献者模式和维护者模式

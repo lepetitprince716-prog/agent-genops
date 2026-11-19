@@ -19,7 +19,7 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # the hooks rejec
 python3 tools/privacy_scan.py --tracked --history              # expect: clean
 ```
 
-The hooks run the scanner like this. `pre-commit` runs `--identity --staged`. `commit-msg` runs `--message "$1"`. `pre-push` runs `--rev <sha> --ref-name <ref>` once for each ref being pushed, and then looks at the other local refs only to warn. A push that deletes a remote ref publishes nothing, so it is not checked. Only a hand run of `.githooks/pre-push` with no arguments, or from a terminal, scans `--history`. Each hook also runs the Betterleaks wrapper; see [PRIVACY.md](../PRIVACY.md#how-the-guard-works).
+The hooks run the scanner like this. `pre-commit` runs `--identity --staged`. `commit-msg` runs `--message "$1" --as-committed <file in the git directory>` and hands that file to the secret scan (the whole message file when it comes back empty), so both read only what the commit will keep. `pre-push` runs `--rev <sha> --ref-name <ref>` once for each ref being pushed, and then looks at the other local refs only to warn. A push that deletes a remote ref publishes nothing, so it is not checked. Only a hand run of `.githooks/pre-push` with no arguments, or from a terminal, scans `--history`. Each hook also runs the Betterleaks wrapper; see [PRIVACY.md](../PRIVACY.md#how-the-guard-works).
 
 CI runs `--no-private --tracked --history` on every push and every pull request. On a pull request the scanner and rules come from the base branch commit, not from the pull request.
 
@@ -40,6 +40,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 | `--ref-name REF` | check a target ref name against the rules (repeatable) |
 | `--identity` | the email in `GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` must match `allowed_emails` |
 | `--message FILE` | a commit message file; every line is scanned, `#` lines too |
+| `--as-committed OUT` | with `--message`, for the commit-msg hook: scan only what git keeps after the hook and write it to OUT (a failed write is exit 2). git cleans up after the hook. With no editor (`GIT_EDITOR=:`), or `commit.cleanup` `verbatim` or `whitespace`, that is every line. Under `strip`, the default with an editor, lines starting with the comment string (`core.commentChar` or `core.commentString`, `#` by default) and everything from the scissors line on are dropped; under `scissors`, only the scissors line and what follows. A comment string of `auto`, or a config git cannot read, keeps every line |
 | `--rules FILE` | use another public rules file |
 | `--no-private` | do not load the private rules |
 | `--require-private` | fail unless non-empty private rules are loaded |
@@ -97,7 +98,8 @@ Your own patterns (names, handles, machine names) live outside the repository in
 - A hostname with an underscore right in front of it (`_name.local_`, as Markdown emphasis writes it) is not caught by the `lan_hostname` rule.
 - JPEG, WEBP and GIF are scanned as raw bytes; a large photo can rarely trip a rule by chance.
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
-- With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
+- The commit-msg hook cannot see `--cleanup` on the command line. An editor commit with `--cleanup=verbatim` or `--cleanup=whitespace` keeps git's comment lines in the commit, and the hook does not scan them; the pre-push scan reads the stored commit and still refuses them.
+- The hook cannot see `-v` either. Under `strip` it takes a scissors line as git's and skips what follows, which git keeps when `-v` was not given; pre-push catches that too. Under `verbatim` or `whitespace` the `-v` diff is scanned, though git drops it.
 
 ### Secret scan wrapper
 
@@ -188,7 +190,7 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # hook 只放行 
 python3 tools/privacy_scan.py --tracked --history              # 应当输出 clean
 ```
 
-hook 这样调用扫描器：`pre-commit` 运行 `--identity --staged`；`commit-msg` 运行 `--message "$1"`；`pre-push` 对每个被推送的 ref 运行一次 `--rev <sha> --ref-name <ref>`，再检查本地其余的 ref，但那一步只告警。删除远端 ref 的推送不发布任何内容，所以不检查。只有不带参数、或在终端里手动运行 `.githooks/pre-push` 时，才会扫 `--history`。每个 hook 还会运行 Betterleaks 包装脚本，见 [PRIVACY.md](../PRIVACY.md#防护怎么工作)。
+hook 这样调用扫描器：`pre-commit` 运行 `--identity --staged`；`commit-msg` 运行 `--message "$1" --as-committed <git 目录里的一个文件>`，再把这个文件交给密钥扫描（它是空的就改交整个说明文件），两者都只读提交会留下的内容；`pre-push` 对每个被推送的 ref 运行一次 `--rev <sha> --ref-name <ref>`，再检查本地其余的 ref，但那一步只告警。删除远端 ref 的推送不发布任何内容，所以不检查。只有不带参数、或在终端里手动运行 `.githooks/pre-push` 时，才会扫 `--history`。每个 hook 还会运行 Betterleaks 包装脚本，见 [PRIVACY.md](../PRIVACY.md#防护怎么工作)。
 
 CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --history`。pull request 上，扫描器和规则取自 base 分支的那个提交，不用 pull request 自己带的版本。
 
@@ -209,6 +211,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `--ref-name REF` | 按规则检查目标 ref 名（可重复） |
 | `--identity` | `GIT_AUTHOR_IDENT` 和 `GIT_COMMITTER_IDENT` 里的邮箱必须匹配 `allowed_emails` |
 | `--message FILE` | 一个提交说明文件，每一行都扫，`#` 开头的也算 |
+| `--as-committed OUT` | 和 `--message` 一起用，给 commit-msg 钩子：只扫 git 在钩子之后清理完会留下的内容，并把它写进 OUT（写不进去是退出码 2）。没开编辑器（`GIT_EDITOR=:`），或 `commit.cleanup` 是 `verbatim`、`whitespace` 时，留下的是每一行。`strip`（开编辑器时的默认）去掉以注释字符串（`core.commentChar` 或 `core.commentString`，默认 `#`）开头的行和剪刀线及其后的内容；`scissors` 只去掉剪刀线及其后的内容。注释字符串是 `auto`，或 git 读不出配置时，留下每一行 |
 | `--rules FILE` | 换用另一份公开规则 |
 | `--no-private` | 不加载私有规则 |
 | `--require-private` | 没有加载到非空的私有规则就失败 |
@@ -255,7 +258,8 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 - 下划线紧贴在主机名开头的写法（如 Markdown 强调写成的 `_name.local_`）不会被 `lan_hostname` 规则抓到。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
-- 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
+- commit-msg 钩子看不到命令行上的 `--cleanup`。编辑器式提交加 `--cleanup=verbatim` 或 `--cleanup=whitespace` 时，git 的注释行会进提交，钩子不扫它们；推送前的扫描读存下来的提交对象，照样会拦。
+- 钩子也看不到 `-v`。`strip` 下它把剪刀线当成 git 加的，不扫其后的内容，而没带 `-v` 时 git 会保留这些内容；推送前的扫描同样会拦。`verbatim` 或 `whitespace` 下 `-v` 的 diff 会被扫，尽管 git 会删掉它。
 
 #### 密钥扫描包装脚本
 

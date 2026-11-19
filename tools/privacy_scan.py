@@ -1213,18 +1213,97 @@ def read_commit_encoding(cwd: Path | None = None) -> str | None:
     return done.stdout.decode("latin-1").strip() or None
 
 
-def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
+CUT_LINE = b"------------------------ >8 ------------------------\n"
+
+
+UNREADABLE = object()  # a config value git cannot give: read as "do not assume a cleanup"
+
+
+def last_config_value(pattern: str, cwd: Path | None = None) -> bytes | None | object:
+    """The value git applies for the keys matching ``pattern`` (the last one set), raw bytes.
+
+    None when no such key is set. UNREADABLE when one is set without a value or git cannot
+    answer: the callers read that as "do not assume a cleanup", which scans more, never less."""
+    try:
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "-z", "--get-regexp", pattern],
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return UNREADABLE
+    entries = [entry for entry in done.stdout.split(b"\0") if entry]
+    if done.returncode == 1 and not entries:
+        return None
+    if done.returncode != 0 or not entries:
+        return UNREADABLE
+    _key, newline, value = entries[-1].partition(b"\n")
+    return value if newline and value else UNREADABLE
+
+
+def committed_message(data: bytes, cwd: Path | None = None) -> bytes:
+    """The part of a commit-msg hook's message file that the commit will keep.
+
+    git runs the hook before it cleans the message up (git-commit(1) ``--cleanup``,
+    githooks(5)). With no editor git sets ``GIT_EDITOR=:`` for the hook and cleans up
+    whitespace only, so every line stays. With an editor the default cleanup, ``strip``,
+    removes the lines that start with the comment string (``core.commentChar`` or
+    ``core.commentString``, ``#`` by default) and, under ``-v``, the diff from the scissors
+    line on; ``scissors`` removes only the scissors line and what follows it; ``verbatim`` and
+    ``whitespace`` remove nothing. ``--cleanup`` on the command line is not visible here, and
+    neither is ``-v``: a scissors line under ``strip`` is taken as git's. Whatever cannot be
+    read (the comment string ``auto``, a config git cannot answer) keeps every line.
+
+    Removed comment lines become empty lines, so line numbers still match the hook's file.
+    """
+    if os.environ.get("GIT_EDITOR") == ":":
+        return data
+    cleanup = last_config_value(r"^commit\.cleanup$", cwd)
+    if cleanup is None or cleanup == b"default":
+        cleanup = b"strip"
+    if cleanup not in (b"strip", b"scissors"):
+        return data
+    comment = last_config_value(r"^core\.comment(char|string)$", cwd)
+    if comment is None:
+        comment = b"#"
+    if not isinstance(comment, bytes) or comment == b"auto":
+        return data
+    cut = comment + b" " + CUT_LINE
+    if data.startswith(cut):
+        data = b""
+    else:
+        at = data.find(b"\n" + cut)
+        if at >= 0:
+            data = data[: at + 1]
+    if cleanup == b"scissors":
+        return data
+    lines = data.split(b"\n")
+    return b"\n".join(b"" if line.startswith(comment) else line for line in lines)
+
+
+def scan_message(path: Path, rules: RuleSet, kept_out: Path | None = None) -> list[Finding]:
     """Scan a commit message file, every line of it.
 
     A line starting with ``#`` is not skipped: git keeps it in the stored message unless the
     commit is cleaned up (``git commit -F FILE`` without ``--cleanup`` does not strip it), and
     what an editor's template adds there (branch, file names) is as public as the commit.
     There is no commit object yet, so the bytes are read in i18n.commitEncoding (UTF-8 when it
-    is not set), the encoding git will store them under."""
+    is not set), the encoding git will store them under.
+
+    With ``kept_out`` (the commit-msg hook) only what the commit will keep is scanned, as
+    ``committed_message`` works it out, and those bytes are written to ``kept_out`` first so
+    the hook's next scanner reads the same text; a failed write is an error, not a pass."""
     try:
         data = path.read_bytes()
     except OSError as exc:
         raise ScanError(f"cannot read message file {path}: {exc.strerror}") from exc
+    if kept_out is not None:
+        data = committed_message(data)
+        try:
+            kept_out.write_bytes(data)
+        except OSError as exc:
+            raise ScanError(f"cannot write {kept_out}: {exc.strerror}") from exc
     where = path.as_posix()
     views, readable = message_views(data, read_commit_encoding())
     findings = [] if readable else [Finding(where, 1, "undecodable", WHY_BAD_ENCODING)]
@@ -1367,7 +1446,7 @@ def run_scans(
     if args.identity:
         findings += scan_identity(rules)
     if args.message:
-        findings += scan_message(args.message, rules)
+        findings += scan_message(args.message, rules, kept_out=args.as_committed)
     if args.paths:
         findings += scan_paths(args.paths, rules, redactor=redactor)
     return findings
@@ -1450,6 +1529,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="scan a commit message file, every line of it",
     )
     parser.add_argument(
+        "--as-committed",
+        type=Path,
+        metavar="OUT",
+        help="with --message, for the commit-msg hook: scan only what git keeps after it cleans "
+        "the message up (an editor commit strips its comment lines) and write that text to OUT",
+    )
+    parser.add_argument(
         "--rules",
         type=Path,
         metavar="FILE",
@@ -1507,6 +1593,8 @@ def main(argv: list[str] | None = None) -> int:
         args.message,
         args.paths,
     ]
+    if args.as_committed and not args.message:
+        parser.error("--as-committed needs --message")
     if args.clone_mode:
         if args.redact_stream or any(modes):
             parser.error("--clone-mode takes no other mode")

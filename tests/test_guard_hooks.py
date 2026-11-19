@@ -617,6 +617,163 @@ class MessageCommentLineTests(TemplateCase):
         self.assertEqual(repo.git("log", "-1", "--format=%s"), "a clean subject")
 
 
+class EditorCleanupTests(TemplateCase):
+    """When git opens an editor it strips its own comment lines after the commit-msg hook.
+
+    The hook scans only what the commit will keep then: comment lines and, with -v, the diff
+    below the scissors line are git's, not the message's. Without an editor, or when the
+    configured cleanup keeps them, every line is scanned.
+    """
+
+    PRIVATE_NAME = f"notes-{MARKER}.txt"
+
+    def editor_env(self, repo: Repo, text: str) -> dict[str, str]:
+        """An editor that keeps a copy of what git gave it (editor.sh.seen) and puts text above
+        it; no terminal is opened."""
+        script = repo.base / "editor.sh"
+        script.write_text(
+            "#!/bin/sh\n"
+            "cp \"$1\" \"$0.seen\"\n"
+            "{ cat \"$0.text\"; cat \"$1\"; } > \"$1.new\" && mv \"$1.new\" \"$1\"\n"
+        )
+        script.chmod(0o755)
+        (repo.base / "editor.sh.text").write_text(text)
+        return dict(repo.env, GIT_EDITOR=str(script))
+
+    def stage_removal_of_private_name(self, repo: Repo) -> str:
+        """A file whose name carries the marker, committed past the hooks, then git rm'd."""
+        repo.add_file(self.PRIVATE_NAME, "plain\n")
+        repo.unchecked_commit("setup past the hooks")
+        repo.git("rm", "-q", self.PRIVATE_NAME)
+        return repo.head()
+
+    def test_editor_commit_of_git_rm_of_a_private_file_name_is_accepted(self) -> None:
+        repo = self.repo()
+        before = self.stage_removal_of_private_name(repo)
+        committed = repo.run("git", "commit", "-q", env=self.editor_env(repo, "Remove a file\n"))
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertNotEqual(repo.head(), before)
+        self.assertNotIn(MARKER, repo.git("log", "-1", "--format=%B"))
+
+    def test_verbose_editor_commit_removing_a_home_path_line_is_accepted(self) -> None:
+        repo = self.repo()
+        home_path = "/" + "Users" + "/" + "zzsynthuser" + "/notes"
+        repo.add_file("doc.txt", f"path {home_path}\nkeep\n")
+        repo.unchecked_commit("setup past the hooks")
+        repo.add_file("doc.txt", "keep\n")
+        before = repo.head()
+        env = self.editor_env(repo, "Remove a leaked path\n")
+        committed = repo.run("git", "commit", "-q", "-v", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertNotEqual(repo.head(), before)
+        self.assertEqual(repo.git("log", "-1", "--format=%B"), "Remove a leaked path")
+        # The file the hook read held the removed line in git's diff below the scissors line.
+        self.assertIn(f"-path {home_path}", (repo.base / "editor.sh.seen").read_text())
+
+    def test_verbose_editor_commit_removing_a_token_line_is_accepted(self) -> None:
+        """The secret scan reads the same kept text: a token only in git's diff is not refused."""
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("conf.txt", f"value {token}\nkeep\n")
+        repo.unchecked_commit("setup past the hooks")
+        repo.add_file("conf.txt", "keep\n")
+        before = repo.head()
+        env = self.editor_env(repo, "Remove a leaked value\n")
+        committed = repo.run("git", "commit", "-q", "-v", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertNotEqual(repo.head(), before)
+        self.assertIn(f"-value {token}", (repo.base / "editor.sh.seen").read_text())
+
+    def test_message_mode_alone_still_scans_every_line(self) -> None:
+        repo = self.repo()
+        message = repo.base / "message.txt"
+        message.write_text(f"subject\n\n# a note about {MARKER}\n")
+        scanned = repo.privacy("--message", str(message))
+        self.assertEqual(scanned.returncode, 1, combined(scanned))
+        self.assertIn("synthetic_private_marker", combined(scanned))
+
+    def test_an_unwritable_kept_file_is_an_error_not_a_pass(self) -> None:
+        repo = self.repo()
+        message = repo.base / "message.txt"
+        message.write_text("subject\n")
+        target = repo.base / "missing-dir" / "kept.txt"
+        scanned = repo.privacy("--message", str(message), "--as-committed", str(target))
+        self.assertEqual(scanned.returncode, 2, combined(scanned))
+        self.assertIn("cannot write", combined(scanned))
+
+    def test_editor_commit_with_a_marker_in_the_message_text_is_refused(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        env = self.editor_env(repo, f"subject\n\nbody about {MARKER}\n")
+        committed = repo.run("git", "commit", "-q", env=env)
+        self.assert_refused(committed, "synthetic_private_marker")
+        self.assertNotIn(MARKER, combined(committed))
+        self.assertEqual(repo.head(), before)
+
+    def test_editor_commit_scans_every_line_when_the_cleanup_keeps_comments(self) -> None:
+        for mode in ("verbatim", "whitespace"):
+            with self.subTest(cleanup=mode):
+                repo = self.repo()
+                before = self.stage_removal_of_private_name(repo)
+                repo.git("config", "commit.cleanup", mode)
+                env = self.editor_env(repo, "Remove a file\n")
+                committed = repo.run("git", "commit", "-q", env=env)
+                self.assert_refused(committed, "synthetic_private_marker")
+                self.assertNotIn(MARKER, combined(committed))
+                self.assertEqual(repo.head(), before)
+
+    def test_scissors_cleanup_keeps_comment_lines_above_the_cut_so_they_are_scanned(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        repo.git("config", "commit.cleanup", "scissors")
+        env = self.editor_env(repo, f"subject\n\n# a note about {MARKER}\n")
+        committed = repo.run("git", "commit", "-q", env=env)
+        self.assert_refused(committed, "synthetic_private_marker")
+        self.assertEqual(repo.head(), before)
+        # Without the marker the same commit lands and git keeps the comment line above the cut.
+        env = self.editor_env(repo, "subject\n\n# a plain note\n")
+        committed = repo.run("git", "commit", "-q", "-v", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertIn("# a plain note", repo.git("log", "-1", "--format=%B"))
+
+    def test_the_configured_comment_string_decides_which_lines_git_strips(self) -> None:
+        repo = self.repo()
+        before = self.stage_removal_of_private_name(repo)
+        repo.git("config", "core.commentChar", ";")
+        # git writes its status with ';' now and strips those lines: accepted.
+        committed = repo.run("git", "commit", "-q", env=self.editor_env(repo, "Remove a file\n"))
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertNotIn(MARKER, repo.git("log", "-1", "--format=%B"))
+        # A '#' line is message text under that setting: scanned and refused.
+        repo.add_file("note.txt", "clean\n")
+        after = repo.head()
+        self.assertNotEqual(after, before)
+        env = self.editor_env(repo, f"subject\n\n# a note about {MARKER}\n")
+        self.assert_refused(repo.run("git", "commit", "-q", env=env), "synthetic_private_marker")
+        self.assertEqual(repo.head(), after)
+
+    def test_comments_kept_by_a_command_line_cleanup_are_stopped_at_push(self) -> None:
+        """Known gap: --cleanup on the command line is invisible to the commit-msg hook.
+
+        With an editor and --cleanup=verbatim git keeps its comment lines, but the hook reads
+        the configured cleanup and skips them. The pre-push scan reads the stored commit object
+        and refuses it.
+        """
+        repo = self.repo()
+        self.stage_removal_of_private_name(repo)
+        remote_before = repo.remote_tip()
+        env = self.editor_env(repo, "Remove a file\n")
+        committed = repo.run("git", "commit", "-q", "--cleanup=verbatim", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        self.assertIn(MARKER, repo.git("log", "-1", "--format=%B"))
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "synthetic_private_marker")
+        self.assertNotIn(MARKER, combined(pushed))
+        self.assertEqual(repo.remote_tip(), remote_before)
+
+
 class SubmoduleTests(TemplateCase):
     """A staged gitlink cannot be scanned, so it is refused."""
 

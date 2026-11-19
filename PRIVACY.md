@@ -88,7 +88,7 @@ change must pass both. Betterleaks never prints a value (`--redact`), a finding 
 | Hook | Runs | Looks at |
 | --- | --- | --- |
 | `pre-commit` | `sh tools/secret_scan.sh ignore-check --index`, then `staged` | what the next commit adds |
-| `commit-msg` | `sh tools/secret_scan.sh ignore-check --index`, then `message "$1"` | the commit message, every line (`#` lines included) |
+| `commit-msg` | `sh tools/secret_scan.sh ignore-check --index`, then `message` on the text the privacy scan wrote with `--as-committed` | the commit message as it will be stored: every line (`#` lines included), except the comment lines and `-v` diff that git strips after an editor |
 | `pre-push` | `sh tools/secret_scan.sh ignore-check <sha>`, then `rev <sha>`, for each pushed ref | the pushed commit and its history, with the commit and tag messages |
 
 Started by hand with no arguments, `pre-push` runs `ignore-check HEAD` and `history` instead, which
@@ -175,7 +175,7 @@ the same shape next time.
 
 两个扫描器并行。`tools/privacy_scan.py` 管本仓库自己的规则：地址、用户目录路径、邮箱、主机名、图片元数据，以及你本机的私有规则。[Betterleaks](https://github.com/betterleaks/betterleaks) 是离线的密钥扫描器，内置覆盖各家服务商密钥和令牌的规则集，也看熵值。两者互不替代，一次改动必须同时通过。Betterleaks 从不打印密钥本身（`--redact`），一条命中就是一行 `规则 路径:行号 提交`。
 
-[`tools/secret_scan.sh`](tools/secret_scan.sh) 包装了它，hook 在隐私扫描之后调用：`pre-commit` 先跑 `ignore-check --index`，再跑 `staged`（这次提交新增的内容）；`commit-msg` 先跑 `ignore-check --index`，再跑 `message "$1"`（提交信息的每一行，`#` 开头的也算）；`pre-push` 对每个被推送的 ref 先跑 `ignore-check <sha>`，再跑 `rev <sha>`（被推送的提交和它的历史，加上提交信息和标签信息）。不带参数手动运行 `pre-push` 时，改跑 `ignore-check HEAD` 和 `history`，后者覆盖所有引用上的每个提交 diff。全部模式和退出码见 [`tools/README.md`](tools/README.md#密钥扫描包装脚本)。
+[`tools/secret_scan.sh`](tools/secret_scan.sh) 包装了它，hook 在隐私扫描之后调用：`pre-commit` 先跑 `ignore-check --index`，再跑 `staged`（这次提交新增的内容）；`commit-msg` 先跑 `ignore-check --index`，再对隐私扫描用 `--as-committed` 写出的内容跑 `message`（提交信息存下来的样子：每一行都算，`#` 开头的也算，只有开了编辑器之后 git 会删掉的注释行和 `-v` 的 diff 不算）；`pre-push` 对每个被推送的 ref 先跑 `ignore-check <sha>`，再跑 `rev <sha>`（被推送的提交和它的历史，加上提交信息和标签信息）。不带参数手动运行 `pre-push` 时，改跑 `ignore-check HEAD` 和 `history`，后者覆盖所有引用上的每个提交 diff。全部模式和退出码见 [`tools/README.md`](tools/README.md#密钥扫描包装脚本)。
 
 每台机器装一次：`brew install betterleaks`，或到 https://github.com/betterleaks/betterleaks/releases 下载。`PATH` 上找不到它时 hook 会失败（退出码 3）并说明原因：找不到工具就放行，等于没有守卫。CI 安装钉死的 1.10.1 发布包，校验 SHA-256，然后跑 `sh tools/secret_scan.sh history`；pull request 上还会用 `range` 扫 pull request 自己的提交。另一个 job 用 `python3 -B -m unittest discover -s tests` 跑防护的全部测试，本地也可以这样跑。在线验证是关着的，因为它会把候选密钥发到外面；仓库自己的 Betterleaks 配置也不会被加载。
 
