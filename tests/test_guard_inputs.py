@@ -666,6 +666,24 @@ class ImageAndBinaryTests(unittest.TestCase):
             with self.subTest(args=args):
                 refused_by_secret_scan(self, self.repo.secret(*args), token)
 
+    def test_a_symlink_replaced_by_a_binary_file_with_a_token_is_found_in_the_history_modes(self) -> None:
+        # A type change (git status T) is a changed file like any other: the pass over what
+        # Betterleaks skips as binary has to take it, not only added and modified files.
+        token = registry_token()
+        link = self.repo.path / "item.dat"
+        link.symlink_to("nowhere")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("a symlink")
+        link.unlink()
+        link.write_bytes(b"\x00key = " + token.encode() + b"\n")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("a binary file in its place")
+        kinds = self.repo.git("diff", "--raw", "--no-renames", "HEAD~1", "HEAD")
+        self.assertIn(" T\titem.dat", kinds)
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
+
     def test_the_unstaged_mode_reads_binary_content_from_a_subdirectory(self) -> None:
         # git prints the paths of a diff relative to the top of the repository; run from a
         # subdirectory, opening them as given found no file and the pass skipped it.
