@@ -111,7 +111,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
 | `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
 | `range BASE..HEAD` | the commits in a range, merges against their first parent, and their messages |
-| `files FILE...` | the named working-tree files; symlinks are not followed |
+| `files FILE...` | the named working-tree files; symlinks are not followed. A file whose head Betterleaks' dir mode sniffs and skips (PDF, ELF, ZIP, gzip, MZ and more) is read again from a copy with an added empty first line, so a finding there counts one line more |
 | `ignore-check --index` or `ignore-check OBJECT` | exits 1 unless `.betterleaksignore` and `.gitleaksignore` in the working tree are byte for byte the versions in the index or in the tree of `OBJECT`; a missing file counts as a version |
 
 Exit status: `0` clean, `2` usage error, `3` Betterleaks is missing, anything else is a finding or a Betterleaks failure. The hooks run `ignore-check` before each scan, so a working-tree ignore file that the commit does not carry cannot hide a finding. Environment controls (`SECRET_SCAN_IGNORE_PATH`, `SECRET_SCAN_IGNORE_ALLOW=1`, and the redaction settings) are described in the header of the script.
@@ -269,7 +269,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
 | `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |
 | `range BASE..HEAD` | 一个区间里的提交（合并提交对照第一个父提交）和它们的提交说明 |
-| `files FILE...` | 指定的工作区文件，不跟随符号链接 |
+| `files FILE...` | 指定的工作区文件，不跟随符号链接。文件头被 Betterleaks 的 dir 模式认成 PDF、ELF、ZIP、gzip、MZ 等而被跳过的文件，另用加了一个空行的副本再读一遍，命中的行号因此多 1 |
 | `ignore-check --index` 或 `ignore-check OBJECT` | 工作区里的 `.betterleaksignore` 和 `.gitleaksignore` 必须和暂存区里、或 `OBJECT` 的 tree 里的版本逐字节相同，否则退出码为 1；文件不存在也算一个版本 |
 
 退出码：`0` 干净，`2` 用法错误，`3` 找不到 Betterleaks，其余是命中或 Betterleaks 自己失败。hook 在每次扫描之前先跑 `ignore-check`，所以提交里没有的工作区 ignore 文件，不能用来遮住命中。环境变量（`SECRET_SCAN_IGNORE_PATH`、`SECRET_SCAN_IGNORE_ALLOW=1` 和脱敏相关的几个）写在脚本开头的注释里。

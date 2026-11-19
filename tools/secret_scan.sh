@@ -15,6 +15,8 @@
 #   sh tools/secret_scan.sh range BASE..HEAD commits in a range (merges against their first
 #                                            parent), plus their messages
 #   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
+#                                            (a file Betterleaks' dir mode skips by its head is
+#                                            read again from a copy with an empty first line)
 #   sh tools/secret_scan.sh ignore-check --index | OBJECT
 #                                            exit 1 unless the working tree's .betterleaksignore
 #                                            and .gitleaksignore are byte for byte the versions in
@@ -440,12 +442,26 @@ case "$mode" in
   files)
     shift
     rc_all=0
+    sniffed=0
     for target in "$@"; do
       if [ -L "$target" ]; then
         link_text=$(readlink "$target")
         printf '%s\n' "$link_text" | scan "symlink target" stdin || rc_all=1
       elif [ -f "$target" ]; then
-        scan "working-tree file" dir "$target" || rc_all=1
+        # The dir mode also skips a file by a head that sniffs as an executable, an archive or a
+        # document (%PDF-, an ELF header, PK, MZ and others; checked with 1.10.1), text or not.
+        # When the first read finds nothing, a copy with an empty first line (so its head sniffs
+        # as nothing) is read again under the file's own name; its line numbers count that line.
+        # Nothing is read twice when the first read already reported.
+        if scan "working-tree file" dir "$target"; then
+          sniffed=$((sniffed + 1))
+          mkdir "$work/sniff$sniffed"
+          base=${target##*/}
+          { printf '\n'; cat "$target"; } >"$work/sniff$sniffed/$base"
+          (cd "$work/sniff$sniffed" && scan "working-tree file past its head (line numbers count an added empty first line)" dir "./$base") || rc_all=1
+        else
+          rc_all=1
+        fi
         scan_binary file "$target" || rc_all=1
       else
         echo "secret_scan: unreadable or missing file: $target" >&2

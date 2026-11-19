@@ -688,5 +688,52 @@ class DefaultPathPrefilterTests(unittest.TestCase):
                 self.assertIn(name, combined(scanned))
 
 
+# Heads that Betterleaks' dir mode sniffs as an executable, an archive or a document and then
+# skips (found with 1.10.1 by trying each one on a file with a token behind it), written here
+# from the format specifications. None holds a NUL byte, so git calls the file text.
+SNIFFED_HEADS = {
+    "pdf": b"%PDF-1.4",
+    "elf": b"\x7fELF text",
+    "zip": b"PK\x03\x04",
+    "gzip": b"\x1f\x8b\x08",
+    "exe": b"MZ",
+    "7z": b"7z\xbc\xaf\x27\x1c",
+}
+
+
+class SniffedHeadTests(unittest.TestCase):
+    """The files mode (what ./check changed runs on unstaged and untracked files) reads a text
+    file whose first bytes look like an executable, an archive or a document, which the dir mode
+    of Betterleaks skips by that head."""
+
+    def test_a_token_behind_a_sniffed_head_is_found_by_the_files_mode(self) -> None:
+        for label, head in SNIFFED_HEADS.items():
+            with self.subTest(head=label):
+                repo = Repo(self)
+                token = registry_token()
+                name = f"{label}.txt"
+                (repo.path / name).write_bytes(head + b"\nkey = " + token.encode() + b"\n")
+                scanned = repo.secret("files", name)
+                refused_by_secret_scan(self, scanned, token)
+                self.assertIn(name, combined(scanned))
+
+    def test_a_clean_file_with_a_sniffed_head_passes_and_a_finding_is_reported_once(self) -> None:
+        repo = Repo(self)
+        (repo.path / "clean.txt").write_bytes(SNIFFED_HEADS["pdf"] + b"\nnothing here\n")
+        scanned = repo.secret("files", "clean.txt")
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+        token = registry_token()
+        (repo.path / "plain.txt").write_bytes(b"key = " + token.encode() + b"\n")
+        scanned = repo.secret("files", "plain.txt")
+        refused_by_secret_scan(self, scanned, token)
+        self.assertEqual(combined(scanned).count("npm-access-token"), 1, combined(scanned))
+
+    def test_the_same_head_with_a_nul_byte_is_still_found(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        (repo.path / "elf.bin").write_bytes(SNIFFED_HEADS["elf"] + b"\x00\nkey = " + token.encode() + b"\n")
+        refused_by_secret_scan(self, repo.secret("files", "elf.bin"), token)
+
+
 if __name__ == "__main__":
     unittest.main()
