@@ -57,6 +57,18 @@ class EnvironmentConfigTests(unittest.TestCase):
                 scanned = self.repo.secret("staged", extra_env=self.hostile_env(name))
                 refused_by_secret_scan(self, scanned, self.token)
 
+    def test_a_config_committed_in_the_repository_is_not_loaded(self) -> None:
+        # Betterleaks 1.10.1 reads these only with --unsafe-auto-load-config, which the wrapper
+        # never passes. Unlike the variables above, a commit can bring them in.
+        for name in (".betterleaks.toml", ".gitleaks.toml"):
+            self.repo.add_file(name, self.hostile)
+        self.repo.add_file("cfg.txt", f"key = {self.token}\n")
+        refused_by_secret_scan(self, self.repo.secret("staged"), self.token)
+        self.repo.unchecked_commit("cfg")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), self.token)
+
     def test_commit_and_push_refuse_with_a_config_in_the_environment(self) -> None:
         env = dict(self.repo.env)
         for name in CONFIG_VARS + CONFIG_TOML_VARS:
