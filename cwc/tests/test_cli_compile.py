@@ -310,6 +310,60 @@ class UiOrderTest(Folder):
         self.assertLess(tops["Canvas size"], tops["Steps"])
 
 
+class AuthoringEffectTest(Folder):
+    """The report of a compile says which _meta keys took effect on which nodes
+    (``metrics.authoring_keys``), and on which nodes a key that is set did nothing."""
+
+    def effects(self, doc):
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertEqual(code, ExitCode.OK, err)
+        return {entry["key"]: entry for entry in self.read(".report.json")["metrics"]["authoring_keys"]}
+
+    def test_each_key_names_the_nodes_it_changed(self):
+        doc = with_lora(with_primitives(steps_order=1))
+        doc["sampler"]["_meta"]["ui_seed"] = "fixed"
+        doc["sampler"]["_meta"]["ui_order"] = 3  # not in the Controls group: no effect
+        doc["decode"]["_meta"] = {"ui_group": "finish"}
+        doc["save"]["_meta"] = {"ui_group": "finish"}
+        doc["neg"]["_meta"]["ui_role"] = "pipeline"
+        effects = self.effects(doc)
+        self.assertEqual(effects["_meta.ui_role"]["nodes"], ["cfg_p", "latent", "neg", "pos", "steps_p"])
+        self.assertEqual(effects["_meta.ui_optional"]["nodes"], ["lora"])
+        self.assertEqual(effects["_meta.ui_group"]["nodes"], ["decode", "save"])
+        self.assertEqual(effects["_meta.ui_seed"]["nodes"], ["sampler"])
+        self.assertEqual(effects["_meta.ui_order"]["nodes"], ["steps_p"])
+        self.assertEqual(effects["_meta.ui_order"]["no_effect_on"], ["sampler"])
+        self.assertIn("lora", effects["_meta.title"]["nodes"])
+        self.assertIn("sampler", effects["_meta.title"]["nodes"])
+        self.assertNotIn("no_effect_on", effects["_meta.ui_role"])
+        self.assertNotIn("_meta.ui_locked", effects)  # E8 names the keys without effect
+        canvas = self.read(".ui.json")
+        neg = next(node for node in canvas["nodes"] if node.get("title") == "Negative prompt")
+        controls = next(group for group in canvas["groups"] if "Controls" in group["title"])
+        x, y, w, h = controls["bounding"]
+        self.assertFalse(x <= neg["pos"][0] < x + w and y <= neg["pos"][1] < y + h)  # pipeline kept it out
+
+    def test_a_key_another_key_overrides_is_named_as_without_effect(self):
+        doc = copy.deepcopy(TXT2IMG)
+        doc["pos"]["_meta"]["ui_group"] = "words"  # ui_role cockpit wins: it stays in Controls
+        doc["decode"]["_meta"] = {"ui_role": "plumbing", "ui_group": "finish"}  # its group wins: not collapsed
+        effects = self.effects(doc)
+        self.assertEqual(effects["_meta.ui_group"]["no_effect_on"], ["pos"])
+        self.assertEqual(effects["_meta.ui_group"]["nodes"], ["decode"])
+        self.assertEqual(effects["_meta.ui_role"]["no_effect_on"], ["decode"])
+        canvas = self.read(".ui.json")
+        decode = next(node for node in canvas["nodes"] if node["type"] == "VAEDecode")
+        self.assertFalse(decode.get("flags", {}).get("collapsed", False))
+        self.assertNotIn("Words", [group["title"].split(" ", 1)[1] for group in canvas["groups"]])
+
+    def test_a_graph_without_meta_keys_has_an_empty_list(self):
+        doc = copy.deepcopy(TXT2IMG)
+        for key, entry in doc.items():
+            if key != "_workflow":
+                entry.pop("_meta", None)
+        self.assertEqual(self.effects(doc), {})
+
+
 def authored(doc, preset):
     doc = copy.deepcopy(doc)
     doc["_workflow"] = {**doc["_workflow"], "layout": {"preset": preset}}
