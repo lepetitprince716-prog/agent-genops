@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,10 @@ MAINTAINER_MODE_VALUE = "maintainer"
 CONTRIBUTOR_MODE_VALUE = "contributor"
 
 ZERO_OID = "0" * 40
+# How long a git call that talks to the remote may take. The variable can only shorten it (tests
+# use it); the release check runs the baseline's copy of this constant, not the candidate's.
+REMOTE_TIMEOUT_S = 30.0
+REMOTE_TIMEOUT_ENV = "AGENT_GENOPS_REMOTE_TIMEOUT_S"
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # Betterleaks honours an inline allow wherever the substring appears on a line
 # (`# _gitleaks:allow` and `nobetterleaks:allow` included), so it is counted the same way.
@@ -155,6 +160,46 @@ def run_git(
         err = proc.stderr.decode("utf-8", "replace").strip()
         raise CheckError(f"git {args[0]} failed: {err}")
     return proc
+
+
+def remote_timeout() -> float:
+    raw = os.environ.get(REMOTE_TIMEOUT_ENV)
+    if raw is None:
+        return REMOTE_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        value = float("nan")
+    if not (0 < value < float("inf")):
+        raise CheckError(f"{REMOTE_TIMEOUT_ENV} must be a positive number of seconds, got {raw!r}")
+    return min(value, REMOTE_TIMEOUT_S)
+
+
+def run_git_remote(args: list[str], cwd: Path) -> subprocess.CompletedProcess[bytes]:
+    """A git call that talks to the remote: refused, never left hanging, past ``remote_timeout()``.
+
+    git and its transport (ssh, a credential helper) run in a session of their own, and the whole
+    group is stopped on timeout, so no transport process outlives the check."""
+    timeout = remote_timeout()
+    cmd = ["git", "--no-replace-objects", *args]
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+        )
+    except OSError as exc:
+        raise CheckError(f"cannot execute git: {exc}") from exc
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
+        raise CheckError(
+            f"git {args[0]} did not answer within {timeout:g} s; the remote was not checked, so nothing is approved"
+        ) from None
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 def git_text(args: list[str], cwd: Path) -> str:
@@ -769,7 +814,7 @@ def check_remote_policy(
 
 def query_remote_ref_sha(root: Path, remote: str, full_ref: str) -> tuple[str, dict[str, str]]:
     """Query the live remote ref SHA via ``git ls-remote``; fail closed if unreachable."""
-    proc = run_git(["ls-remote", "--refs", remote], root, check=False)
+    proc = run_git_remote(["ls-remote", "--refs", remote], root)
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", "replace").strip()
         raise CheckError(f"cannot verify remote state via ls-remote ({remote}): {err}")
