@@ -728,11 +728,13 @@ class SniffedHeadTests(unittest.TestCase):
         refused_by_secret_scan(self, scanned, token)
         self.assertEqual(combined(scanned).count("npm-access-token"), 1, combined(scanned))
 
-    def test_the_same_head_with_a_nul_byte_is_still_found(self) -> None:
+    def test_the_same_head_with_a_nul_byte_is_found_and_reported_once(self) -> None:
         repo = Repo(self)
         token = registry_token()
         (repo.path / "elf.bin").write_bytes(SNIFFED_HEADS["elf"] + b"\x00\nkey = " + token.encode() + b"\n")
-        refused_by_secret_scan(self, repo.secret("files", "elf.bin"), token)
+        scanned = repo.secret("files", "elf.bin")
+        refused_by_secret_scan(self, scanned, token)
+        self.assertEqual(combined(scanned).count("npm-access-token"), 1, combined(scanned))
 
 
 if __name__ == "__main__":
