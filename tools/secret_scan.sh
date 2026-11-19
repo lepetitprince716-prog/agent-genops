@@ -44,7 +44,8 @@
 #
 # Exit status: 0 clean, 2 usage error, 3 betterleaks missing, anything else: findings or a
 # betterleaks failure. Secret values are never printed (--redact); a finding is one line,
-# "rule path:line commit", with sensitive paths redacted when the real privacy scanner is present.
+# "rule path:line commit", with sensitive paths redacted by the privacy scanner; when that cannot
+# redact, a placeholder is printed in place of the finding.
 # Validation is off (it would send candidates to the network) and the repository's own
 # Betterleaks config is not loaded (--unsafe-auto-load-config is not used).
 set -eu
@@ -118,22 +119,21 @@ if [ -n "$ignore_path" ]; then
   esac
 fi
 
+# Findings carry file paths, which can be private names: they are printed only after the
+# scanner's --redact-stream has seen them. A scanner that is missing, too old to know the flag
+# or failing leaves a placeholder, never the raw text.
 redact_output() {
-  if [ -f "$redact_scanner" ] && grep -q -- '--redact-stream' "$redact_scanner" 2>/dev/null; then
-    set -- -I -B "$redact_scanner" --redact-stream
-    if [ -n "${SECRET_SCAN_RULES:-}" ]; then
-      set -- "$@" --rules "$SECRET_SCAN_RULES"
-    fi
-    if [ "${SECRET_SCAN_NO_PRIVATE:-0}" = "1" ]; then
-      set -- "$@" --no-private
-    fi
-    if redacted=$(python3 "$@"); then
-      printf '%s\n' "$redacted"
-    else
-      echo "<redacted: path redaction failed; inspect locally>"
-    fi
+  set -- -I -B "$redact_scanner" --redact-stream
+  if [ -n "${SECRET_SCAN_RULES:-}" ]; then
+    set -- "$@" --rules "$SECRET_SCAN_RULES"
+  fi
+  if [ "${SECRET_SCAN_NO_PRIVATE:-0}" = "1" ]; then
+    set -- "$@" --no-private
+  fi
+  if [ -f "$redact_scanner" ] && redacted=$(python3 "$@"); then
+    printf '%s\n' "$redacted"
   else
-    cat
+    echo "<redacted: path redaction failed; inspect locally>"
   fi
 }
 

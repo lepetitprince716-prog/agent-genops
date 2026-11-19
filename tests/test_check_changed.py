@@ -261,5 +261,54 @@ class CloneModeReadErrorTests(unittest.TestCase):
         self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "contributor"), combined(asked))
 
 
+
+GLPAT_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+
+class SecretScanRedactionTests(unittest.TestCase):
+    """Findings are printed with sensitive paths redacted, or not at all."""
+
+    def staged_secret_scan(self, repo: SyntheticRepo, scanner: str | None) -> "subprocess.CompletedProcess[str]":
+        env = dict(repo.env)
+        if scanner is not None:
+            env["SECRET_SCAN_REDACT_SCANNER"] = scanner
+        return repo.run("sh", "tools/secret_scan.sh", "staged", env=env)
+
+    def repo_with_a_secret_in_a_sensitive_path(self) -> tuple[SyntheticRepo, str]:
+        import secrets as secrets_module
+
+        repo = SyntheticRepo(self, maintainer=True)
+        # A GitLab-style token shape only Betterleaks knows, built at run time.
+        token = "glpat-" + "".join(secrets_module.choice(GLPAT_ALPHABET) for _ in range(20))
+        repo.write(f"docs/{SYNTH_MARKER}-notes.txt", f"token = {token}\n")
+        repo.git("add", "docs")
+        return repo, token
+
+    def test_the_real_scanner_redacts_the_path_of_a_finding(self) -> None:
+        need_betterleaks(self)
+        repo, token = self.repo_with_a_secret_in_a_sensitive_path()
+        res = self.staged_secret_scan(repo, None)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertNotIn(SYNTH_MARKER, combined(res))
+        self.assertNotIn(token, combined(res))
+        self.assertIn("<redacted-path#", combined(res))
+
+    def test_a_scanner_that_cannot_redact_never_lets_the_path_through(self) -> None:
+        need_betterleaks(self)
+        repo, token = self.repo_with_a_secret_in_a_sensitive_path()
+        # A scanner with no --redact-stream (an older checkout): its source has no such word.
+        old = repo.base / "old_scanner.py"
+        old.write_text("import sys\nsys.exit(2)\n")
+        res = self.staged_secret_scan(repo, str(old))
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertNotIn(SYNTH_MARKER, combined(res))
+        self.assertNotIn(token, combined(res))
+        self.assertIn("path redaction failed", combined(res))
+        missing = self.staged_secret_scan(repo, str(repo.base / "no_such_scanner.py"))
+        self.assertEqual(missing.returncode, 1, combined(missing))
+        self.assertNotIn(SYNTH_MARKER, combined(missing))
+        self.assertIn("path redaction failed", combined(missing))
+
+
 if __name__ == "__main__":
     unittest.main()
