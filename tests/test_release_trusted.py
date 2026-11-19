@@ -142,5 +142,230 @@ class TrustedBaselineSourceTests(unittest.TestCase):
         self.assertEqual(len(manifests(repo)), 1)
 
 
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# Synthetic stand-in for a release checker written before the trusted-checker protocol: it knows
+# only "changed" and "release", and would wave any release through.
+OLD_CHECKER = (
+    '"""Synthetic stand-in for a release checker that predates the trusted-checker protocol."""\n'
+    "import argparse, sys\n"
+    'parser = argparse.ArgumentParser(prog="./check")\n'
+    'sub = parser.add_subparsers(dest="command", required=True)\n'
+    'sub.add_parser("changed")\n'
+    'sub.add_parser("release")\n'
+    "parser.parse_known_args()\n"
+    'print("old checker: release OK")\n'
+    "sys.exit(0)\n"
+)
+
+# Appended to a candidate's tools/release_check.py: every privacy scan answers "clean", and the
+# control-plane list is emptied. Both only matter if the candidate's checker is what judges.
+CHECKER_OVERRIDE_SCAN = (
+    "\n\ndef run_privacy_subprocess(*_args, **_kwargs):\n"
+    '    return 0, {"status": "clean", "findings": [], "private_loaded": True, "private_rule_count": 1}, ""\n'
+)
+CHECKER_OVERRIDE_CONTROL = '\n\nCONTROL_PLANE_EXACT = frozenset()\nCONTROL_PLANE_PREFIXES = ("\\0",)\n'
+
+
+def push_baseline(repo: SyntheticRepo, message: str, *paths: str) -> str:
+    """Commit ``paths`` on main and publish them as the remote's main (hooks off: synthetic setup)."""
+    repo.git("add", *paths)
+    sha = repo.commit_unchecked(message)
+    repo.git("-c", f"core.hooksPath={os.devnull}", "push", "-q", "origin", "main")
+    return sha
+
+
+def add_workflows(repo: SyntheticRepo, *, checker: bool = True) -> list[str]:
+    paths = ["tools/workflow_policy.json", "workflows"]
+    shutil.copy2(ROOT / "tools" / "workflow_policy.json", repo.work / "tools" / "workflow_policy.json")
+    shutil.copytree(ROOT / "workflows", repo.work / "workflows")
+    if checker:
+        shutil.copy2(ROOT / "tools" / "workflow_policy.py", repo.work / "tools" / "workflow_policy.py")
+        paths.append("tools/workflow_policy.py")
+    return paths
+
+
+class TrustedCheckerTests(unittest.TestCase):
+    """R9: the checker and the scanners that judge come from the trusted baseline."""
+
+    def test_a_candidate_that_rewrites_the_checker_is_still_judged_by_the_baseline(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        checker = repo.work / "tools" / "release_check.py"
+        checker.write_text(checker.read_text(encoding="utf-8") + CHECKER_OVERRIDE_SCAN, encoding="utf-8")
+        repo.write("docs/notes.md", f"# Notes\n{SYNTH_MARKER}\n")
+        repo.git("add", "tools/release_check.py", "docs/notes.md")
+        cand = repo.commit_unchecked("weaken the checker and slip a marker")
+        res = release(repo, cand)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("privacy", combined(res))
+        self.assertNotIn(SYNTH_MARKER, combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_the_control_plane_list_is_computed_by_the_baseline(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        checker = repo.work / "tools" / "release_check.py"
+        checker.write_text(checker.read_text(encoding="utf-8") + CHECKER_OVERRIDE_CONTROL, encoding="utf-8")
+        repo.write("tests/test_guard_extra.py", "import unittest\n")
+        repo.git("add", "tools/release_check.py", "tests/test_guard_extra.py")
+        cand = repo.commit_unchecked("empty the control-plane list")
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        manifest = json.loads(res.stdout)["manifest"]
+        self.assertEqual(manifest["control_plane_changes"], ["tests/test_guard_extra.py", "tools/release_check.py"])
+
+    def test_a_baseline_without_the_trusted_checker_is_refused_unless_bootstrapped(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        repo.write("tools/release_check.py", OLD_CHECKER)
+        push_baseline(repo, "an old checker on the remote", "tools/release_check.py")
+        shutil.copy2(ROOT / "tools" / "release_check.py", repo.work / "tools" / "release_check.py")
+        repo.write("docs/guide.md", "# Guide\n\nA clean change.\n")
+        repo.git("add", "tools/release_check.py", "docs/guide.md")
+        cand = repo.commit_unchecked("bring the current checker")
+
+        refused = release(repo, cand)
+        self.assertEqual(refused.returncode, 2, combined(refused))
+        self.assertIn("--bootstrap-self-judge", combined(refused))
+        self.assertNotIn("old checker: release OK", combined(refused))
+        self.assertEqual(manifests(repo), [])
+
+        boot = release(repo, cand, "--bootstrap-self-judge", "--json")
+        self.assertEqual(boot.returncode, 0, combined(boot))
+        manifest = json.loads(boot.stdout)["manifest"]
+        self.assertIs(manifest["self_judged"], True)
+        self.assertEqual(manifest["checker_sha"], cand)
+        self.assertIn("tools/release_check.py", manifest["control_plane_changes"])
+        self.assertTrue(any("independent" in note for note in manifest["unverified_items"]), manifest)
+
+        text = release(repo, cand, "--bootstrap-self-judge")
+        self.assertEqual(text.returncode, 0, combined(text))
+        self.assertIn("候选自己判自己", text.stdout)
+
+    def test_a_bootstrapped_candidate_is_still_scanned_by_its_own_scanners(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        repo.write("tools/release_check.py", OLD_CHECKER)
+        push_baseline(repo, "an old checker on the remote", "tools/release_check.py")
+        shutil.copy2(ROOT / "tools" / "release_check.py", repo.work / "tools" / "release_check.py")
+        repo.write("docs/notes.md", f"# Notes\n{SYNTH_MARKER}\n")
+        repo.git("add", "tools/release_check.py", "docs/notes.md")
+        cand = repo.commit_unchecked("current checker and a marker")
+        res = release(repo, cand, "--bootstrap-self-judge")
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_a_baseline_scanner_without_rev_is_refused_not_replaced(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        repo.write("tools/privacy_scan.py", "import sys\nsys.exit(0)\n")
+        push_baseline(repo, "an old privacy scanner on the remote", "tools/privacy_scan.py")
+        shutil.copy2(ROOT / "tools" / "privacy_scan.py", repo.work / "tools" / "privacy_scan.py")
+        repo.write("docs/guide.md", "# Guide\n\nA clean change.\n")
+        repo.git("add", "tools/privacy_scan.py", "docs/guide.md")
+        cand = repo.commit_unchecked("bring the current scanner")
+        res = release(repo, cand)
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_a_check_run_from_a_checkout_of_the_baseline_judges_a_candidate_that_replaced_the_launcher(self) -> None:
+        """The way to rule out a candidate that swaps the launcher itself: run ./check from a
+        checkout of the trusted baseline and name the candidate by its commit."""
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        trusted = repo.head()
+        other = repo.base / "trusted-checkout"
+        repo.git("worktree", "add", "-q", "--detach", str(other), trusted)
+
+        def from_other(commit: str, *more: str) -> subprocess.CompletedProcess[str]:
+            return repo.run(
+                sys.executable, "-B", str(other / "check"), "release", "--to", "origin",
+                "--ref", "refs/heads/main", "--commit", commit, "--allowed-url", str(repo.remote),
+                "--manifest-dir", str(repo.manifest_dir), *more, cwd=other,
+            )
+
+        repo.write("tools/release_check.py", OLD_CHECKER)
+        repo.write("docs/notes.md", f"# Notes\n{SYNTH_MARKER}\n")
+        repo.git("add", "tools/release_check.py", "docs/notes.md")
+        dirty = repo.commit_unchecked("replace the launcher and slip a marker")
+        res = from_other(dirty)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("privacy", combined(res))
+        self.assertNotIn("old checker: release OK", combined(res))
+        self.assertEqual(manifests(repo), [])
+
+        repo.git("reset", "-q", "--hard", trusted)
+        repo.write("tools/release_check.py", OLD_CHECKER)
+        repo.git("add", "tools/release_check.py")
+        clean = repo.commit_unchecked("replace the launcher only")
+        ok = from_other(clean, "--json")
+        self.assertEqual(ok.returncode, 0, combined(ok))
+        manifest = json.loads(ok.stdout)["manifest"]
+        self.assertEqual((manifest["candidate_sha"], manifest["checker_sha"]), (clean, trusted))
+        self.assertIn("tools/release_check.py", manifest["control_plane_changes"])
+
+
+class ReleaseWorkflowPolicyTests(unittest.TestCase):
+    """The baseline's policy checker, the candidate's registry and workflows/."""
+
+    def repo(self, *, checker: bool = True) -> SyntheticRepo:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        push_baseline(repo, "standard workflows", *add_workflows(repo, checker=checker))
+        return repo
+
+    def test_an_unregistered_workflow_file_blocks_the_release(self) -> None:
+        repo = self.repo()
+        repo.write("workflows/sdxl-lora/NOTES.md", "# Notes\n\nPlain text.\n")
+        repo.git("add", "workflows/sdxl-lora/NOTES.md")
+        cand = repo.commit_unchecked("an unregistered file")
+        res = release(repo, cand)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("workflow", combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_a_file_the_candidate_registers_passes_and_the_registry_is_listed(self) -> None:
+        repo = self.repo()
+        repo.write("workflows/sdxl-lora/NOTES.md", "# Notes\n\nPlain text.\n")
+        registry = json.loads((repo.work / "tools" / "workflow_policy.json").read_text(encoding="utf-8"))
+        registry["workflows"]["sdxl-lora"]["files"].append("NOTES.md")
+        repo.write("tools/workflow_policy.json", json.dumps(registry, indent=2) + "\n")
+        repo.git("add", "workflows/sdxl-lora/NOTES.md", "tools/workflow_policy.json")
+        cand = repo.commit_unchecked("a registered file")
+        res = release(repo, cand, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        manifest = json.loads(res.stdout)["manifest"]
+        self.assertEqual(manifest["control_plane_changes"], ["tools/workflow_policy.json"])
+        self.assertEqual(manifest["workflow_policy"], "clean")
+
+    def test_a_candidate_that_weakens_the_policy_checker_is_judged_by_the_baseline(self) -> None:
+        repo = self.repo()
+        repo.write("tools/workflow_policy.py", "import sys\nsys.exit(0)\n")
+        repo.write("workflows/sdxl-lora/NOTES.md", "# Notes\n\nPlain text.\n")
+        repo.git("add", "tools/workflow_policy.py", "workflows/sdxl-lora/NOTES.md")
+        cand = repo.commit_unchecked("weaken the policy checker")
+        res = release(repo, cand)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertEqual(manifests(repo), [])
+
+    def test_a_baseline_without_the_policy_checker_is_refused_unless_bootstrapped(self) -> None:
+        repo = self.repo(checker=False)
+        shutil.copy2(ROOT / "tools" / "workflow_policy.py", repo.work / "tools" / "workflow_policy.py")
+        repo.write("docs/guide.md", "# Guide\n\nA clean change.\n")
+        repo.git("add", "tools/workflow_policy.py", "docs/guide.md")
+        cand = repo.commit_unchecked("bring the policy checker")
+        refused = release(repo, cand)
+        self.assertEqual(refused.returncode, 2, combined(refused))
+        self.assertIn("--bootstrap-self-judge", combined(refused))
+        self.assertEqual(manifests(repo), [])
+        boot = release(repo, cand, "--bootstrap-self-judge", "--json")
+        self.assertEqual(boot.returncode, 0, combined(boot))
+        manifest = json.loads(boot.stdout)["manifest"]
+        self.assertIs(manifest["self_judged"], True)
+        self.assertEqual(manifest["workflow_policy"], "clean")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,10 @@ Subcommands (invoked via ``./check``):
     path-selected tests. Distinguishes contributor mode (public rules only, never authorizes a
     release) from maintainer mode (fails closed if private rules are missing, empty or invalid).
   - ``release``: read-only pre-release verification and redacted manifest generation for one exact
-    ``(remote, ref, commit)`` candidate, using the trusted baseline scanner/rules. Never pushes.
+    ``(remote, ref, commit)`` candidate. The copy in the working tree only launches: the checker,
+    the scanners and the rules that judge are exported from the trusted baseline (the remote's
+    main) and run from a temporary directory. Never pushes.
+  - ``protocol``: the release protocol this checker speaks, as JSON.
 """
 
 from __future__ import annotations
@@ -65,11 +68,12 @@ CONTROL_PLANE_EXACT = frozenset(
         "tools/secret_scan.sh",
         "tools/secret_scan.tmpl",
         "tools/release_check.py",
-        "tests/test_secret_guard.py",
-        "tests/test_release_check.py",
+        "tools/workflow_policy.py",
+        "tools/workflow_policy.json",
     }
 )
-CONTROL_PLANE_PREFIXES = (".githooks/", ".github/workflows/")
+# Every test under the root tests/ is a guard test.
+CONTROL_PLANE_PREFIXES = (".githooks/", ".github/workflows/", "tests/")
 DOC_SUFFIXES = frozenset({".md", ".svg", ".txt"})
 DOC_EXACT = frozenset({"LICENSE", "LICENSE-APACHE", "LICENSE-MIT"})
 GUARD_TEST_PREFIXES = (".githooks/", "tools/", "tests/", "workflows/")
@@ -85,14 +89,21 @@ GUARD_TEST_EXACT = frozenset(
 )
 EXECUTABLE_SUFFIXES = frozenset({".py", ".sh", ".ps1", ".rs", ".toml", ".yml", ".yaml", ".json"})
 
-TRUSTED_FILES = (
+# The release protocol: a checker that answers ``protocol`` with this number can judge a release
+# handed to it by ./check release (``--as-trusted-checker``).
+RELEASE_PROTOCOL = 1
+BOOTSTRAP_FLAG = "--bootstrap-self-judge"
+# Exported from the judging commit; the checker uses only the copies beside it.
+CHECKER_FILES = (
+    "tools/release_check.py",
     "tools/privacy_scan.py",
     "tools/privacy_rules.json",
     "tools/secret_scan.sh",
     "tools/secret_scan.tmpl",
-    ".betterleaksignore",
-    ".gitleaksignore",
 )
+OPTIONAL_CHECKER_FILES = ("tools/workflow_policy.py",)
+IGNORE_FILES = (".betterleaksignore", ".gitleaksignore")
+WORKFLOW_RELEASE_PATHS = ("workflows", "tools/workflow_policy.json")
 
 
 class CheckError(Exception):
@@ -762,48 +773,6 @@ def query_remote_ref_sha(root: Path, remote: str, full_ref: str) -> tuple[str, d
     return refs.get(full_ref, ZERO_OID), refs
 
 
-def extract_trusted_bundle(root: Path, trusted_sha: str, dest: Path) -> tuple[dict[str, Path], str]:
-    """Extract scanner, rules, wrapper, template and ignore files from ``trusted_sha``."""
-    extracted: dict[str, Path] = {}
-    hasher = hashlib.sha256()
-    hasher.update(f"trusted_sha={trusted_sha}\n".encode("ascii"))
-
-    for rel in TRUSTED_FILES:
-        proc = run_git(["cat-file", "-e", f"{trusted_sha}:{rel}"], root, check=False)
-        if proc.returncode != 0:
-            hasher.update(f"missing:{rel}\n".encode("ascii"))
-            continue
-        blob = run_git(["show", f"{trusted_sha}:{rel}"], root, check=True).stdout
-        out_path = dest / rel
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(blob)
-        if rel.endswith(".sh") or rel.endswith(".py"):
-            out_path.chmod(0o755)
-        extracted[rel] = out_path
-        hasher.update(f"file:{rel}:{hashlib.sha256(blob).hexdigest()}\n".encode("ascii"))
-
-    # Include hash of maintainer private rules file without recording any pattern text.
-    priv_path = private_rules_path()
-    if priv_path.is_file():
-        priv_hash = hashlib.sha256(priv_path.read_bytes()).hexdigest()
-        hasher.update(f"private_rules:{priv_hash}\n".encode("ascii"))
-
-    # Prepare explicit Betterleaks ignore path from the trusted baseline only.
-    ignore_dir = dest / "_trusted_ignore"
-    ignore_dir.mkdir(parents=True, exist_ok=True)
-    if ".betterleaksignore" in extracted:
-        shutil.copy2(extracted[".betterleaksignore"], ignore_dir / ".betterleaksignore")
-        ignore_target = ignore_dir / ".betterleaksignore"
-    elif ".gitleaksignore" in extracted:
-        shutil.copy2(extracted[".gitleaksignore"], ignore_dir / ".gitleaksignore")
-        ignore_target = ignore_dir / ".gitleaksignore"
-    else:
-        ignore_target = ignore_dir / "empty.ignore"
-        ignore_target.write_text("", encoding="utf-8")
-    extracted["_ignore_path"] = ignore_target
-    return extracted, hasher.hexdigest()[:16]
-
-
 def inspect_control_plane_and_allows(
     root: Path, base_sha: str, candidate_sha: str
 ) -> tuple[list[str], list[str]]:
@@ -892,26 +861,351 @@ def ensure_outside_repo(root: Path, target_dir: Path) -> Path:
     )
 
 
-def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespace) -> int:
+@dataclass(frozen=True)
+class Judge:
+    """Who judges a release: the checker and scanners exported from one commit."""
+
+    tools: Path  # directory holding the exported checker, scanners and rules
+    trusted_sha: str  # the remote main the release is judged against (its ignore file applies)
+    checker_sha: str  # where the checker and scanners came from
+    self_judged: bool  # True only under --bootstrap-self-judge: the candidate's own tools
+
+
+def export_checker(root: Path, sha: str, dest: Path) -> Path:
+    """Write the release checker, its scanners and rules from ``sha`` into ``dest/tools``.
+
+    Raises CheckError naming the first required file ``sha`` lacks."""
+    tools = dest / "tools"
+    tools.mkdir(parents=True, exist_ok=True)
+    for rel in CHECKER_FILES + OPTIONAL_CHECKER_FILES:
+        proc = run_git(["cat-file", "blob", f"{sha}:{rel}"], root, check=False)
+        if proc.returncode != 0:
+            if rel in CHECKER_FILES:
+                raise CheckError(f"commit {sha[:12]} has no {rel}")
+            continue
+        out_path = dest / rel
+        out_path.write_bytes(proc.stdout)
+        out_path.chmod(0o755 if rel.endswith((".py", ".sh")) else 0o644)
+    return tools
+
+
+def checker_speaks_protocol(script: Path, root: Path) -> bool:
+    """Ask an exported checker for its protocol; anything but the expected answer is a no."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-I", "-B", str(script), "protocol"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if proc.returncode != 0:
+        return False
+    try:
+        answer = json.loads(proc.stdout)
+    except ValueError:
+        return False
+    return isinstance(answer, dict) and answer.get("release_protocol") == RELEASE_PROTOCOL
+
+
+def bootstrap_hint(trusted_sha: str, what: str) -> str:
+    return (
+        f"the trusted baseline {trusted_sha[:12]} {what}, so it cannot judge this release. "
+        f"Only with {BOOTSTRAP_FLAG} does the candidate's own checker judge it; the manifest then "
+        "says the candidate judged itself and needs an independent review"
+    )
+
+
+def write_trusted_ignore(root: Path, trusted_sha: str, approvals: list[str], dest: Path) -> tuple[Path, bytes]:
+    """The one ignore list for Betterleaks: the trusted baseline's ignore file plus approvals."""
+    content = b""
+    for name in IGNORE_FILES:
+        proc = run_git(["cat-file", "blob", f"{trusted_sha}:{name}"], root, check=False)
+        if proc.returncode == 0:
+            content = proc.stdout
+            break
+    if approvals:
+        if content and not content.endswith(b"\n"):
+            content += b"\n"
+        content += "".join(f"{fp}\n" for fp in approvals).encode("utf-8")
+    ignore_dir = dest / "_ignore"
+    ignore_dir.mkdir(parents=True, exist_ok=True)
+    target = ignore_dir / ".betterleaksignore"
+    target.write_bytes(content)
+    return target, content
+
+
+def compute_policy_version(judge: Judge, ignore_bytes: bytes) -> str:
+    hasher = hashlib.sha256()
+    hasher.update(f"protocol={RELEASE_PROTOCOL}\nchecker_sha={judge.checker_sha}\n".encode("ascii"))
+    hasher.update(f"trusted_sha={judge.trusted_sha}\n".encode("ascii"))
+    for rel in CHECKER_FILES + OPTIONAL_CHECKER_FILES:
+        path = judge.tools.parent / rel
+        if path.is_file():
+            hasher.update(f"file:{rel}:{hashlib.sha256(path.read_bytes()).hexdigest()}\n".encode("ascii"))
+        else:
+            hasher.update(f"missing:{rel}\n".encode("ascii"))
+    hasher.update(f"ignore:{hashlib.sha256(ignore_bytes).hexdigest()}\n".encode("ascii"))
+    # The private rules count by hash only; no pattern text is recorded.
+    priv_path = private_rules_path()
+    if priv_path.is_file():
+        hasher.update(f"private_rules:{hashlib.sha256(priv_path.read_bytes()).hexdigest()}\n".encode("ascii"))
+    return hasher.hexdigest()[:16]
+
+
+def export_paths(root: Path, commit: str, paths: list[str], dest: Path) -> None:
+    """Write ``paths`` of ``commit``'s tree under ``dest`` as git stores them (links stay links)."""
+    listing = run_git(["ls-tree", "-r", "-z", "--full-tree", commit, "--", *paths], root).stdout
+    for entry in split_names(listing):
+        meta, _, rel = entry.partition("\t")
+        mode, kind, oid = meta.split(" ")
+        parts = rel.split("/")
+        if any(part in ("", ".", "..") for part in parts):
+            raise CheckError(f"commit {commit[:12]} holds a path git should not store: {rel!r}")
+        target = dest.joinpath(*parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if kind == "commit":
+            target.mkdir(exist_ok=True)  # a submodule: a folder the policy does not know
+        elif mode == "120000":
+            os.symlink(run_git(["cat-file", "blob", oid], root).stdout, target)
+        else:
+            target.write_bytes(run_git(["cat-file", "blob", oid], root).stdout)
+
+
+def run_release_workflow_policy(root: Path, judge: Judge, commit: str, dest: Path) -> tuple[str, str]:
+    """Check the candidate's workflows/ with the judge's policy checker and the candidate's registry.
+
+    Returns ``(status, detail)``: ``clean``, ``findings`` or ``not_applicable`` (the candidate has
+    neither workflows/ nor the registry, so there is nothing for the policy to cover)."""
+    present = [
+        rel
+        for rel in WORKFLOW_RELEASE_PATHS
+        if run_git(["cat-file", "-e", f"{commit}:{rel}"], root, check=False).returncode == 0
+    ]
+    if not present:
+        return "not_applicable", "the candidate has no workflows/ and no tools/workflow_policy.json"
+    checker = judge.tools / "workflow_policy.py"
+    if not checker.is_file():
+        if judge.self_judged:
+            raise CheckError(f"the candidate {commit[:12]} has workflows but no tools/workflow_policy.py")
+        raise CheckError(bootstrap_hint(judge.trusted_sha, "has no tools/workflow_policy.py"))
+    tree = dest / "candidate"
+    tree.mkdir()
+    export_paths(root, commit, present, tree)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            str(checker),
+            "--root",
+            str(tree / "workflows"),
+            "--policy",
+            str(tree / "tools" / "workflow_policy.json"),
+        ],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    detail = (proc.stdout + "\n" + proc.stderr).strip()
+    if proc.returncode == 0:
+        return "clean", detail
+    if proc.returncode == 1:
+        return "findings", detail
+    raise CheckError(f"workflow policy check failed (exit {proc.returncode}): {detail[-800:]}")
+
+
+@dataclass
+class ReleaseResult:
+    blocked: list[str]  # report lines when the release is blocked; empty when it passes
+    manifest: dict[str, Any] | None
+
+
+def blocked(*lines: str) -> ReleaseResult:
+    return ReleaseResult(list(lines), None)
+
+
+def prepare_release(
+    root: Path,
+    judge: Judge,
+    *,
+    remote: str,
+    ref: str,
+    commit: str,
+    allow_new_ref: bool,
+    allowed_url: str | None,
+) -> ReleaseResult:
+    """Every release check for one ``(remote, ref, commit)``; writes nothing to the repository."""
+    validate_target_ref(root, ref)
+    if not FULL_SHA_RE.fullmatch(commit):
+        raise CheckError(f"--commit must be a full 40-char commit SHA, got: {commit!r}")
+    verified_commit = git_optional(
+        ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{commit}^{{commit}}"], root
+    )
+    if verified_commit != commit:
+        raise CheckError(f"candidate commit not found locally: {commit}")
+
+    hook_problems = ensure_hooks_ready(root)
+    if hook_problems:
+        raise CheckError("; ".join(hook_problems))
+    ensure_betterleaks_available()
+    if git_text(["rev-parse", "--is-shallow-repository"], root) == "true":
+        raise CheckError("shallow clone cannot prepare a release manifest")
+    _priv_loaded, private_rule_count, _priv_note = validate_private_rules_file(require_non_empty=True)
+
+    fetch_url, push_url, _ = check_remote_policy(root, remote, allowed_url)
+    remote_old_sha, remote_refs = query_remote_ref_sha(root, remote, ref)
+    trusted_label, live_trusted = resolve_trusted_baseline(root, remote, remote_refs)
+    if live_trusted != judge.trusted_sha:
+        raise CheckError(
+            f"the remote's {BASELINE_BRANCH} moved during the check ({judge.trusted_sha[:12]} -> {live_trusted[:12]}); retry"
+        )
+
+    if remote_old_sha == ZERO_OID:
+        if not allow_new_ref:
+            raise CheckError(
+                f"remote ref {ref} does not exist; pass --allow-new-ref to explicitly stage a new branch"
+            )
+    else:
+        if remote_old_sha == commit:
+            raise CheckError(f"remote {ref} is already at {commit}; nothing to publish")
+        ff = run_git(["merge-base", "--is-ancestor", remote_old_sha, commit], root, check=False)
+        if ff.returncode != 0:
+            raise CheckError(
+                f"non-fast-forward refused: remote {ref} ({remote_old_sha[:12]}) is not an ancestor of {commit[:12]}"
+            )
+
+    scanner = judge.tools / "privacy_scan.py"
+    rules = judge.tools / "privacy_rules.json"
+    secret = judge.tools / "secret_scan.sh"
+    unverified_notes: list[str] = []
+    if judge.self_judged:
+        unverified_notes.append(
+            f"bootstrap: the candidate's own checker and scanners ({judge.checker_sha[:12]}) judged it, "
+            f"because the trusted baseline {judge.trusted_sha[:12]} could not; needs an independent review"
+        )
+
+    with tempfile.TemporaryDirectory(prefix="genops-release-") as td:
+        td_path = Path(td)
+        ignore_path, ignore_bytes = write_trusted_ignore(root, judge.trusted_sha, [], td_path)
+        policy_version = compute_policy_version(judge, ignore_bytes)
+
+        p_rc, p_payload, p_err = run_privacy_subprocess(
+            scanner, rules, ["--rev", commit, "--ref-name", ref], root, require_private=True, no_private=False
+        )
+        if p_rc == EXIT_ERROR or p_payload.get("status") == "error":
+            raise CheckError(p_payload.get("error") or p_err or "privacy_scan error")
+        if p_rc == EXIT_FINDINGS:
+            return blocked(
+                "RELEASE BLOCKED: candidate failed privacy scan (no approval manifest generated).",
+                *(
+                    f"  {item['where']}:{item['line']}: {item['rule_id']} -- {item['why']}"
+                    for item in p_payload.get("findings", [])
+                ),
+            )
+        if p_rc != 0:
+            raise CheckError(f"privacy_scan exited {p_rc}")
+
+        s_rc, s_out = run_secret_subprocess(
+            secret,
+            ["rev", commit],
+            root,
+            redact_scanner=scanner,
+            rules_path=rules,
+            no_private=False,
+            ignore_path=ignore_path,
+        )
+        if s_rc in (2, 3):
+            raise CheckError(s_out or f"secret_scan error (exit {s_rc})")
+        if s_rc != 0:
+            return blocked(
+                "RELEASE BLOCKED: candidate failed Betterleaks scan (no approval manifest generated).",
+                *(f"  {line}" for line in s_out.splitlines()),
+            )
+
+        wf_status, wf_detail = run_release_workflow_policy(root, judge, commit, td_path)
+        if wf_status == "findings":
+            return blocked(
+                "RELEASE BLOCKED: candidate's workflows/ failed the workflow policy (no approval manifest generated).",
+                *(f"  {line}" for line in wf_detail.splitlines()),
+            )
+
+        o_rc, o_payload, _o_err = run_privacy_subprocess(
+            scanner, rules, ["--other-refs-except", commit], root, require_private=True, no_private=False
+        )
+        other_warnings: list[dict[str, Any]] = []
+        if o_rc == EXIT_FINDINGS:
+            other_warnings = o_payload.get("findings", [])
+        elif o_rc != 0:
+            unverified_notes.append("non-candidate local ref scan errored; inspect locally")
+
+    audit_base = remote_old_sha if remote_old_sha != ZERO_OID else judge.trusted_sha
+    control_changes, inline_allows = inspect_control_plane_and_allows(root, audit_base, commit)
+    commit_count, changed_files = collect_release_diff_summary(root, remote_old_sha, commit)
+
+    return ReleaseResult(
+        [],
+        {
+            "schema_version": 2,
+            "status": "awaiting_user_approval_not_pushed",
+            "action": "push_single_branch_only",
+            "remote": remote,
+            "fetch_url": fetch_url,
+            "push_url": push_url,
+            "target_ref": ref,
+            "new_ref": remote_old_sha == ZERO_OID,
+            "remote_old_sha": remote_old_sha,
+            "candidate_sha": commit,
+            "trusted_ref": trusted_label,
+            "trusted_sha": judge.trusted_sha,
+            "checker_sha": judge.checker_sha,
+            "self_judged": judge.self_judged,
+            "policy_version": policy_version,
+            "commit_count": commit_count,
+            "changed_files": changed_files,
+            "privacy_scan": {"status": "clean", "private_rules_loaded": private_rule_count},
+            "secret_scan": {"status": "clean", "tool": "betterleaks"},
+            "workflow_policy": wf_status,
+            "control_plane_changes": control_changes,
+            "inline_allow_additions": inline_allows,
+            "non_candidate_ref_warnings": other_warnings,
+            "unverified_items": unverified_notes,
+        },
+    )
+
+
+def read_manifest(manifest_path: Path) -> dict[str, Any]:
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise CheckError(f"cannot read manifest {manifest_path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise CheckError(f"manifest {manifest_path} is not a JSON object")
+    for key in ("remote", "target_ref", "candidate_sha"):
+        if not isinstance(data.get(key), str) or not data[key]:
+            raise CheckError(f"manifest {manifest_path} has no {key}")
+    return data
 
+
+def verify_manifest_file(root: Path, judge: Judge, manifest_path: Path, args: argparse.Namespace) -> int:
+    data = read_manifest(manifest_path)
     remote = data["remote"]
     target_ref = data["target_ref"]
-    expected_old = data["remote_old_sha"]
+    expected_old = data.get("remote_old_sha")
     expected_new = data["candidate_sha"]
-    expected_fetch = data["fetch_url"]
-    expected_push = data["push_url"]
-    expected_policy = data["policy_version"]
+    expected_fetch = data.get("fetch_url")
+    expected_push = data.get("push_url")
+    expected_policy = data.get("policy_version")
 
     mismatches: list[str] = []
     try:
         fetch_url, push_url, _ = check_remote_policy(root, remote, args.allowed_url)
     except CheckError as exc:
         mismatches.append(str(exc))
-        fetch_url, push_url = "", ""
     else:
         if fetch_url != expected_fetch or push_url != expected_push:
             mismatches.append(
@@ -941,13 +1235,14 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
             mismatches.append("candidate is no longer a fast-forward of remote ref")
 
     try:
-        _label, trusted_sha = resolve_trusted_baseline(root, remote, live_refs)
+        _label, live_trusted = resolve_trusted_baseline(root, remote, live_refs)
+        if live_trusted != judge.trusted_sha:
+            raise CheckError(f"the remote's {BASELINE_BRANCH} moved during the check; retry")
         with tempfile.TemporaryDirectory(prefix="genops-verify-") as td:
-            _, live_policy = extract_trusted_bundle(root, trusted_sha, Path(td))
+            _path, ignore_bytes = write_trusted_ignore(root, judge.trusted_sha, [], Path(td))
+        live_policy = compute_policy_version(judge, ignore_bytes)
         if live_policy != expected_policy:
-            mismatches.append(
-                f"policy version changed: manifest={expected_policy}, live={live_policy}"
-            )
+            mismatches.append(f"policy version changed: manifest={expected_policy}, live={live_policy}")
     except CheckError as exc:
         mismatches.append(str(exc))
 
@@ -963,7 +1258,7 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
 
     print(
         f"MANIFEST VERIFICATION: VALID | {remote} {target_ref} "
-        f"{expected_old[:12]} -> {expected_new[:12]} | policy={expected_policy}"
+        f"{str(expected_old)[:12]} -> {expected_new[:12]} | policy={expected_policy}"
     )
     return 0
 
@@ -982,218 +1277,170 @@ def validate_target_ref(root: Path, ref: str) -> None:
         raise CheckError(f"--ref must be one full branch ref (refs/heads/<name>); {problem}, got: {ref!r}")
 
 
-def cmd_release(args: argparse.Namespace) -> int:
+def forwarded_release_args(args: argparse.Namespace) -> list[str]:
+    """The caller's release options, passed on unchanged to the exported checker."""
+    out = ["--to", args.to]
+    for flag, value in (
+        ("--ref", args.ref),
+        ("--commit", args.commit),
+        ("--allowed-url", args.allowed_url),
+        ("--manifest-dir", args.manifest_dir),
+        ("--verify-manifest", args.verify_manifest),
+    ):
+        if value is not None:
+            out += [flag, value]
+    if args.allow_new_ref:
+        out.append("--allow-new-ref")
+    if args.json_output:
+        out.append("--json")
+    if args.bootstrap_self_judge:
+        out.append(BOOTSTRAP_FLAG)
+    return out
+
+
+def launch_release(args: argparse.Namespace) -> int:
+    """Run the release check with the checker exported from the trusted baseline.
+
+    This launcher is the only part that runs from the working tree. It finds the trusted
+    baseline (the remote's main), exports the checker and scanners of that commit (or, under
+    --bootstrap-self-judge, of the candidate) and hands the whole check to that exported copy."""
     root = repo_root()
     if args.verify_manifest:
-        return verify_manifest_file(root, Path(args.verify_manifest), args)
-
-    if not args.ref or not args.commit:
-        raise CheckError("--ref <refs/heads/...> and --commit <40-hex-sha> are required")
-    validate_target_ref(root, args.ref)
-    if not FULL_SHA_RE.fullmatch(args.commit):
-        raise CheckError(f"--commit must be a full 40-char commit SHA, got: {args.commit!r}")
-    verified_commit = git_optional(
-        ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{args.commit}^{{commit}}"],
-        root,
-    )
-    if verified_commit != args.commit:
-        raise CheckError(f"candidate commit not found locally: {args.commit}")
-
-    # Strict maintainer prerequisites (fail closed before touching anything else).
-    hook_problems = ensure_hooks_ready(root)
-    if hook_problems:
-        raise CheckError("; ".join(hook_problems))
-    ensure_betterleaks_available()
-
-    if git_text(["rev-parse", "--is-shallow-repository"], root) == "true":
-        raise CheckError("shallow clone cannot prepare a release manifest")
-
-    _priv_loaded, private_rule_count, _priv_note = validate_private_rules_file(require_non_empty=True)
-
-    fetch_url, push_url, _ = check_remote_policy(root, args.to, args.allowed_url)
-    remote_old_sha, remote_refs = query_remote_ref_sha(root, args.to, args.ref)
-
-    if remote_old_sha == ZERO_OID:
-        if not args.allow_new_ref:
-            raise CheckError(
-                f"remote ref {args.ref} does not exist; pass --allow-new-ref to explicitly stage a new branch"
-            )
+        data = read_manifest(Path(args.verify_manifest))
+        remote, candidate = data["remote"], data["candidate_sha"]
     else:
-        if remote_old_sha == args.commit:
-            raise CheckError(f"remote {args.ref} is already at {args.commit}; nothing to publish")
-        ff = run_git(
-            ["merge-base", "--is-ancestor", remote_old_sha, args.commit], root, check=False
-        )
-        if ff.returncode != 0:
-            raise CheckError(
-                f"non-fast-forward refused: remote {args.ref} ({remote_old_sha[:12]}) is not an ancestor of {args.commit[:12]}"
-            )
+        if not args.ref or not args.commit:
+            raise CheckError("--ref <refs/heads/...> and --commit <40-hex-sha> are required")
+        validate_target_ref(root, args.ref)
+        remote, candidate = args.to, args.commit
+    if not FULL_SHA_RE.fullmatch(candidate):
+        raise CheckError(f"--commit must be a full 40-char commit SHA, got: {candidate!r}")
+    if git_optional(["rev-parse", "--verify", "--quiet", "--end-of-options", f"{candidate}^{{commit}}"], root) != candidate:
+        raise CheckError(f"candidate commit not found locally: {candidate}")
 
-    trusted_label, trusted_sha = resolve_trusted_baseline(root, args.to, remote_refs)
+    # The remote is checked before it is asked anything; the exported checker checks it again.
+    check_remote_policy(root, remote, args.allowed_url)
+    _old, remote_refs = query_remote_ref_sha(root, remote, BASELINE_BRANCH)
+    _label, trusted_sha = resolve_trusted_baseline(root, remote, remote_refs)
+    checker_sha = candidate if args.bootstrap_self_judge else trusted_sha
+    with tempfile.TemporaryDirectory(prefix="genops-checker-") as td:
+        try:
+            tools = export_checker(root, checker_sha, Path(td))
+        except CheckError as exc:
+            if args.bootstrap_self_judge:
+                raise
+            raise CheckError(bootstrap_hint(trusted_sha, f"cannot supply the checker ({exc})")) from exc
+        script = tools / "release_check.py"
+        if not checker_speaks_protocol(script, root):
+            if args.bootstrap_self_judge:
+                raise CheckError(
+                    f"the candidate's own checker ({candidate[:12]}) does not speak release protocol {RELEASE_PROTOCOL}"
+                )
+            raise CheckError(
+                bootstrap_hint(trusted_sha, f"has no release checker that speaks protocol {RELEASE_PROTOCOL}")
+            )
+        cmd = [
+            sys.executable,
+            "-I",
+            "-B",
+            str(script),
+            "release",
+            *forwarded_release_args(args),
+            "--as-trusted-checker",
+            "--trusted-sha",
+            trusted_sha,
+            "--checker-sha",
+            checker_sha,
+        ]
+        sys.stdout.flush()
+        sys.stderr.flush()
+        return subprocess.run(cmd, cwd=root, check=False).returncode
+
+
+def judge_for_this_process(root: Path, args: argparse.Namespace) -> Judge:
+    """The exported checker checks what the launcher told it before it judges anything."""
+    for name in ("trusted_sha", "checker_sha"):
+        if not FULL_SHA_RE.fullmatch(getattr(args, name) or ""):
+            raise CheckError("--as-trusted-checker is internal to ./check release")
+    candidate = args.commit
+    if args.verify_manifest:
+        candidate = read_manifest(Path(args.verify_manifest))["candidate_sha"]
+    if args.bootstrap_self_judge:
+        if args.checker_sha != candidate:
+            raise CheckError("bootstrap: the checker must come from the candidate")
+    elif args.checker_sha != args.trusted_sha:
+        raise CheckError("the checker must come from the trusted baseline")
+    me = Path(__file__).resolve()
+    shipped = run_git(["cat-file", "blob", f"{args.checker_sha}:tools/release_check.py"], root, check=False)
+    if shipped.returncode != 0 or shipped.stdout != me.read_bytes():
+        raise CheckError(
+            f"this checker ({me}) is not tools/release_check.py of {args.checker_sha[:12]}; run ./check release"
+        )
+    return Judge(me.parent, args.trusted_sha, args.checker_sha, bool(args.bootstrap_self_judge))
+
+
+def run_as_trusted_checker(args: argparse.Namespace) -> int:
+    root = repo_root()
+    judge = judge_for_this_process(root, args)
+    if args.verify_manifest:
+        return verify_manifest_file(root, judge, Path(args.verify_manifest), args)
+
     manifest_dir = ensure_outside_repo(
         root, Path(args.manifest_dir) if args.manifest_dir else default_manifest_dir()
     )
+    result = prepare_release(
+        root,
+        judge,
+        remote=args.to,
+        ref=args.ref,
+        commit=args.commit,
+        allow_new_ref=args.allow_new_ref,
+        allowed_url=args.allowed_url,
+    )
+    if result.blocked or result.manifest is None:
+        if judge.self_judged:
+            print("注意：候选自己判自己（引导模式），结论要独立复核。")
+        for line in result.blocked:
+            print(line)
+        return 1
+    manifest = {"created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **result.manifest}
+    print_and_store_manifest(manifest, manifest_dir, args.json_output)
+    return 0
 
-    with tempfile.TemporaryDirectory(prefix="genops-trusted-") as td:
-        td_path = Path(td)
-        bundle, policy_version = extract_trusted_bundle(root, trusted_sha, td_path)
-        if "tools/privacy_scan.py" not in bundle or "tools/privacy_rules.json" not in bundle:
-            raise CheckError(
-                f"trusted baseline {trusted_sha[:12]} is missing tools/privacy_scan.py or privacy_rules.json"
-            )
-        if "tools/secret_scan.sh" not in bundle or "tools/secret_scan.tmpl" not in bundle:
-            raise CheckError(
-                f"trusted baseline {trusted_sha[:12]} is missing tools/secret_scan.sh or secret_scan.tmpl"
-            )
 
-        trusted_scanner = bundle["tools/privacy_scan.py"]
-        trusted_rules = bundle["tools/privacy_rules.json"]
-        trusted_secret = bundle["tools/secret_scan.sh"]
-        trusted_ignore = bundle["_ignore_path"]
-
-        scanner_text = trusted_scanner.read_text(encoding="utf-8", errors="replace")
-        secret_text = trusted_secret.read_text(encoding="utf-8", errors="replace")
-        scanner_has_rev = "--rev" in scanner_text and "--json" in scanner_text
-        secret_has_rev = "rev)" in secret_text
-
-        unverified_notes: list[str] = []
-        if scanner_has_rev:
-            p_rc, p_payload, p_err = run_privacy_subprocess(
-                trusted_scanner,
-                trusted_rules,
-                ["--rev", args.commit, "--ref-name", args.ref],
-                root,
-                require_private=True,
-                no_private=False,
-            )
-        else:
-            unverified_notes.append(
-                f"trusted baseline {trusted_sha[:12]} predates --rev; ran baseline + current scanner (review scanner upgrade separately)"
-            )
-            legacy = subprocess.run(
-                [sys.executable, "-I", "-B", str(trusted_scanner), "--rules", str(trusted_rules), "--history"],
-                cwd=root,
-                env={**os.environ, REQUIRE_PRIVATE_ENV: "1"},
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if legacy.returncode == EXIT_ERROR:
-                raise CheckError(legacy.stderr.strip() or "legacy trusted privacy_scan failed")
-            if legacy.returncode == EXIT_FINDINGS:
-                print("RELEASE BLOCKED: legacy trusted privacy_scan reported findings (no manifest generated).")
-                for line in (legacy.stdout + "\n" + legacy.stderr).strip().splitlines():
-                    print(f"  {line}")
-                return 1
-            p_rc, p_payload, p_err = run_privacy_subprocess(
-                root / "tools" / "privacy_scan.py",
-                trusted_rules,
-                ["--rev", args.commit, "--ref-name", args.ref],
-                root,
-                require_private=True,
-                no_private=False,
-            )
-
-        if p_rc == EXIT_ERROR:
-            raise CheckError(p_payload.get("error") or p_err or "privacy_scan error")
-        if p_rc == EXIT_FINDINGS:
-            print("RELEASE BLOCKED: candidate failed privacy scan (no approval manifest generated).")
-            for item in p_payload.get("findings", []):
-                print(f"  {item['where']}:{item['line']}: {item['rule_id']} -- {item['why']}")
-            return 1
-
-        redact_helper = (
-            trusted_scanner if "--redact-stream" in scanner_text else (root / "tools" / "privacy_scan.py")
-        )
-        s_mode = ["rev", args.commit] if secret_has_rev else ["history"]
-        if not secret_has_rev:
-            unverified_notes.append(
-                f"trusted baseline {trusted_sha[:12]} predates secret_scan rev mode; ran baseline history mode"
-            )
-        s_rc, s_out = run_secret_subprocess(
-            trusted_secret,
-            s_mode,
-            root,
-            redact_scanner=redact_helper,
-            rules_path=trusted_rules,
-            no_private=False,
-            ignore_path=trusted_ignore,
-        )
-        if s_rc in (2, 3):
-            raise CheckError(s_out or f"trusted secret_scan error (exit {s_rc})")
-        if s_rc != 0:
-            print("RELEASE BLOCKED: candidate failed Betterleaks scan (no approval manifest generated).")
-            for line in s_out.splitlines():
-                print(f"  {line}")
-            return 1
-
-        other_scanner = trusted_scanner if scanner_has_rev else (root / "tools" / "privacy_scan.py")
-        o_rc, o_payload, _o_err = run_privacy_subprocess(
-            other_scanner,
-            trusted_rules,
-            ["--other-refs-except", args.commit],
-            root,
-            require_private=True,
-            no_private=False,
-        )
-        other_warnings: list[dict[str, Any]] = []
-        if o_rc == EXIT_FINDINGS:
-            other_warnings = o_payload.get("findings", [])
-        elif o_rc == EXIT_ERROR:
-            unverified_notes.append("non-candidate local ref scan errored; inspect locally")
-
-    audit_base = remote_old_sha if remote_old_sha != ZERO_OID else trusted_sha
-    control_changes, inline_allows = inspect_control_plane_and_allows(root, audit_base, args.commit)
-    commit_count, changed_files = collect_release_diff_summary(root, remote_old_sha, args.commit)
-
-    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    manifest = {
-        "schema_version": 1,
-        "created_at": created_at,
-        "status": "awaiting_user_approval_not_pushed",
-        "action": "push_single_branch_only",
-        "remote": args.to,
-        "fetch_url": fetch_url,
-        "push_url": push_url,
-        "target_ref": args.ref,
-        "new_ref": remote_old_sha == ZERO_OID,
-        "remote_old_sha": remote_old_sha,
-        "candidate_sha": args.commit,
-        "trusted_ref": trusted_label,
-        "trusted_sha": trusted_sha,
-        "policy_version": policy_version,
-        "commit_count": commit_count,
-        "changed_files": changed_files,
-        "privacy_scan": {
-            "status": "clean",
-            "private_rules_loaded": private_rule_count,
-        },
-        "secret_scan": {"status": "clean", "tool": "betterleaks"},
-        "control_plane_changes": control_changes,
-        "inline_allow_additions": inline_allows,
-        "non_candidate_ref_warnings": other_warnings,
-        "unverified_items": unverified_notes,
-    }
-
+def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_output: bool) -> None:
+    commit = manifest["candidate_sha"]
     manifest_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    manifest_file = manifest_dir / f"release-{args.commit[:12]}-{stamp}.json"
+    manifest_file = manifest_dir / f"release-{commit[:12]}-{stamp}.json"
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    if args.json_output:
+    if json_output:
         print(json.dumps({"manifest_path": str(manifest_file), "manifest": manifest}, ensure_ascii=False, indent=2))
-        return 0
+        return
 
+    remote_old_sha = manifest["remote_old_sha"]
+    changed_files = manifest["changed_files"]
+    control_changes = manifest["control_plane_changes"]
+    inline_allows = manifest["inline_allow_additions"]
+    other_warnings = manifest["non_candidate_ref_warnings"]
+    unverified_notes = manifest["unverified_items"]
     old_label = "NEW (000000000000)" if remote_old_sha == ZERO_OID else remote_old_sha
     file_preview = ", ".join(f"{f['status']} {f['path']}" for f in changed_files[:20])
     if len(changed_files) > 20:
         file_preview += f", ... (+{len(changed_files) - 20} more)"
+    if manifest["self_judged"]:
+        print(
+            f"注意：候选自己判自己——可信基线 {manifest['trusted_sha'][:12]} 判不了，"
+            f"检查器和扫描器用的是候选 {manifest['checker_sha'][:12]} 自己的，要独立复核。"
+        )
     print("请求：仅推送一个分支；不改可见性，不建 tag，不发 release")
-    print(f"目标：{push_url} · {args.ref} · {old_label} -> {args.commit}")
-    print(f"改动：{commit_count} 个提交 / {len(changed_files)} 个文件；{file_preview or '(无文件差异)'}")
+    print(f"目标：{manifest['push_url']} · {manifest['target_ref']} · {old_label} -> {commit}")
+    print(f"改动：{manifest['commit_count']} 个提交 / {len(changed_files)} 个文件；{file_preview or '(无文件差异)'}")
     print(
-        f"隐私：维护者规则已加载（{private_rule_count} 条）；历史、路径和 ref 通过；"
-        f"Betterleaks 通过；策略版本 {policy_version}（trusted={trusted_sha[:12]}）"
+        f"隐私：维护者规则已加载（{manifest['privacy_scan']['private_rules_loaded']} 条）；历史、路径和 ref 通过；"
+        f"Betterleaks 通过；工作流策略 {manifest['workflow_policy']}；策略版本 {manifest['policy_version']}"
+        f"（trusted={manifest['trusted_sha'][:12]}，checker={manifest['checker_sha'][:12]}）"
     )
     print(
         f"需人决定：控制面改动 {len(control_changes)}；新增行内豁免 {len(inline_allows)}；"
@@ -1204,17 +1451,17 @@ def cmd_release(args: argparse.Namespace) -> int:
     if inline_allows:
         print(f"  新增行内豁免（需独立复核）：{', '.join(inline_allows)}")
     if other_warnings:
-        print(
-            f"  本地其他未推 ref 告警（不影响本次候选）：{len(other_warnings)} 条（详见本机扫描）"
-        )
-    if unverified_notes:
-        for note in unverified_notes:
-            print(f"  未验证项：{note}")
-    print(
-        "当前状态：等待用户同意；尚未推送。目标、SHA 或策略版本变化时本清单作废。"
-    )
+        print(f"  本地其他未推 ref 告警（不影响本次候选）：{len(other_warnings)} 条（详见本机扫描）")
+    for note in unverified_notes:
+        print(f"  未验证项：{note}")
+    print("当前状态：等待用户同意；尚未推送。目标、SHA 或策略版本变化时本清单作废。")
     print(f"仓外核对记录：{manifest_file}")
-    return 0
+
+
+def cmd_release(args: argparse.Namespace) -> int:
+    if args.as_trusted_checker:
+        return run_as_trusted_checker(args)
+    return launch_release(args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1261,6 +1508,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="re-verify an existing manifest snapshot against live remote/local state before pushing",
     )
     p_release.add_argument("--json", dest="json_output", action="store_true", help="emit JSON output")
+    p_release.add_argument(
+        BOOTSTRAP_FLAG,
+        dest="bootstrap_self_judge",
+        action="store_true",
+        help=(
+            "only when the trusted baseline cannot judge (no release checker that speaks the protocol, "
+            "or no workflow policy checker): let the candidate's own checker and scanners judge it; "
+            "the manifest says so and needs an independent review"
+        ),
+    )
+    # Internal: ./check release hands the check to the checker exported from the judging commit.
+    p_release.add_argument("--as-trusted-checker", action="store_true", help=argparse.SUPPRESS)
+    p_release.add_argument("--trusted-sha", help=argparse.SUPPRESS)
+    p_release.add_argument("--checker-sha", help=argparse.SUPPRESS)
+
+    sub.add_parser("protocol", help="print the release protocol this checker speaks (JSON)")
     return parser
 
 
@@ -1272,6 +1535,9 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_changed(args)
         if args.command == "release":
             return cmd_release(args)
+        if args.command == "protocol":
+            print(json.dumps({"release_protocol": RELEASE_PROTOCOL}))
+            return 0
         parser.error(f"unknown command: {args.command}")
     except CheckError as exc:
         if getattr(args, "json_output", False):
