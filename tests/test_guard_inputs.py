@@ -180,6 +180,25 @@ class AttributeTests(unittest.TestCase):
         link.replace(self.repo.path / "app.cfg")
         refused_by_secret_scan(self, self.repo.secret("unstaged"), self.token)
 
+    def test_a_nul_byte_deep_in_a_file_that_git_is_told_to_diff_as_text_is_scanned(self) -> None:
+        # Betterleaks' git run works in a scratch clone that does not carry a committed
+        # .gitattributes, so for it a NUL byte makes the file binary and it skips the file.
+        # Here git itself is told to treat *.dat as text, so its --numstat does not flag the
+        # file, and only the NUL test on the head of the content selects it for the second
+        # pass. The NUL sits well past the first few hundred bytes, inside the 8000 that git's
+        # own binary check reads.
+        self.repo.add_file(".gitattributes", "*.dat diff\n")
+        token = registry_token()
+        filler = b"ordinary text line\n" * 280  # 5320 bytes
+        (self.repo.path / "item.dat").write_bytes(filler + b"\x00\nkey = " + token.encode() + b"\n")
+        self.repo.git("add", "item.dat")
+        self.repo.unchecked_commit("text by attribute, with a NUL byte")
+        numstat = self.repo.git("show", "--numstat", "--format=", "HEAD")
+        self.assertTrue(numstat.endswith("item.dat") and not numstat.startswith("-"), numstat)
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
+
     def test_committed_content_marked_binary_is_scanned_in_every_git_mode(self) -> None:
         self.repo.add_file("app.cfg", f"key = {self.token}\n")
         self.repo.unchecked_commit("config")
