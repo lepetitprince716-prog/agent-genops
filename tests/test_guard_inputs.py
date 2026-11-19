@@ -236,6 +236,64 @@ class AttributeTests(unittest.TestCase):
                 self.repo.unchecked_commit(f"drop {name}")
 
 
+class AttributesOutsideTheCommitTests(unittest.TestCase):
+    """Attributes a commit does not carry hide nothing from the modes that walk history.
+
+    git reads attributes from the clone's info/attributes, from core.attributesFile (by default
+    $HOME/.config/git/attributes) and from the system file as well as from .gitattributes. A
+    text file one of them marks binary or -diff is skipped by Betterleaks' git mode, so the
+    second pass has to select it by git's own judgment, as the staged mode does.
+    """
+
+    SOURCES = (("info", "*.cfg binary\n"), ("user", "* -diff\n"), ("attributes_file", "*.cfg binary\n"))
+
+    def committed_token(self) -> tuple[Repo, str]:
+        repo = Repo(self)
+        # git reads $XDG_CONFIG_HOME/git/attributes instead of $HOME/.config/git/attributes when
+        # it is set; drop it so the file written under the test's HOME is the one git reads.
+        repo.env.pop("XDG_CONFIG_HOME", None)
+        token = registry_token()
+        repo.add_file("app.cfg", f"key = {token}\n")
+        repo.unchecked_commit("config")
+        self.assertFalse(self.judged_binary(repo))
+        return repo, token
+
+    def judged_binary(self, repo: Repo) -> bool:
+        numstat = repo.git("show", "--numstat", "--format=", "HEAD")
+        return numstat.startswith("-\t-\tapp.cfg")
+
+    def place(self, repo: Repo, source: str, line: str) -> None:
+        if source == "info":
+            target = repo.path / ".git" / "info" / "attributes"
+        elif source == "user":
+            target = repo.home / ".config" / "git" / "attributes"
+        else:
+            target = repo.base / "elsewhere.attributes"
+            repo.git("config", "core.attributesFile", str(target))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(line)
+        # Without this the test would pass with the attribute never read.
+        self.assertTrue(self.judged_binary(repo), source)
+
+    def test_history_modes_read_text_that_an_outside_attribute_marks_binary(self) -> None:
+        for source, line in self.SOURCES:
+            repo, token = self.committed_token()
+            self.place(repo, source, line)
+            for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+                with self.subTest(source=source, args=args):
+                    refused_by_secret_scan(self, repo.secret(*args), token)
+
+    def test_push_refuses_text_that_the_user_attributes_file_marks_binary(self) -> None:
+        repo, token = self.committed_token()
+        self.place(repo, "user", "* binary\n")
+        pushed = repo.push("main")
+        refused_by_secret_scan(self, pushed, token)
+        self.assertNotEqual(
+            repo.git("rev-parse", "HEAD"),
+            repo.git("--git-dir", str(repo.remote), "rev-parse", "main"),
+        )
+
+
 class CommitHeaderTests(unittest.TestCase):
     """Headers of a commit object other than author and committer are read by both scanners.
 

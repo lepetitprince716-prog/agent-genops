@@ -254,49 +254,96 @@ peel() {
 
 # scan_binary staged | unstaged | log REV-ARGS... | file PATH: read again, through stdin, what
 # Betterleaks' own scan skips. Its git mode prints "Binary files differ" for content git treats as
-# binary (a NUL byte in the first 8000 bytes, or -diff or binary in a committed .gitattributes,
-# which its own git run reads whatever GIT_ATTR_SOURCE, --text in --log-opts or the clone's
-# info/attributes say), and its dir mode skips a file with a NUL byte too (checked with 1.10.1).
-# So the selection is binary by git's rule. A dir scan is no way round: it also skips a file by a
-# head that looks like an executable, a document or an archive. Stdin sniffs only the head of the
-# stream (checked up to 10 MiB in), so the stream starts with an empty line. Findings here carry
-# no path; a false positive is allowed inline or by its ":rule:line" fingerprint, the line counted
-# in this stream. The log form takes every blob the walked commits add or change (merges against
-# their first parent), once each.
+# binary: a NUL byte in the first 8000 bytes, or binary or -diff in an attributes file. Its git
+# run works in a scratch clone of its own, so which attributes files it reads is not the clone's
+# set (with 1.10.1 it reads $HOME/.config/git/attributes but not info/attributes or a committed
+# .gitattributes). So every form selects what git itself, run here, calls binary (a "-" in
+# --numstat, whichever attributes file says so), plus any content with a NUL byte in its first
+# 8000 bytes. A dir scan is no way round: it also skips a
+# file by a head that looks like an executable, a document or an archive. Stdin sniffs only the
+# head of the stream (checked up to 10 MiB in), so the stream starts with an empty line. Findings
+# here carry no path; a false positive is allowed inline or by its ":rule:line" fingerprint, the
+# line counted in this stream. The log form takes every blob the walked commits add or change
+# (merges against their first parent), once each. A git command that fails, or output that does
+# not parse, fails the scan.
 scan_binary() {
   python3 -I -B -c '
 import os, subprocess, sys
 
 stream, mode, *rest = sys.argv[1:]
 git = ["git", "--no-replace-objects"]
+diff_opts = ["--no-renames", "--no-relative", "--no-textconv", "--no-ext-diff"]
+
+def fail(why):
+    sys.stderr.write(f"secret_scan: binary content: {why}; nothing was passed as clean\n")
+    sys.exit(1)
 
 def wanted(data):
     return b"\0" in data[:8000]
 
+def marked(numstat):
+    added, deleted, path = numstat.split(b"\t", 2)
+    return path, added == b"-" and deleted == b"-"
+
 def run(args, data=None):
-    return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
+    try:
+        return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
+    except subprocess.CalledProcessError as error:
+        fail(f"git {args[0]} exited {error.returncode}")
 
 def batch(oids):
     out = run(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
     pos = 0
-    for _ in oids:
-        header, _, out_rest = out[pos:].partition(b"\n")
-        size = int(header.split()[2])
+    for oid in oids:
+        header = out[pos:].partition(b"\n")[0]
+        fields = header.split()
+        if len(fields) != 3 or fields[0] != oid or fields[1] != b"blob":
+            fail("git cat-file did not return a listed blob")
+        size = int(fields[2])
         start = pos + len(header) + 1
         yield out[start : start + size]
         pos = start + size + 1
 
+def changed_blobs(log):
+    """{blob id: git calls it binary in at least one commit} from log -z --raw --numstat."""
+    blobs = {}
+    def close(entries, binary):
+        for path, oid in entries:
+            if path not in binary:
+                fail("git log printed no --numstat line for a changed file")
+            blobs[oid] = blobs.get(oid, False) or binary[path]
+    entries, binary = [], {}
+    fields = iter(log.split(b"\0"))
+    for token in fields:
+        token = token.lstrip(b"\n")
+        if token == b"\x01":  # the --format line that opens each commit
+            close(entries, binary)
+            entries, binary = [], {}
+        elif token.startswith(b":"):
+            path = next(fields, None)
+            parts = token[1:].split(b" ")
+            if path is None or len(parts) != 5:
+                fail("git log --raw output did not parse")
+            _, new_mode, _, oid, status = parts
+            if new_mode.startswith(b"100") and status[:1] in b"AMT":
+                entries.append((path, oid))
+        elif token:
+            if token.count(b"\t") < 2:
+                fail("git log --numstat output did not parse")
+            path, is_binary = marked(token)
+            binary[path] = binary.get(path, False) or is_binary
+    close(entries, binary)
+    return blobs
+
 found = []
 if mode in ("staged", "unstaged"):
-    cmd = ["diff", "--numstat", "-z", "--no-renames", "--no-textconv", "--no-ext-diff",
-           "--ignore-submodules=all", "--diff-filter=ACMT"]
+    cmd = ["diff", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
     if mode == "staged":
         cmd.append("--cached")
     for record in run(cmd).split(b"\0"):
         if not record:
             continue
-        added, deleted, path = record.split(b"\t", 2)
-        marked = added == b"-" and deleted == b"-"
+        path, is_binary = marked(record)
         if mode == "staged":
             data = run(["cat-file", "blob", b":0:" + path])
         else:
@@ -309,21 +356,13 @@ if mode in ("staged", "unstaged"):
                     data = handle.read()
             else:
                 continue
-        if marked or wanted(data):
+        if is_binary or wanted(data):
             found.append(data)
 elif mode == "log":
-    raw = run(["log", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-merges=first-parent",
-               "--format=", *rest])
-    seen, fields = {}, iter(raw.split(b"\0"))
-    for token in fields:
-        if not token.startswith(b":"):
-            continue
-        next(fields)  # the path that follows each raw record
-        _, new_mode, _, oid, status = token[1:].split(b" ")
-        if new_mode.startswith(b"100") and status[:1] in b"AMT":
-            seen[oid] = None
-    oids = list(seen)
-    found = [data for data in batch(oids) if wanted(data)]
+    blobs = changed_blobs(run(["log", "-z", "--raw", "--numstat", "--no-abbrev", *diff_opts,
+                               "--diff-merges=first-parent", "--format=%x01", *rest]))
+    oids = list(blobs)
+    found = [data for oid, data in zip(oids, batch(oids)) if blobs[oid] or wanted(data)]
 else:
     with open(rest[0], "rb") as handle:
         data = handle.read()
@@ -333,7 +372,7 @@ with open(stream, "wb") as out:
     out.write(b"\n")
     for data in found:
         out.write(data + b"\n")
-' "$work/binary-stream" "$@"
+' "$work/binary-stream" "$@" || return 1
   if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
     scan "content Betterleaks skips as binary" stdin <"$work/binary-stream"
   fi
