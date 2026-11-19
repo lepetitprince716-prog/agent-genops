@@ -15,10 +15,20 @@
 #   sh tools/secret_scan.sh range BASE..HEAD commits in a range (merges against their first
 #                                            parent), plus their messages
 #   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
+#   sh tools/secret_scan.sh ignore-check --index | OBJECT
+#                                            exit 1 unless the working tree's .betterleaksignore
+#                                            and .gitleaksignore are byte for byte the versions in
+#                                            the index or in OBJECT's tree (absent counts as a
+#                                            version); the hooks run it before each scan
 #
 # Betterleaks itself scans diffs only and shows a merge commit no diff, so content that only a
 # merge adds would pass unseen; every diff walk here asks git for merges against their first
 # parent. Tag objects, messages and directly referenced trees and blobs go through stdin.
+#
+# Without SECRET_SCAN_IGNORE_PATH, Betterleaks applies the ignore files it finds on disk at the root
+# of its source (and, for stdin, in the current directory), whatever the scanned commit holds. A
+# hook that scanned with a working-tree copy the commit does not carry would pass content under an
+# exemption no reviewer sees; ignore-check is how the hooks refuse that.
 #
 # Optional environment controls:
 #   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory. When
@@ -40,7 +50,7 @@
 set -eu
 
 usage() {
-  echo "usage: sh tools/secret_scan.sh staged | unstaged | message FILE | history | rev OBJECT | range SPEC | files FILE..." >&2
+  echo "usage: sh tools/secret_scan.sh staged | unstaged | message FILE | history | rev OBJECT | range SPEC | files FILE... | ignore-check --index|OBJECT" >&2
   exit 2
 }
 
@@ -49,7 +59,7 @@ mode=$1
 case "$mode" in
   staged | unstaged | history) [ "$#" -eq 1 ] || usage ;;
   message) [ "$#" -eq 2 ] && [ -r "$2" ] || usage ;;
-  rev | range) [ "$#" -eq 2 ] && [ -n "$2" ] || usage ;;
+  rev | range | ignore-check) [ "$#" -eq 2 ] && [ -n "$2" ] || usage ;;
   files) [ "$#" -ge 2 ] || usage ;;
   *) usage ;;
 esac
@@ -221,6 +231,51 @@ peel() {
 }
 
 case "$mode" in
+  ignore-check)
+    top=$(g rev-parse --show-toplevel)
+    if [ "$2" = --index ]; then
+      label="the index"
+    else
+      obj=$(g rev-parse --verify --quiet --end-of-options "$2^{object}") || {
+        echo "secret_scan: not a git object: $2" >&2
+        exit 2
+      }
+      label="the scanned object $(printf '%s' "$obj" | cut -c1-12)"
+      # A blob (or a tag of one) has no tree, so no ignore file comes with it.
+      tree=$(g rev-parse --verify --quiet "$obj^{tree}") || tree=
+    fi
+    rc_all=0
+    for name in .betterleaksignore .gitleaksignore; do
+      path="$top/$name"
+      have=
+      if [ -e "$path" ]; then
+        # hash-object reads through a symlink, as Betterleaks does; a directory is unreadable.
+        have=$(g hash-object --no-filters -- "$path") || {
+          echo "secret_scan: cannot read $name in the working tree" >&2
+          exit 2
+        }
+      fi
+      if [ "$2" = --index ]; then
+        want=$(g rev-parse --verify --quiet ":0:$name") || want=
+      elif [ -n "$tree" ]; then
+        want=$(g rev-parse --verify --quiet "$tree:$name") || want=
+      else
+        want=
+      fi
+      if [ "$have" != "$want" ]; then
+        if [ -z "$want" ]; then
+          what="exists in the working tree but not in $label"
+        elif [ -z "$have" ]; then
+          what="is in $label but missing from the working tree"
+        else
+          what="in the working tree differs from the version in $label"
+        fi
+        echo "secret_scan: $name $what. Betterleaks would apply the working-tree copy, not the exemptions the scanned content carries. Commit it, restore it, or move it away, then retry." >&2
+        rc_all=1
+      fi
+    done
+    exit "$rc_all"
+    ;;
   staged)
     scan "staged changes" git --pre-commit --staged "$src"
     ;;

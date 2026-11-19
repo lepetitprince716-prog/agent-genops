@@ -378,6 +378,113 @@ class PerRefPathTests(TemplateCase):
         self.assertEqual(repo.remote_tip(), before)
 
 
+class IgnoreFileTests(TemplateCase):
+    """A Betterleaks ignore file only the working tree has is an exemption nobody sees (R8b)."""
+
+    def staged_token(self) -> tuple[Repo, str]:
+        """A copy with a registry token staged, and the one fingerprint Betterleaks gives it."""
+        repo = self.repo()
+        repo.add_file("deploy.txt", f"value: {registry_token()}\n")
+        prints = repo.fingerprints("git", "--pre-commit", "--staged", ".")
+        self.assertEqual(len(prints), 1, prints)
+        self.assert_refused(repo.commit("no exemption yet"), "secret_scan:")
+        return repo, prints[0] + "\n"
+
+    def test_pre_commit_refuses_an_ignore_file_the_index_does_not_have(self) -> None:
+        for name in (".betterleaksignore", ".gitleaksignore"):
+            with self.subTest(untracked=name):
+                repo, listing = self.staged_token()
+                before = repo.head()
+                repo.write(name, listing)
+                self.assert_refused(repo.commit("untracked exemption"), name)
+                self.assertEqual(repo.head(), before)
+
+    def test_pre_commit_accepts_a_staged_ignore_file_but_not_an_unstaged_edit(self) -> None:
+        repo, listing = self.staged_token()
+        repo.add_file(".betterleaksignore", listing)
+        committed = repo.commit("exemption in the commit itself")
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        before = repo.head()
+        repo.write(".betterleaksignore", listing + "other.txt:npm-access-token:1\n")
+        repo.add_file("note.txt", "clean\n")
+        self.assert_refused(repo.commit("modified, not staged"), ".betterleaksignore")
+        self.assertEqual(repo.head(), before)
+
+    def test_pre_commit_hook_alone_refuses_an_ignore_file_the_index_does_not_have(self) -> None:
+        """Run directly: a real commit also runs commit-msg, which would mask a missing check."""
+        repo, listing = self.staged_token()
+        hook = str(repo.path / ".githooks" / "pre-commit")
+        repo.write(".betterleaksignore", listing)
+        self.assert_refused(repo.run(hook), ".betterleaksignore")
+        repo.git("add", ".betterleaksignore")
+        allowed = repo.run(hook)
+        self.assertEqual(allowed.returncode, 0, combined(allowed))
+
+    def test_commit_msg_refuses_an_ignore_file_the_index_does_not_have(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        message = repo.base / "msg.txt"
+        message.write_text(f"note the token {token}\n")
+        prints = repo.fingerprints("stdin", stdin=message.read_text())
+        self.assertEqual(len(prints), 1, prints)
+        hook = str(repo.path / ".githooks" / "commit-msg")
+        self.assert_refused(repo.run(hook, str(message)), "secret_scan:")
+        repo.write(".betterleaksignore", prints[0] + "\n")
+        self.assert_refused(repo.run(hook, str(message)), ".betterleaksignore")
+        repo.git("add", ".betterleaksignore")
+        allowed = repo.run(hook, str(message))
+        self.assertEqual(allowed.returncode, 0, combined(allowed))
+
+    def test_pre_push_refuses_an_ignore_file_the_candidate_does_not_have(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("deploy.txt", f"value: {token}\n")
+        repo.unchecked_commit("slip")
+        prints = repo.fingerprints("git", "--log-opts=-1", ".")
+        self.assertEqual(len(prints), 1, prints)
+        before = repo.remote_tip()
+        self.assert_refused(repo.push("origin", "main"), "secret_scan:")
+        repo.write(".betterleaksignore", prints[0] + "\n")
+        self.assert_refused(repo.push("origin", "main"), ".betterleaksignore")
+        self.assertEqual(repo.remote_tip(), before)
+        repo.git("add", ".betterleaksignore")
+        repo.unchecked_commit("exemption in the pushed commit")
+        pushed = repo.push("origin", "main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        self.assertEqual(repo.remote_tip(), repo.head())
+
+    def test_pre_push_compares_with_the_pushed_commit_not_with_head(self) -> None:
+        repo = self.repo()
+        base = repo.head()
+        repo.add_file("deploy.txt", f"value: {registry_token()}\n")
+        repo.unchecked_commit("slip")
+        prints = repo.fingerprints("git", "--log-opts=-1", ".")
+        self.assertEqual(len(prints), 1, prints)
+        repo.add_file(".betterleaksignore", prints[0] + "\n")
+        repo.unchecked_commit("exemption in the pushed commit")
+        pushed_tip = repo.head()
+        repo.git("checkout", "-q", "-b", "side", base)
+        self.assertFalse((repo.path / ".betterleaksignore").exists())
+        repo.write(".betterleaksignore", prints[0] + "\n")
+        pushed = repo.push("origin", "main:main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        self.assertEqual(repo.remote_tip(), pushed_tip)
+
+    def test_direct_pre_push_refuses_an_ignore_file_head_does_not_have(self) -> None:
+        for name in ("no arguments", "no ref lines"):
+            with self.subTest(invocation=name):
+                repo = self.repo()
+                args = () if name == "no arguments" else ("origin", str(repo.remote))
+                repo.add_file("deploy.txt", f"value: {registry_token()}\n")
+                repo.unchecked_commit("slip")
+                prints = repo.fingerprints("git", "--log-opts=-1", ".")
+                self.assertEqual(len(prints), 1, prints)
+                hook = str(repo.path / ".githooks" / "pre-push")
+                self.assert_refused(repo.run(hook, *args, stdin=""), "secret_scan:")
+                repo.write(".betterleaksignore", prints[0] + "\n")
+                self.assert_refused(repo.run(hook, *args, stdin=""), ".betterleaksignore")
+
+
 class MaintainerRulesTests(TemplateCase):
     """In maintainer mode a missing or empty private rules file stops every hook."""
 

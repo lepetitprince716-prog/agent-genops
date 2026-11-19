@@ -2,4 +2,5 @@
 set -eu
 cd "$(git --no-replace-objects rev-parse --show-toplevel)"
 python3 -B tools/privacy_scan.py --message "$1"
+sh tools/secret_scan.sh ignore-check --index
 exec sh tools/secret_scan.sh message "$1"

@@ -54,6 +54,7 @@ fi
 # to read): scan the full history instead of waiting on stdin.
 if [ "$#" -eq 0 ] || [ -t 0 ]; then
   python3 -B tools/privacy_scan.py --history
+  sh tools/secret_scan.sh ignore-check HEAD
   exec sh tools/secret_scan.sh history
 fi
 
@@ -72,12 +73,14 @@ while IFS=' ' read -r local_ref local_sha remote_ref _remote_sha; do
   fi
   pushed_any=1
   python3 -B tools/privacy_scan.py --rev "$local_sha" --ref-name "$remote_ref"
+  sh tools/secret_scan.sh ignore-check "$local_sha"
   sh tools/secret_scan.sh rev "$local_sha"
   exclude_args="$exclude_args $local_sha"
 done
 
 if [ "$seen_input" = "0" ]; then
   python3 -B tools/privacy_scan.py --history
+  sh tools/secret_scan.sh ignore-check HEAD
   exec sh tools/secret_scan.sh history
 fi
 
