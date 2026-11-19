@@ -220,6 +220,7 @@ Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
 
 ## Privacy guard
 
-This repository is public. `tools/privacy_scan.py` runs from the git hooks in `.githooks/` and in
-CI; see [tools/README.md](tools/README.md). Enable the hooks once per clone with
+This repository is public. The privacy and secret scans run from the git hooks in `.githooks/` at
+the repository root and in CI, and they cover this folder; `rdbg/` carries no guard of its own. See
+[PRIVACY.md](../PRIVACY.md) at the root. Enable the hooks once per clone, from the root, with
 `git config core.hooksPath .githooks`.

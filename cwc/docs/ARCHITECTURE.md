@@ -347,8 +347,8 @@ How compile and tidy place nodes and groups, and how the checks read the result.
 - Iterations are capped (barycentre sweeps 4, layout and corridor passes 2).
 - Organise by feature: one module per folder, no layer folders, no god files, no pass-through
   wrappers, no duplicated logic across modules.
-- Tests use `unittest` and run with `python3 -m unittest discover -s tests`. Fixtures are
-  hand-written or derived from public sources; nothing private enters `tests/`.
+- Tests use `unittest` and run, from the `cwc/` folder, with `python3 -m unittest discover -s tests`.
+  Fixtures are hand-written or derived from public sources; nothing private enters `tests/`.
 
 ## Data files
 

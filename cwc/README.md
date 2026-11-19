@@ -46,6 +46,10 @@ cwc snapshot --from URL [--via-frontend] -o nodedefs.json
 The core needs Python 3.10 or newer and nothing outside the standard library.
 Playwright is needed only for the real-frontend checks in `tools/oracle/`.
 
+`cwc/` is one folder of a larger repository. Paths on this page and in `docs/` (`src/`,
+`tests/`, `tools/`) are relative to this folder, and the commands in them run from here:
+`python3 -m unittest discover -s tests` runs the tests.
+
 ## Milestones
 
 | Milestone | What it covers | Status |
