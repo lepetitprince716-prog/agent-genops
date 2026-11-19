@@ -87,7 +87,7 @@ def parse_intent(author_id: str, meta: dict[str, Any], out: Findings) -> NodeInt
             continue
         fields[key] = parsed
         if key in NO_EFFECT_KEYS:
-            no_effect(out, f"node {author_id!r}: _meta.{key}", [author_id])
+            no_effect(out, f"_meta.{key}", author_id)
     return NodeIntent(**fields)
 
 

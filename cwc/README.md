@@ -53,8 +53,27 @@ Inputs that used to pass and now do not, or now warn:
 - A `_meta` key that starts with `ui_` but is not one of cwc's keys is an error (E7, exit 3)
   that names the closest key. It used to be a warning, and the misspelt key did nothing.
 - A key cwc accepts but does not use yet (`ui_locked`, `ui_expose`, `ui_note`,
-  `_workflow.title`, `_workflow.locale`, `_workflow.groups.<id>.note`) gets an info line (E7)
-  on stderr and in the report of a successful compile. The exit code and `ok` do not change.
+  `_workflow.title`, `_workflow.locale`, `_workflow.groups.<id>.note`) is named in one info
+  finding (E8) per compile, one line on stderr that lists the keys and the nodes that set them,
+  and in the report of a successful compile with the keys one by one in `data.keys`. The exit
+  code and `ok` do not change.
+
+The authoring checks of `compile` report these codes (the report's `title` field carries the
+same text; the other code families check the canvas):
+
+| Code | Meaning |
+|---|---|
+| E1 | unknown node type |
+| E2 | input name not defined for the node type |
+| E3 | required input without a declared default is missing |
+| E4 | link connects incompatible types |
+| E5 | literal value has the wrong type, is out of range, or is not a known option |
+| E6 | link points at a missing node or output, or names an ambiguous output |
+| E7 | graph structure is invalid (cycle, bad id, bad _workflow, mixed optional group) |
+| E8 | authoring key is accepted but has no effect yet |
+
+E7 also covers `_meta` keys cwc does not know: an error for one that starts with `ui_`, a
+warning for any other.
 
 `--nodedefs URL` reads `<URL>/api/object_info` from a running ComfyUI server. It follows at most
 three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge

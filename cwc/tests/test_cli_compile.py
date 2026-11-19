@@ -68,11 +68,10 @@ class CompileTest(Folder):
     def test_writes_canvas_prompt_and_report(self):
         code, out, err = run("compile", self.graph(with_lora(TXT2IMG)), "-o", self.out)
         self.assertEqual(code, ExitCode.OK)
-        *notices, summary = err.splitlines()  # no error or warning: the success summary, after
-        # one info line per key the graph sets that has no effect yet (ui_note and the like)
+        notice, summary = err.splitlines()  # no error or warning: the success summary, after
+        # the one info line on the keys the graph sets that have no effect yet (ui_note and the like)
         self.assertTrue(summary.startswith("cwc compile: ok; "), summary)
-        self.assertTrue(notices)
-        self.assertTrue(all(line.startswith("E7 info: ") and "no effect" in line for line in notices), notices)
+        self.assertTrue(notice.startswith("E8 info: ") and "no effect" in notice, notice)
         self.assertEqual(sorted(p.name for p in self.out.iterdir()), ["graph.api.json", "graph.report.json", "graph.ui.json"])
         self.assertEqual(out.count("wrote "), 3)
         report = self.read(".report.json")

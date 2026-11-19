@@ -273,7 +273,7 @@ def _success_line(compiled: Compiled, ui_path: str, warnings: int) -> str:
     )
 
 
-# Authoring checks (E1 to E7) speak about what the author wrote, so they reach the terminal at
+# Authoring checks (E1 to E8) speak about what the author wrote, so they reach the terminal at
 # every severity. Infos from the canvas checks stay in the report.
 AUTHORING_CODES = frozenset(code for code in Code if code.value.startswith("E"))
 

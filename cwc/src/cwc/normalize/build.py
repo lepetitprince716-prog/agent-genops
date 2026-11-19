@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol, Sequence
 
 from cwc.nodedefs.types import NodeDef
-from cwc.normalize.diagnostics import Findings, listing
+from cwc.normalize.diagnostics import Findings, listing, no_effect_notice
 from cwc.normalize.ids import RawNode, assign_ids, split_document
 from cwc.normalize.inputs import NodeOutput, check_node, check_unknown_node
 from cwc.normalize.intents import check_group_purity, parse_intent
@@ -38,11 +38,11 @@ class NodeDefSource(Protocol):
 
 
 def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool = False) -> tuple[Authoring, list[Finding]]:
-    """Check an authoring document (E1 to E7) and build its strict prompts.
+    """Check an authoring document (E1 to E8) and build its strict prompts.
 
     Raises ``CwcError(INPUT_ERROR, findings)`` when any finding is an error; otherwise
-    returns the result with the warnings, sorted. Info findings ride on ``Authoring.notices``
-    and are left out of a failed run.
+    returns the result with the warnings, sorted. The E8 info on keys without effect rides on
+    ``Authoring.notices`` and is left out of a failed run.
     """
     out = Findings()
     raw_workflow, nodes = split_document(doc, out)
@@ -76,8 +76,7 @@ def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool =
         )
     check_group_purity(intents, out)
     _check_unknown_bypass(nodes, resolved, intents, outputs, out)
-    notices = sort_findings(f for f in out.items if f.severity is Severity.INFO)
-    out.items = [f for f in out.items if f.severity is not Severity.INFO]
+    notices = no_effect_notice(out.unused)
     if out.has_errors:
         raise CwcError(ExitCode.INPUT_ERROR, sort_findings(out.items))
 

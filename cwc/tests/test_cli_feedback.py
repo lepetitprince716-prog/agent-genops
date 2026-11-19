@@ -5,6 +5,7 @@ import copy
 import json
 import unittest
 
+from tests import support
 from tests import test_cli_compile as base
 from tests.test_cli_compile import Folder
 
@@ -87,45 +88,68 @@ class MetaKeyTest(Folder):
 
 
 class NoEffectKeyTest(Folder):
-    """Keys cwc parses but does not use yet: accepted, and said so as an info finding, on
-    stderr and in the report, without changing the outcome."""
+    """Keys cwc parses but does not use yet: accepted, and said so in one E8 info finding per
+    compile, on one stderr line and in the report with the data key by key, without changing the
+    outcome."""
 
     def compile(self, doc, *argv):
         code, out, err = run("compile", self.graph(doc), "-o", self.out, *argv)
         report = json.loads((self.out / "graph.report.json").read_text(encoding="utf-8"))
-        infos = [f for f in report["findings"] if f["severity"] == "info" and f["code"] == "E7"]
+        infos = [f for f in report["findings"] if f["severity"] == "info" and f["code"].startswith("E")]
         return code, out, err, report, infos
 
     # PLAIN, not the fixture graph: the fixture sets some of these keys itself
 
-    def test_each_key_gets_one_info_line_and_the_run_stays_ok(self):
+    def test_each_key_is_named_in_the_one_info_and_the_run_stays_ok(self):
         doc = with_meta(PLAIN, "decode", ui_group="finish")
         cases = {
-            "_meta.ui_locked": with_meta(PLAIN, "sampler", ui_locked=["cfg"]),
-            "_meta.ui_expose": with_meta(PLAIN, "pos", ui_expose=["text"]),
-            "_meta.ui_note": with_meta(PLAIN, "sampler", ui_note="hello"),
-            "_workflow.title": {**PLAIN, "_workflow": {"format": 1, "title": "My graph"}},
-            "_workflow.locale": {**PLAIN, "_workflow": {"format": 1, "locale": "de"}},
-            "_workflow.groups.finish.note": {**doc, "_workflow": {"format": 1, "groups": {"finish": {"note": "n"}}}},
+            ("_meta.ui_locked", "sampler"): with_meta(PLAIN, "sampler", ui_locked=["cfg"]),
+            ("_meta.ui_expose", "pos"): with_meta(PLAIN, "pos", ui_expose=["text"]),
+            ("_meta.ui_note", "sampler"): with_meta(PLAIN, "sampler", ui_note="hello"),
+            ("_workflow.title", None): {**PLAIN, "_workflow": {"format": 1, "title": "My graph"}},
+            ("_workflow.locale", None): {**PLAIN, "_workflow": {"format": 1, "locale": "de"}},
+            ("_workflow.groups.finish.note", None): {**doc, "_workflow": {"format": 1, "groups": {"finish": {"note": "n"}}}},
         }
-        for key, graph in cases.items():
+        for (key, node), graph in cases.items():
             with self.subTest(key=key):
                 code, _, err, report, infos = self.compile(graph)
                 self.assertEqual(code, ExitCode.OK, err)
                 self.assertTrue(report["ok"])
                 [info] = infos
+                self.assertEqual(info["code"], "E8")
+                self.assertEqual(info["data"]["keys"], [{"key": key, "nodes": [node]} if node else {"key": key}])
                 self.assertIn(key, info["message"])
-                self.assertIn("no effect", info["message"])
-                self.assertIn(f"E7 info: {info['message']}\n", err)
+                self.assertIn(f"E8 info: {info['message']}\n", err)
                 self.assertTrue(err.splitlines()[-1].startswith("cwc compile: ok; "), err)
                 self.assertIn(" 0 warnings;", err.splitlines()[-1])
+
+    def test_several_keys_make_one_line_that_ends_at_the_guide(self):
+        doc = with_meta(PLAIN, "pos", ui_expose=["text"])
+        doc = with_meta(doc, "neg", ui_expose=["text"])
+        doc = with_meta(doc, "sampler", ui_note="hello", ui_locked=True)
+        doc["_workflow"] = {"format": 1, "title": "My graph"}
+        code, _, err, report, infos = self.compile(doc)
+        self.assertEqual(code, ExitCode.OK, err)
+        [info] = infos
+        lines = [line for line in err.splitlines() if " info: " in line]
+        self.assertEqual(lines, [f"E8 info: {info['message']}"])
+        self.assertTrue(info["message"].endswith("`cwc guide` says what each key does"), info["message"])
+        self.assertEqual(
+            sorted((entry["key"], tuple(entry.get("nodes", ()))) for entry in info["data"]["keys"]),
+            [("_meta.ui_expose", ("pos", "neg")), ("_meta.ui_locked", ("sampler",)), ("_meta.ui_note", ("sampler",)), ("_workflow.title", ())],
+        )
+        for text in ("_meta.ui_expose (nodes 'pos', 'neg')", "_meta.ui_note (node 'sampler')", "_workflow.title"):
+            self.assertIn(text, info["message"])
+        self.assertEqual(sorted(info["nodes"]), ["neg", "pos", "sampler"])
+        self.assertEqual(report["findings"][-1]["title"], "authoring key is accepted but has no effect yet")
+        self.assertNotIn("E7", [f["code"] for f in report["findings"]])
 
     def test_json_lists_the_info_and_keeps_ok(self):
         code, out, _, _, _ = self.compile(with_meta(PLAIN, "sampler", ui_note="hello"), "--json")
         summary = json.loads(out)
         self.assertEqual((code, summary["ok"], summary["exit_code"]), (ExitCode.OK, True, 0))
         self.assertEqual(summary["findings"]["info"], 1)
-        self.assertEqual([f["severity"] for f in summary["finding_list"] if f["code"] == "E7"], ["info"])
+        self.assertEqual([f["code"] for f in summary["finding_list"] if f["severity"] == "info"], ["E8"])
 
     def test_keys_that_do_something_get_no_info(self):
         doc = with_meta(PLAIN, "sampler", title="Main", ui_role="cockpit", ui_seed="fixed")
@@ -135,6 +159,14 @@ class NoEffectKeyTest(Folder):
         self.assertEqual(code, ExitCode.OK, err)
         self.assertEqual(infos, [])
         self.assertNotIn(" info: ", err)
+
+    def test_the_readme_code_table_lists_every_authoring_code(self):
+        from cwc.report import TITLES, Code
+
+        readme = (support.ROOT / "README.md").read_text(encoding="utf-8")
+        for code in Code:
+            if code.value.startswith("E"):
+                self.assertIn(f"| {code.value} | {TITLES[code]} |", readme)
 
 
 class InputTypoTest(Folder):
@@ -271,10 +303,10 @@ class SummaryTest(Folder):
         self.assertEqual(code, ExitCode.OK)
         canvas = json.loads((self.out / "graph.ui.json").read_text(encoding="utf-8"))
         groups = len(canvas["groups"])
-        notices = [line for line in err.splitlines(keepends=True) if line.startswith("E7 info: ")]  # keys of the fixture
+        [notice] = [line for line in err.splitlines(keepends=True) if line.startswith("E8 info: ")]  # keys of the fixture
         self.assertEqual(
             err,
-            "".join(notices) + f"cwc compile: ok; preset bento (auto: no other rule holds); {groups} groups, 1 optional module, "
+            notice + f"cwc compile: ok; preset bento (auto: no other rule holds); {groups} groups, 1 optional module, "
             f"0 warnings; preview: cwc render {self.out / 'graph.ui.json'} -o graph.svg\n",
         )
 
