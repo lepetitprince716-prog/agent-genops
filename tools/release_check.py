@@ -76,6 +76,9 @@ CONTROL_PLANE_EXACT = frozenset(
         "tools/workflow_policy.json",
     }
 )
+# Every git diff that builds a change list reads a rename as a removal plus an addition: with rename
+# detection on, git names only the new path, and a guard file moved away would drop off the list.
+NO_RENAMES = "--no-renames"
 # Every test under the root tests/ is a guard test.
 CONTROL_PLANE_PREFIXES = (".githooks/", ".github/workflows/", "tests/")
 DOC_SUFFIXES = frozenset({".md", ".svg", ".txt"})
@@ -483,19 +486,19 @@ def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[
     nothing to scan in them but they still decide which tests run."""
     staged = list(
         split_names(
-            run_git(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout
+            run_git(["diff", NO_RENAMES, "--cached", "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout
         )
     )
     unstaged = list(
-        split_names(run_git(["diff", "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout)
+        split_names(run_git(["diff", NO_RENAMES, "--name-only", "-z", "--diff-filter=ACMRT"], root).stdout)
     )
     removed_staged = list(
         split_names(
-            run_git(["diff", "--cached", "--name-only", "-z", "--diff-filter=D"], root).stdout
+            run_git(["diff", NO_RENAMES, "--cached", "--name-only", "-z", "--diff-filter=D"], root).stdout
         )
     )
     removed_unstaged = list(
-        split_names(run_git(["diff", "--name-only", "-z", "--diff-filter=D"], root).stdout)
+        split_names(run_git(["diff", NO_RENAMES, "--name-only", "-z", "--diff-filter=D"], root).stdout)
     )
     untracked = list(
         split_names(run_git(["ls-files", "--others", "--exclude-standard", "-z"], root).stdout)
@@ -505,7 +508,7 @@ def list_changed_by_state(root: Path, merge_base: str | None) -> dict[str, list[
         count = int(git_text(["rev-list", "--count", f"{merge_base}..HEAD"], root))
         if count > 0:
             branch_files = list(
-                split_names(run_git(["diff", "--name-only", "-z", f"{merge_base}..HEAD"], root).stdout)
+                split_names(run_git(["diff", NO_RENAMES, "--name-only", "-z", f"{merge_base}..HEAD"], root).stdout)
             )
     return {
         "staged": staged,
@@ -785,13 +788,13 @@ def inspect_control_plane_and_allows(
         raw_names = run_git(["ls-tree", "-r", "--name-only", "-z", candidate_sha], root).stdout
         touched = list(split_names(raw_names))
         diff_text = run_git(
-            ["show", "--format=", "--unified=0", candidate_sha], root, check=False
+            ["show", NO_RENAMES, "--format=", "--unified=0", candidate_sha], root, check=False
         ).stdout.decode("utf-8", "replace")
     else:
-        raw_names = run_git(["diff", "--name-only", "-z", base_sha, candidate_sha], root).stdout
+        raw_names = run_git(["diff", NO_RENAMES, "--name-only", "-z", base_sha, candidate_sha], root).stdout
         touched = list(split_names(raw_names))
         diff_text = run_git(
-            ["diff", "--unified=0", base_sha, candidate_sha], root, check=False
+            ["diff", NO_RENAMES, "--unified=0", base_sha, candidate_sha], root, check=False
         ).stdout.decode("utf-8", "replace")
 
     control_changes = sorted(
@@ -824,7 +827,7 @@ def collect_release_diff_summary(
         return commit_count, files
 
     commit_count = int(git_text(["rev-list", "--count", f"{remote_old_sha}..{candidate_sha}"], root))
-    raw = run_git(["diff", "--name-status", "-z", remote_old_sha, candidate_sha], root).stdout
+    raw = run_git(["diff", NO_RENAMES, "--name-status", "-z", remote_old_sha, candidate_sha], root).stdout
     parts = raw.split(b"\0")
     files: list[dict[str, str]] = []
     idx = 0
