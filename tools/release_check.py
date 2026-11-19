@@ -109,6 +109,9 @@ CHECKER_FILES = (
     "tools/secret_scan.tmpl",
 )
 OPTIONAL_CHECKER_FILES = ("tools/workflow_policy.py",)
+# The one list of what is exported, hashed into the policy version, and checked by the exported
+# checker against the judging commit before it judges.
+EXPORTED_CHECKER_FILES = CHECKER_FILES + OPTIONAL_CHECKER_FILES
 IGNORE_FILES = (".betterleaksignore", ".gitleaksignore")
 WORKFLOW_RELEASE_PATHS = ("workflows", "tools/workflow_policy.json")
 
@@ -884,7 +887,7 @@ def export_checker(root: Path, sha: str, dest: Path) -> Path:
     Raises CheckError naming the first required file ``sha`` lacks."""
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for rel in CHECKER_FILES + OPTIONAL_CHECKER_FILES:
+    for rel in EXPORTED_CHECKER_FILES:
         proc = run_git(["cat-file", "blob", f"{sha}:{rel}"], root, check=False)
         if proc.returncode != 0:
             if rel in CHECKER_FILES:
@@ -949,7 +952,7 @@ def compute_policy_version(judge: Judge, ignore_bytes: bytes) -> str:
     hasher = hashlib.sha256()
     hasher.update(f"protocol={RELEASE_PROTOCOL}\nchecker_sha={judge.checker_sha}\n".encode("ascii"))
     hasher.update(f"trusted_sha={judge.trusted_sha}\n".encode("ascii"))
-    for rel in CHECKER_FILES + OPTIONAL_CHECKER_FILES:
+    for rel in EXPORTED_CHECKER_FILES:
         path = judge.tools.parent / rel
         if path.is_file():
             hasher.update(f"file:{rel}:{hashlib.sha256(path.read_bytes()).hexdigest()}\n".encode("ascii"))
@@ -1552,12 +1555,29 @@ def judge_for_this_process(root: Path, args: argparse.Namespace) -> Judge:
     elif args.checker_sha != args.trusted_sha:
         raise CheckError("the checker must come from the trusted baseline")
     me = Path(__file__).resolve()
-    shipped = run_git(["cat-file", "blob", f"{args.checker_sha}:tools/release_check.py"], root, check=False)
-    if shipped.returncode != 0 or shipped.stdout != me.read_bytes():
+    tools = me.parent
+    mismatched = [
+        rel
+        for rel in EXPORTED_CHECKER_FILES
+        if not file_is_blob_of(root, tools.parent / rel, args.checker_sha, rel, required=rel in CHECKER_FILES)
+    ]
+    if mismatched:
         raise CheckError(
-            f"this checker ({me}) is not tools/release_check.py of {args.checker_sha[:12]}; run ./check release"
+            f"the files beside this checker ({tools}) are not those of {args.checker_sha[:12]}: "
+            f"{', '.join(mismatched)}; run ./check release"
         )
-    return Judge(me.parent, args.trusted_sha, args.checker_sha, bool(args.bootstrap_self_judge))
+    return Judge(tools, args.trusted_sha, args.checker_sha, bool(args.bootstrap_self_judge))
+
+
+def file_is_blob_of(root: Path, path: Path, sha: str, rel: str, *, required: bool) -> bool:
+    """Whether ``path`` holds exactly ``sha``'s ``rel``; a file ``sha`` lacks must be absent too."""
+    shipped = run_git(["cat-file", "blob", f"{sha}:{rel}"], root, check=False)
+    if shipped.returncode != 0:
+        return not required and not path.exists() and not path.is_symlink()
+    try:
+        return not path.is_symlink() and path.is_file() and path.read_bytes() == shipped.stdout
+    except OSError:
+        return False
 
 
 def run_as_trusted_checker(args: argparse.Namespace) -> int:
