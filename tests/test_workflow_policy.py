@@ -192,6 +192,35 @@ class PrivatePathTest(Tree):
                     self.assertRefused("abs_path", account, value)
                     self.assertNotIn("over_encoded", self.rules())
 
+    def test_a_home_path_in_exactly_three_or_four_encoding_layers_is_named_not_over_encoded(self):
+        """The layer counts are literal on purpose: lowering the decoding bound must turn this red."""
+        account = "acct" + token()
+        for layers in (3, 4):
+            value = "/" + "Users" + "/" + account + "/models"
+            for _ in range(layers):
+                value = quote(value, safe="")
+            with self.subTest(layers=layers):
+                doc = self.load(".json")
+                doc["latent"]["_meta"]["ui_note"] = f"weights live in {value}"
+                self.save(".json", doc)
+                self.assertRefused("abs_path", account, value)
+                self.assertIn("privacy:home_path", self.rules())
+                self.assertNotIn("over_encoded", self.rules())
+
+    def test_a_finding_that_only_an_intermediate_decoding_shows_is_reported(self):
+        """The text, the middle layer and the last layer differ; the credential shows in the middle only."""
+        host = "evil" + token() + ".example"
+        listed = sorted(POLICY.url_hosts)[0]
+        value = f"https://{listed}" + "%252f%40" + host + "/"
+        variants = workflow_policy.decoded_variants(value)
+        self.assertEqual(variants[1], f"https://{listed}%2f@{host}/")
+        self.assertEqual(variants[2], f"https://{listed}/@{host}/")
+        doc = self.load(".json")
+        doc["latent"]["_meta"]["ui_note"] = value
+        self.save(".json", doc)
+        self.assertRefused("url_credentials", host)
+        self.assertIn("privacy:email", self.rules())
+
     def test_an_over_encoded_string_is_refused_even_without_a_path_in_it(self):
         value = "a/b"
         for _ in range(workflow_policy.MAX_DECODE_ROUNDS + 1):
