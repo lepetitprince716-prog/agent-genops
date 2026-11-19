@@ -35,7 +35,10 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 ```
 
 - `node` shows one node definition (inputs, widgets with defaults, the values of each
-  dropdown, outputs) or searches the definitions.
+  dropdown, outputs) or searches the definitions. A TYPE that is not a known type exits 3
+  (it used to exit 4) and names the closest types on stderr; a search with no match exits 1
+  (it used to exit 0) with nothing on stdout, or `[]` under `--json`. All exit codes:
+  `docs/ARCHITECTURE.md`.
 - `compile` turns an authoring graph into a canvas and its API prompts.
   `--preset` takes one of `bento`, `swimlanes`, `cockpit-split`, `tower-preview`,
   `stepped`, or `auto`, which chooses by the number of nodes, optional modules and control

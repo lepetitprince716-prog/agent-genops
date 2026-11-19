@@ -177,18 +177,18 @@ def _node(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
             out.write(json_bytes(rows).decode("utf-8"))
         else:
             out.writelines(_search_line(n) + "\n" for n in found)
-            if not found:
-                err.write(f"no node type matches {args.search!r}\n")
+        if not found:  # like grep: an empty answer is a failed check, not an error
+            err.write(f"no node type matches {args.search!r}\n")
+            return ExitCode.CHECK_FAILED
         return ExitCode.OK
 
     nd = defs.get(args.type)
-    if nd is None:
+    if nd is None:  # the definitions loaded; the name given is wrong
         closest = defs.closest(args.type, CLOSEST)
         if args.json:
             out.write(json_bytes({"type": args.type, "error": "unknown node type", "closest": closest}).decode("utf-8"))
-        else:
-            err.write(f"unknown node type {args.type!r}; closest: {', '.join(closest) or '-'}\n")
-        return ExitCode.NODEDEFS_MISSING
+        err.write(f"unknown node type {args.type!r}; closest: {', '.join(closest) or '-'}\n")
+        return ExitCode.INPUT_ERROR
     if args.json:
         out.write(json_bytes(_node_json(nd)).decode("utf-8"))
     else:

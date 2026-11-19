@@ -57,15 +57,18 @@ class NodeShowTest(unittest.TestCase):
         self.assertEqual(code, ExitCode.OK)
         self.assertIn("tier: builtin", out)
 
-    def test_unknown_type_exits_4_with_three_suggestions(self):
+    def test_unknown_type_is_an_input_error_with_three_suggestions(self):
+        # A name that is not a node type is a wrong input (3); 4 stays for definitions that
+        # cannot be loaded at all.
         code, out, err = run("node", "KSamplr")
-        self.assertEqual(code, ExitCode.NODEDEFS_MISSING)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
         self.assertEqual(out, "")
         self.assertIn("KSampler", err)
         self.assertEqual(err.split("closest: ", 1)[1].strip().count(", "), 2)
-        code, out, _ = run("node", "KSamplr", "--json")
-        self.assertEqual(code, ExitCode.NODEDEFS_MISSING)
+        code, out, err = run("node", "KSamplr", "--json")
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
         self.assertEqual(len(json.loads(out)["closest"]), 3)
+        self.assertIn("KSampler", err)
 
     def test_type_and_search_are_exclusive(self):
         self.assertEqual(run("node")[0], ExitCode.USAGE)
@@ -170,8 +173,14 @@ class NodeSearchTest(unittest.TestCase):
         code, out, _ = run("node", "--search", "ksampler", "--json")
         self.assertEqual(code, ExitCode.OK)
         self.assertTrue(all(set(row) == {"type", "display_name", "category", "tier"} for row in json.loads(out)))
+
+    def test_no_match_exits_1_with_empty_output(self):
         code, out, err = run("node", "--search", "no such word anywhere")
-        self.assertEqual((code, out), (ExitCode.OK, ""))
+        self.assertEqual((code, out), (ExitCode.CHECK_FAILED, ""))
+        self.assertIn("no node type matches", err)
+        self.assertEqual(len(err.splitlines()), 1)
+        code, out, err = run("node", "--search", "no such word anywhere", "--json")
+        self.assertEqual((code, json.loads(out)), (ExitCode.CHECK_FAILED, []))
         self.assertIn("no node type matches", err)
 
 
@@ -243,7 +252,7 @@ class ModuleEntryTest(unittest.TestCase):
                 ExitCode.CHECK_FAILED: ("compile", str(graph), "-o", f"{tmp}/b"),
                 ExitCode.USAGE: ("compile",),
                 ExitCode.INPUT_ERROR: ("compile", f"{tmp}/absent.json", "-o", f"{tmp}/c"),
-                ExitCode.NODEDEFS_MISSING: ("node", "KSamplr"),
+                ExitCode.NODEDEFS_MISSING: ("node", "KSampler", "--nodedefs", f"{tmp}/absent.json"),
             }
             for expected, argv in cases.items():
                 with self.subTest(expected=expected.name):

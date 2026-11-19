@@ -24,9 +24,9 @@ UI JSON / PNG --------------> ingest --------+
 | Code | Name | Meaning |
 |---|---|---|
 | 0 | `OK` | done |
-| 1 | `CHECK_FAILED` | verification ran and raised a blocking finding; only the report is written |
+| 1 | `CHECK_FAILED` | verification ran and raised a blocking finding; only the report is written. `cwc node --search` found no type (like `grep`) |
 | 2 | `USAGE` | bad command line |
-| 3 | `INPUT_ERROR` | the input is unreadable, malformed or fails authoring checks |
+| 3 | `INPUT_ERROR` | the input is unreadable, malformed or fails authoring checks; `cwc node TYPE` names no known type |
 | 4 | `NODEDEFS_MISSING` | node definitions are unavailable, unreadable or malformed (D1) |
 | 5 | `WRITE_FAILED` | an output could not be written; the run's artefacts were removed where possible, so the folder never mixes two runs |
 | 70 | `INTERNAL` | a bug in cwc: `cwc: internal error: <type>: <message>` on one stderr line, nothing written |
