@@ -92,7 +92,8 @@ CREDENTIAL_PARAM = re.compile(
 MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(|<img\b", re.I)
 MAX_STRING = 4000
 # Percent-encoding is undone this many times at most; each string is checked as written and as
-# each decoding gives it, so an encoded path cannot slip past the path and privacy checks.
+# each decoding gives it, so an encoded path cannot slip past the path and privacy checks. A
+# string that one more round would still change cannot be judged, so it is refused (over_encoded).
 MAX_DECODE_ROUNDS = 4
 
 
@@ -105,6 +106,11 @@ def decoded_variants(text: str) -> list[str]:
             break
         variants.append(decoded)
     return variants
+
+
+def over_encoded(variants: list[str]) -> bool:
+    """True when ``variants`` stopped at the round limit and one more decoding would still change it."""
+    return len(variants) > MAX_DECODE_ROUNDS and unquote(variants[-1]) != variants[-1]
 
 
 class PolicyError(Exception):
@@ -212,7 +218,10 @@ class Checker:
         first = len(self.findings)
         self.check_content(text, where, place)
         found = {f.rule for f in self.findings[first:]}
-        for variant in decoded_variants(text)[1:]:
+        variants = decoded_variants(text)
+        if over_encoded(variants):
+            self.add(where, place, "over_encoded", "encoded in more layers than the check decodes, so it cannot be judged")
+        for variant in variants[1:]:
             probe = Checker(self.policy, self.rules)
             probe.check_content(variant, where, place)
             for finding in probe.findings:

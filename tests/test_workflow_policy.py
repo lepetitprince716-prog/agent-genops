@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / "workflows"
@@ -174,6 +175,40 @@ class PrivatePathTest(Tree):
         variants = workflow_policy.decoded_variants(value)
         self.assertLessEqual(len(variants), workflow_policy.MAX_DECODE_ROUNDS + 1)
         self.assertEqual(variants[0], value)
+
+    def test_a_home_path_encoded_past_the_bound_is_refused_not_passed(self):
+        """More encoding layers than the bound cannot be decided, so they are refused, never clean."""
+        account = "acct" + token()
+        value = "/" + "Users" + "/" + account + "/models"
+        for layers in range(1, workflow_policy.MAX_DECODE_ROUNDS + 4):
+            value = quote(value, safe="")
+            with self.subTest(layers=layers):
+                doc = self.load(".json")
+                doc["latent"]["_meta"]["ui_note"] = f"weights live in {value}"
+                self.save(".json", doc)
+                if layers > workflow_policy.MAX_DECODE_ROUNDS:
+                    self.assertRefused("over_encoded", account, value)
+                else:
+                    self.assertRefused("abs_path", account, value)
+                    self.assertNotIn("over_encoded", self.rules())
+
+    def test_an_over_encoded_string_is_refused_even_without_a_path_in_it(self):
+        value = "a/b"
+        for _ in range(workflow_policy.MAX_DECODE_ROUNDS + 1):
+            value = quote(value, safe="")
+        doc = self.load(".json")
+        doc["latent"]["_meta"]["ui_note"] = value
+        self.save(".json", doc)
+        self.assertEqual(self.rules(), ["over_encoded"])
+
+    def test_filename_placeholders_and_literal_percent_signs_are_not_over_encoded(self):
+        values = ("%date%", "%date:yyyy-MM-dd%/img_%seed%", "%KSampler.seed%_%width%x%height%", "50%", "100% detail", "%25")
+        for value in values:
+            with self.subTest(value=value):
+                doc = self.load(".json")
+                doc["latent"]["_meta"]["ui_note"] = value
+                self.save(".json", doc)
+                self.assertEqual(self.rules(), [])
 
     def test_control_prompt_weights_and_plain_percent_signs_are_accepted(self):
         doc = self.load(".json")
