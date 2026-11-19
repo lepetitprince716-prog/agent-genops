@@ -19,7 +19,8 @@ Never copy whole files from a private repository without a line-by-line review. 
 1. **While working:** run `./check changed`
    - Scans staged, unstaged, non-ignored untracked files, and unmerged branch commits with both
      `tools/privacy_scan.py` and `tools/secret_scan.sh`, then runs the tests that the changed paths
-     select. The output lists the changed guard files under `GUARD CHANGES`. The workflow policy
+     select. The output lists the changed guard files under `GUARD CHANGES`; a path that no longer exists
+     (deleted or renamed away, staged or committed on the branch) is marked `(removed)`. The workflow policy
      step runs when `workflows/` or its policy changes, also with `--no-tests`.
    - There is no mode that runs every suite. All guard tests: `python3 -B -m unittest discover -s tests`.
    - Contributors without private rules run in contributor mode (`not a release check`).
@@ -34,7 +35,8 @@ Never copy whole files from a private repository without a line-by-line review. 
    - The trusted baseline is the commit that the remote's `main` holds now, read with
      `git ls-remote`. If the local `refs/remotes/<remote>/main` is another commit, the check
      refuses and tells you to run `git fetch <remote>`. A remote that does not answer within 30 s
-     is refused too (exit 2).
+     is refused too (exit 2). The check then stops git and its transport, waits 2 s more for their
+     output, and gives up on any process that left the group and still holds it.
    - The checker, scanners, rules and wrapper are exported from the trusted commit and run from
      there. The working tree supplies only the launcher.
    - The candidate's own exemptions do not count. Betterleaks uses the baseline's ignore file, and
@@ -53,12 +55,17 @@ Never copy whole files from a private repository without a line-by-line review. 
      repository's own, for rehearsals against a local bare repository. That remote's main is then the
      trusted baseline, so the manifest has `rehearsal_remote: true` and an entry in `unverified_items`,
      the terminal says REHEARSAL, and the manifest does not clear a release to the repository.
+     Naming one of the registered upstream addresses this way is not a rehearsal.
      `--verify-manifest` is refused unless the same remote is approved again.
    - Prints a redacted release manifest and stores a verification snapshot outside the repository
      (`~/.cache/agent-genops/release-manifests`, or `--manifest-dir`; a directory inside the
-     repository is refused). It also lists the changed control files: the launcher, `.gitignore`, the two
-     ignore files, `.githooks/`, `.github/workflows/`, `tests/`, and the scanner, rules, wrapper,
-     template, release check and workflow policy files under `tools/`.
+     repository is refused). The commits and files it lists are counted from `change_base`: the
+     remote's current commit on an existing branch; on a new branch, the commit where the candidate
+     meets the trusted baseline, or the whole tree (`change_base` empty) when they share no commit.
+     The scans still cover all the history named above. It also lists the changed control files:
+     the launcher, `.gitignore`, the two ignore files, `.githooks/`, `.github/workflows/`, `tests/`,
+     and the scanner, rules, wrapper, template, release check and workflow policy files under
+     `tools/`.
    - `--verify-manifest <file>` re-runs the whole release check against the live remote and compares
      it with the snapshot, field by field. Pass `--allow-new-ref`, `--bootstrap-self-judge` and each
      `--approve-exemption` again, exactly as for the first run; the snapshot does not carry them over.
