@@ -82,5 +82,36 @@ class MetaKeyTest(Folder):
         self.assertNotIn("E7: ", err)
 
 
+
+class InputTypoTest(Folder):
+    def misspelt(self, wrong, right):
+        doc = copy.deepcopy(TXT2IMG)
+        inputs = doc["sampler"]["inputs"]
+        inputs[wrong] = inputs.pop(right)
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        report = json.loads((self.out / "graph.report.json").read_text(encoding="utf-8"))
+        return code, err, [f for f in report["findings"] if f["severity"] == "error"]
+
+    def test_a_misspelt_widget_input_is_one_error_with_a_suggestion(self):
+        code, err, errors = self.misspelt("sampler_nme", "sampler_name")
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual([f["code"] for f in errors], ["E2"])
+        self.assertIn("E2: node 'sampler': KSampler has no input 'sampler_nme'; did you mean 'sampler_name'?", err)
+        self.assertNotIn("E3", err)
+
+    def test_a_misspelt_link_input_is_one_error_with_a_suggestion(self):
+        code, err, errors = self.misspelt("postive", "positive")
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual([f["code"] for f in errors], ["E2"])
+        self.assertIn("did you mean 'positive'?", err)
+
+    def test_a_name_close_to_nothing_gets_no_suggestion(self):
+        doc = copy.deepcopy(TXT2IMG)
+        doc["sampler"]["inputs"]["zzzz"] = 1
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertIn("E2: node 'sampler': KSampler has no input 'zzzz'\n", err)
+
+
 if __name__ == "__main__":
     unittest.main()
