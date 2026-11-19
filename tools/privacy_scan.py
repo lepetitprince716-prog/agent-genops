@@ -623,7 +623,7 @@ def scan_worktree_file(
 
 
 def parse_raw_diff_z(raw: bytes) -> list[tuple[str, str, str]]:
-    """Parse ``git diff --raw -z --diff-filter=ACMR`` into ``(new_mode, new_oid, path)``."""
+    """Parse ``git diff --raw -z --diff-filter=ACMRT`` into ``(new_mode, new_oid, path)``."""
     entries: list[tuple[str, str, str]] = []
     parts = raw.split(b"\0")
     idx = 0
@@ -660,7 +660,8 @@ def scan_staged(
 ) -> list[Finding]:
     """Scan the index version (and names) of every file about to be committed."""
     red = redactor or NameRedactor(rules)
-    raw = git(["diff", "--cached", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    # T: a regular file and a symlink swapping places changes the stored bytes like any edit.
+    raw = git(["diff", "--cached", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMRT"], root)
     findings: list[Finding] = []
     for new_mode, new_oid, name in parse_raw_diff_z(raw):
         findings += red.scan_path(name, prefix=prefix)
@@ -685,7 +686,7 @@ def scan_unstaged(
 ) -> list[Finding]:
     """Scan working-tree files that differ from the index (and their names)."""
     red = redactor or NameRedactor(rules)
-    raw = git(["diff", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    raw = git(["diff", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMRT"], root)
     findings: list[Finding] = []
     for new_mode, _new_oid, name in parse_raw_diff_z(raw):
         if new_mode == "160000":
