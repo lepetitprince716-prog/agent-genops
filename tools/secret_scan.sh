@@ -259,13 +259,15 @@ peel() {
 # set (with 1.10.1 it reads $HOME/.config/git/attributes but not info/attributes or a committed
 # .gitattributes). So every form selects what git itself, run here, calls binary (a "-" in
 # --numstat, whichever attributes file says so), plus any content with a NUL byte in its first
-# 8000 bytes. A dir scan is no way round: it also skips a
-# file by a head that looks like an executable, a document or an archive. Stdin sniffs only the
-# head of the stream (checked up to 10 MiB in), so the stream starts with an empty line. Findings
-# here carry no path; a false positive is allowed inline or by its ":rule:line" fingerprint, the
-# line counted in this stream. The log form takes every blob the walked commits add or change
-# (merges against their first parent), once each. A git command that fails, or output that does
-# not parse, fails the scan.
+# 8000 bytes. A dir scan is no way round: it also skips a file by a head that looks like an
+# executable, a document or an archive. Stdin sniffs only the head of the stream (checked up to
+# 10 MiB in), so the stream starts with an empty line. Findings here carry no path, and their line
+# is counted in a stream of whatever other content the mode covers: a ":rule:line" fingerprint
+# accepted for one file would cover a token in another, and goes stale when an unrelated file
+# joins the stream. So no ignore file and no inline allow comment applies to this pass; a false
+# positive in binary content is fixed in the file. The log form takes every blob the walked
+# commits add or change (merges against their first parent), once each. A git command that
+# fails, or output that does not parse, fails the scan.
 scan_binary() {
   python3 -I -B -c '
 import os, subprocess, sys
@@ -374,7 +376,16 @@ with open(stream, "wb") as out:
         out.write(data + b"\n")
 ' "$work/binary-stream" "$@" || return 1
   if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
-    scan "content Betterleaks skips as binary" stdin <"$work/binary-stream"
+    # No exemption applies here: an empty ignore list, read from an empty directory so no
+    # ignore file beside it counts either, and inline allow comments off.
+    mkdir -p "$work/binary-src"
+    : >"$work/binary-none.ignore"
+    (
+      ignore_path="$work/binary-none.ignore"
+      iso="$work/binary-src"
+      SECRET_SCAN_IGNORE_ALLOW=1
+      scan "content Betterleaks skips as binary (no exemption applies to it)" stdin <"$work/binary-stream"
+    )
   fi
 }
 

@@ -112,6 +112,12 @@ A false positive, checked on 1.10.1:
   two forms, both built from the finding line. `path:rule:line` allows that finding in the staged
   files and in every commit of history. `commit:path:rule:line` (the full commit hash from the
   finding line) allows it in that one commit. The file is committed, so the exception is reviewed.
+- Neither works for content git treats as binary (a NUL byte in its first 8000 bytes, or `binary`
+  or `-diff` in any attributes file git reads). Betterleaks skips such content, so the wrapper
+  reads it again through stdin, where a finding has no path and its line is counted among other
+  files: a `:rule:line` fingerprint there could cover a token in another file. No ignore file and
+  no inline comment applies to that reading. A false positive in binary content is fixed by
+  changing the file.
 - The three hooks refuse when `.betterleaksignore` or `.gitleaksignore` in the working tree differs
   from the version in the index (`pre-commit`, `commit-msg`) or in the pushed commit (`pre-push`).
   Stage the ignore file together with the change that needs it. The hooks and `./check changed`
@@ -183,6 +189,7 @@ the same shape next time.
 
 - 在同一行的注释里写 `betterleaks:allow`（`gitleaks:allow` 也认）。提交信息的行同样适用。
 - 或者把指纹逐行写进仓库根目录的 `.betterleaksignore`。有两种写法，都从命中那一行取值：`路径:规则:行号` 对暂存区的文件和历史里的每个提交都放行；`提交:路径:规则:行号`（提交取命中那一行里的完整哈希）只对那一个提交放行。这个文件会被提交，所以例外是过了审的。
+- 这两种办法对 git 当作二进制的内容（前 8000 字节里有 NUL 字节，或 git 读到的任一属性文件里标了 `binary`、`-diff`）都不管用。Betterleaks 会跳过这类内容，包装脚本另经 stdin 再读一遍，命中不带路径，行号和别的文件一起数，一条 `:规则:行号` 指纹可能放过另一个文件里的令牌。所以这一遍不认任何 ignore 文件，也不认行内注释。二进制内容里的误报只能改文件本身。
 - 工作区里的 `.betterleaksignore` 或 `.gitleaksignore` 和暂存区里的版本（`pre-commit`、`commit-msg`），或被推送提交里的版本（`pre-push`）不一致时，三个 hook 都会拒绝。要把 ignore 文件和需要它的改动一起暂存。hook 和 `./check changed` 自己仍然认工作区里的 ignore 文件和行内豁免。
 - 改动自己新加的豁免，在做裁决的地方不算数。pull request 上的 CI 和 `./check release` 的 ignore 文件都取自可信基线，候选自己的提交会关掉行内豁免再扫一遍。发布检查扫的是从远端当前分支（新分支则从可信基线）到候选的那些提交。维护者认可这样的命中时，给 `./check release` 逐条传 `--approve-exemption <提交>:<路径>:<规则>:<行号>`，清单里会列出来；`--verify-manifest` 时必须把同样的参数再传一遍。
 - 已经推送出去的提交信息里的密钥无法用注释放行。先吊销，再和仓库主人商量要不要改写历史。

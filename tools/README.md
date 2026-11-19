@@ -105,7 +105,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 | Mode | Scans |
 | --- | --- |
-| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`), which Betterleaks skips, is read again through stdin, so its findings carry no path and the fingerprint is `:rule:line`; `rev`, `range`, `history` and `files` do the same for the blobs and files they cover |
+| `staged` | the index; content git treats as binary (a NUL byte in the first 8000 bytes, or `binary` or `-diff` in any attributes file git reads: `.gitattributes`, `.git/info/attributes`, the user's or the system's), which Betterleaks skips, is read again through stdin, where a finding carries no path and no exemption applies; `rev`, `range` and `history` do the same for the blobs their commits add or change, `files` for named files with a NUL byte |
 | `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
 | `message FILE` | one commit message file |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
@@ -115,6 +115,11 @@ Your own patterns (names, handles, machine names) live outside the repository in
 | `ignore-check --index` or `ignore-check OBJECT` | exits 1 unless `.betterleaksignore` and `.gitleaksignore` in the working tree are byte for byte the versions in the index or in the tree of `OBJECT`; a missing file counts as a version |
 
 Exit status: `0` clean, `2` usage error, `3` Betterleaks is missing, anything else is a finding or a Betterleaks failure. The hooks run `ignore-check` before each scan, so a working-tree ignore file that the commit does not carry cannot hide a finding. Environment controls (`SECRET_SCAN_IGNORE_PATH`, `SECRET_SCAN_IGNORE_ALLOW=1`, and the redaction settings) are described in the header of the script.
+
+Limits of the secret scan:
+
+- A false positive in content git treats as binary cannot be allowed. Its second reading goes through stdin, where a finding has no path and its line is counted among other files, so a `:rule:line` fingerprint could cover a token in another file; that reading uses an empty ignore list and turns inline allow comments off, and a `.betterleaksignore` entry without a path has no effect on it in any mode. Change the file instead.
+- Betterleaks reads the raw bytes of binary content. A token inside a compressed PNG text chunk (`zTXt`, or an `iTXt` with compression on) is not found, and neither is one that touches binary bytes with no space or line break between them.
 
 ## Kernel classes
 
@@ -263,7 +268,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 | 模式 | 扫描对象 |
 | --- | --- |
-| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）Betterleaks 会跳过，这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号`；`rev`、`range`、`history`、`files` 对各自覆盖的 blob 和文件同样处理 |
+| `staged` | 暂存区；git 当作二进制的内容（前 8000 字节里有 NUL 字节，或 git 读到的任一属性文件里标了 `binary`、`-diff`：`.gitattributes`、`.git/info/attributes`、用户级或系统级的属性文件）Betterleaks 会跳过，这部分另经 stdin 再读一遍，命中不带路径，也不认任何豁免；`rev`、`range`、`history` 对各自提交新增或改动的 blob 同样处理，`files` 对指定文件里含 NUL 字节的同样处理 |
 | `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
 | `message FILE` | 一个提交说明文件 |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
@@ -273,6 +278,11 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `ignore-check --index` 或 `ignore-check OBJECT` | 工作区里的 `.betterleaksignore` 和 `.gitleaksignore` 必须和暂存区里、或 `OBJECT` 的 tree 里的版本逐字节相同，否则退出码为 1；文件不存在也算一个版本 |
 
 退出码：`0` 干净，`2` 用法错误，`3` 找不到 Betterleaks，其余是命中或 Betterleaks 自己失败。hook 在每次扫描之前先跑 `ignore-check`，所以提交里没有的工作区 ignore 文件，不能用来遮住命中。环境变量（`SECRET_SCAN_IGNORE_PATH`、`SECRET_SCAN_IGNORE_ALLOW=1` 和脱敏相关的几个）写在脚本开头的注释里。
+
+密钥扫描的局限：
+
+- git 当作二进制的内容里的误报没有办法放行。这部分经 stdin 再读一遍，命中不带路径，行号又和别的文件一起数，一条 `:规则:行号` 指纹可能放过另一个文件里的令牌；所以这一遍用空的 ignore 列表、关掉行内豁免，`.betterleaksignore` 里不带路径的条目在任何模式下都对它不起作用。只能改文件本身。
+- Betterleaks 读的是二进制内容的原始字节。压缩过的 PNG 文本块（`zTXt`，或开了压缩的 `iTXt`）里的令牌找不到，令牌和二进制字节紧贴、中间没有空格或换行的也找不到。
 
 ### 内核分类
 

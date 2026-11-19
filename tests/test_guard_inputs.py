@@ -140,7 +140,10 @@ class AttributeTests(unittest.TestCase):
                 refused_by_secret_scan(self, self.repo.secret("staged"), token)
                 self.repo.unchecked_commit(f"{label} with a token")
 
-    def test_ignore_files_still_apply_to_content_marked_binary(self) -> None:
+    def test_no_exemption_applies_to_content_marked_binary(self) -> None:
+        # Read again through stdin, a finding has no path and its line is counted in a stream of
+        # whatever other binary content the mode covers, so an exemption there could cover
+        # another file's token. Neither a ":rule:line" fingerprint nor an inline comment applies.
         self.repo.add_file("app.cfg", f"key = {self.token}\n")
         report = self.repo.base / "stdin.json"
         self.repo.run(
@@ -152,8 +155,7 @@ class AttributeTests(unittest.TestCase):
         # Read through stdin, a finding's fingerprint is ":<rule>:<line>"; cover any line.
         prints = [f":{rule}:{line}" for rule in rules for line in range(1, 50)]
         self.repo.add_file(".betterleaksignore", "\n".join(prints) + "\n")
-        allowed = self.repo.secret("staged")
-        self.assertEqual(allowed.returncode, 0, combined(allowed))
+        refused_by_secret_scan(self, self.repo.secret("staged"), self.token)
         empty = self.repo.base / "empty.ignore"
         empty.write_text("")
         explicit = {"SECRET_SCAN_IGNORE_PATH": str(empty)}
@@ -161,8 +163,7 @@ class AttributeTests(unittest.TestCase):
         inline = f"key = {self.token}  # betterleaks:allow\n"
         self.repo.add_file(".betterleaksignore", "")
         self.repo.add_file("app.cfg", inline)
-        allowed = self.repo.secret("staged")
-        self.assertEqual(allowed.returncode, 0, combined(allowed))
+        refused_by_secret_scan(self, self.repo.secret("staged"), self.token)
         refused_by_secret_scan(
             self, self.repo.secret("staged", extra_env={"SECRET_SCAN_IGNORE_ALLOW": "1"}), self.token
         )
@@ -631,6 +632,38 @@ class ImageAndBinaryTests(unittest.TestCase):
         token = registry_token()
         data = b"GIF89a\nkey = " + token.encode() + b"\n"
         self.secret_refused_everywhere("pic.gif", data, token)
+
+    def test_a_fingerprint_accepted_for_one_binary_file_exempts_no_other(self) -> None:
+        # A ":rule:line" fingerprint carries no path and no commit. Accepted once for a fixture,
+        # it would cover a real token in another file that lands on the same stream line.
+        fixture = b"GIF89a\x00\x00\nfixture " + registry_token().encode() + b"\n"
+        token = registry_token()
+        other = b"GIF89a\x00\x01\nreal " + token.encode() + b"\n"
+        report = self.repo.base / "fixture.json"
+        self.repo.run(
+            "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
+            "-f", "json", "-r", str(report), stdin=("\n" + fixture.decode() + "\n"),
+            cwd=self.repo.base,
+        )
+        prints = sorted({item["Fingerprint"] for item in json.loads(report.read_text())})
+        self.assertTrue(prints)
+        self.assertTrue(all(fp.startswith(":") for fp in prints), prints)
+        self.add_bytes("fixture.gif", fixture)
+        self.repo.add_file(".betterleaksignore", "\n".join(prints) + "\n")
+        self.repo.unchecked_commit("fixture with an accepted false positive")
+        # Betterleaks itself, given the second file as the wrapper streams it, takes the
+        # fingerprint as covering that token: without the wrapper's rule it would pass.
+        control = self.repo.run(
+            "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
+            stdin=("\n" + other.decode() + "\n"),
+        )
+        self.assertEqual(control.returncode, 0, combined(control))
+        self.add_bytes("other.gif", other)
+        refused_by_secret_scan(self, self.repo.secret("staged"), token)
+        self.repo.unchecked_commit("another binary file")
+        for args in (("range", "HEAD~1..HEAD"), ("rev", "HEAD")):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
 
     def test_real_images_stay_clean(self) -> None:
         for suffix in self.suffixes:
