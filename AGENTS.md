@@ -43,7 +43,8 @@ Never copy whole files from a private repository without a line-by-line review. 
      manifest lists them under `approved_exemptions`.
    - `--bootstrap-self-judge` is only for a baseline that cannot judge: it has no release checker
      that answers `./check protocol` with `{"release_protocol": 1}`, or no `tools/workflow_policy.py`.
-     Without the flag the check refuses and says so. With it the candidate's own checker and
+     Without the flag the check refuses and says so; with the flag on a baseline that can judge,
+     the check refuses the flag (exit 2), for `--verify-manifest` too. With it the candidate's own checker and
      scanners judge the candidate. The manifest then has `self_judged: true` and an entry in
      `unverified_items`, the terminal says that the candidate judged itself, and the result needs an
      independent review.

@@ -982,16 +982,46 @@ def export_paths(root: Path, commit: str, paths: list[str], dest: Path) -> None:
             target.write_bytes(run_git(["cat-file", "blob", oid], root).stdout)
 
 
+def candidate_workflow_paths(root: Path, commit: str) -> list[str]:
+    """The workflow-policy inputs ``commit`` holds (workflows/, the registry)."""
+    return [
+        rel
+        for rel in WORKFLOW_RELEASE_PATHS
+        if run_git(["cat-file", "-e", f"{commit}:{rel}"], root, check=False).returncode == 0
+    ]
+
+
+def trusted_baseline_gap(root: Path, trusted_sha: str, candidate: str) -> str | None:
+    """Why the trusted baseline cannot judge ``candidate``, or None when it can.
+
+    The one reading of "the baseline can judge", used by the launcher (which baseline to export)
+    and by the checker itself (whether --bootstrap-self-judge may stand)."""
+    with tempfile.TemporaryDirectory(prefix="genops-baseline-") as td:
+        try:
+            tools = export_checker(root, trusted_sha, Path(td))
+        except CheckError as exc:
+            return f"cannot supply the checker ({exc})"
+        if not checker_speaks_protocol(tools / "release_check.py", root):
+            return f"has no release checker that speaks protocol {RELEASE_PROTOCOL}"
+        if not (tools / "workflow_policy.py").is_file() and candidate_workflow_paths(root, candidate):
+            return "has no tools/workflow_policy.py"
+    return None
+
+
+def refuse_needless_bootstrap(root: Path, trusted_sha: str, candidate: str) -> None:
+    if trusted_baseline_gap(root, trusted_sha, candidate) is None:
+        raise CheckError(
+            f"{BOOTSTRAP_FLAG} refused: the trusted baseline {trusted_sha[:12]} can judge this release, "
+            f"so the candidate may not judge itself; run without {BOOTSTRAP_FLAG}"
+        )
+
+
 def run_release_workflow_policy(root: Path, judge: Judge, commit: str, dest: Path) -> tuple[str, str]:
     """Check the candidate's workflows/ with the judge's policy checker and the candidate's registry.
 
     Returns ``(status, detail)``: ``clean``, ``findings`` or ``not_applicable`` (the candidate has
     neither workflows/ nor the registry, so there is nothing for the policy to cover)."""
-    present = [
-        rel
-        for rel in WORKFLOW_RELEASE_PATHS
-        if run_git(["cat-file", "-e", f"{commit}:{rel}"], root, check=False).returncode == 0
-    ]
+    present = candidate_workflow_paths(root, commit)
     if not present:
         return "not_applicable", "the candidate has no workflows/ and no tools/workflow_policy.json"
     checker = judge.tools / "workflow_policy.py"
@@ -1471,14 +1501,15 @@ def launch_release(args: argparse.Namespace) -> int:
     check_remote_policy(root, remote, args.allowed_url)
     _old, remote_refs = query_remote_ref_sha(root, remote, BASELINE_BRANCH)
     _label, trusted_sha = resolve_trusted_baseline(root, remote, remote_refs)
+    if args.bootstrap_self_judge:
+        refuse_needless_bootstrap(root, trusted_sha, candidate)
+    else:
+        gap = trusted_baseline_gap(root, trusted_sha, candidate)
+        if gap:
+            raise CheckError(bootstrap_hint(trusted_sha, gap))
     checker_sha = candidate if args.bootstrap_self_judge else trusted_sha
     with tempfile.TemporaryDirectory(prefix="genops-checker-") as td:
-        try:
-            tools = export_checker(root, checker_sha, Path(td))
-        except CheckError as exc:
-            if args.bootstrap_self_judge:
-                raise
-            raise CheckError(bootstrap_hint(trusted_sha, f"cannot supply the checker ({exc})")) from exc
+        tools = export_checker(root, checker_sha, Path(td))
         script = tools / "release_check.py"
         if not checker_speaks_protocol(script, root):
             if args.bootstrap_self_judge:
@@ -1517,6 +1548,7 @@ def judge_for_this_process(root: Path, args: argparse.Namespace) -> Judge:
     if args.bootstrap_self_judge:
         if args.checker_sha != candidate:
             raise CheckError("bootstrap: the checker must come from the candidate")
+        refuse_needless_bootstrap(root, args.trusted_sha, candidate)
     elif args.checker_sha != args.trusted_sha:
         raise CheckError("the checker must come from the trusted baseline")
     me = Path(__file__).resolve()
