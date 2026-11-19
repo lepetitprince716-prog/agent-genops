@@ -51,7 +51,13 @@ def normalize(doc: dict[str, Any], defs: NodeDefSource, *, allow_unknown: bool =
     intents = {node.author_id: parse_intent(node.author_id, node.meta, out) for node in nodes}
     resolved = {node.author_id: _definition(node, defs, allow_unknown, out) for node in nodes}
 
-    sources = Sources(ids, resolved)
+    # E1 errors: no definition and no --allow-unknown, or a frontend-only (virtual) type
+    rejected = frozenset(
+        node.author_id
+        for node in nodes
+        if resolved[node.author_id] is None and (not allow_unknown or defs.get(node.class_type) is not None)
+    )
+    sources = Sources(ids, resolved, rejected)
     outputs: dict[str, NodeOutput] = {}
     for node in nodes:
         nodedef = resolved[node.author_id]

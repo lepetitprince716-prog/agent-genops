@@ -231,6 +231,40 @@ class UnknownTypeHintTest(Folder):
 
 
 
+class UnknownTypeEchoTest(Folder):
+    """An unknown type is one E1; the links that name its outputs are not reported again."""
+
+    def unknown_loader(self):
+        doc = copy.deepcopy(PLAIN)
+        doc["ckpt"]["class_type"] = "MyFancyLoader"  # pos, neg, sampler and decode name its outputs
+        return doc
+
+    def errors(self):
+        report = json.loads((self.out / "graph.report.json").read_text(encoding="utf-8"))
+        return [f["code"] for f in report["findings"] if f["severity"] == "error"]
+
+    def test_links_by_output_name_add_no_error(self):
+        code, _, err = run("compile", self.graph(self.unknown_loader()), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual(self.errors(), ["E1"])
+        self.assertNotIn("E6", err)
+        self.assertIn("cwc compile: 1 error(s);", err)
+
+    def test_with_allow_unknown_the_named_outputs_are_still_errors(self):
+        code, _, err = run("compile", self.graph(self.unknown_loader()), "-o", self.out, "--allow-unknown")
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual(sorted(frozenset(self.errors())), ["E6"])
+        self.assertIn("whose type is unknown", err)
+
+    def test_a_link_to_a_missing_node_is_still_an_error(self):
+        doc = self.unknown_loader()
+        doc["sampler"]["inputs"]["positive"] = ["nowhere", 0]
+        code, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertEqual(sorted(self.errors()), ["E1", "E6"])
+        self.assertIn("links to node 'nowhere', which does not exist", err)
+
+
 class SummaryTest(Folder):
     def test_success_prints_one_summary_line(self):
         code, _, err = run("compile", self.graph(base.with_lora(TXT2IMG)), "-o", self.out, "--preset", "auto")
