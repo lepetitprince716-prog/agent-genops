@@ -15,13 +15,21 @@ skip: a skipped guard test reads as green while the guard is not running.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_guard_objects import IDENTITY, MARKER, Repo, combined, registry_token  # noqa: E402
+from test_guard_objects import (  # noqa: E402
+    IDENTITY,
+    MARKER,
+    Repo,
+    combined,
+    random_text,
+    registry_token,
+)
 
 CONFIG_VARS = ("BETTERLEAKS_CONFIG", "GITLEAKS_CONFIG")
 CONFIG_TOML_VARS = ("BETTERLEAKS_CONFIG_TOML", "GITLEAKS_CONFIG_TOML")
@@ -299,6 +307,139 @@ class CommitHeaderTests(unittest.TestCase):
             with self.subTest(args=args):
                 scanned = self.repo.secret(*args)
                 self.assertEqual(scanned.returncode, 0, combined(scanned))
+
+
+class MessageEncodingTests(unittest.TestCase):
+    """A commit message is read in the encoding git stores it in, or refused.
+
+    git keeps a message in i18n.commitEncoding and names that encoding in the commit object's
+    encoding header; git log and the hosting site show it converted to UTF-8. The commit-msg hook
+    runs before there is a commit object, so the scanner reads i18n.commitEncoding itself.
+    Content that cannot be decoded cannot be scanned, so it is a finding, never clean.
+    """
+
+    def setUp(self) -> None:
+        self.repo = Repo(self)
+        # A private rule with non-ASCII text, built at run time.
+        self.marker = "\u5408\u6210" + "\u6807\u8bb0" + "zq"
+        rules = self.repo.home / ".config" / "agent-genops" / "private_rules.json"
+        document = json.loads(rules.read_text())
+        document["rules"].append(
+            {"id": "synthetic_cjk_marker", "pattern": self.marker, "why": "synthetic non-ASCII marker"}
+        )
+        rules.write_text(json.dumps(document))
+        self.gbk = self.write_message("gbk", f"note: {self.marker} here\n")
+        with self.assertRaises(UnicodeDecodeError):
+            self.gbk.read_bytes().decode("utf-8")
+
+    def write_message(self, encoding: str, text: str) -> Path:
+        path = self.repo.base / f"msg-{random_text(6)}.txt"
+        path.write_bytes(text.encode(encoding))
+        return path
+
+    def unchecked_commit_file(self, message: Path, *config: str) -> None:
+        self.repo.add_file(f"f-{random_text(6)}.txt", "data\n")
+        options = [item for pair in config for item in ("-c", pair)]
+        self.repo.git("-c", f"core.hooksPath={os.devnull}", *options, "commit", "-q", "-F", str(message))
+
+    def write_commit(self, body: bytes, header: bytes = b"") -> None:
+        """A commit on main whose object is written byte for byte (no git conversion)."""
+        tree = self.repo.git("rev-parse", "HEAD^{tree}")
+        parent = self.repo.git("rev-parse", "HEAD")
+        ident = f"tester <{IDENTITY}> 1700000000 +0000"
+        raw = (f"tree {tree}\nparent {parent}\nauthor {ident}\ncommitter {ident}\n").encode()
+        raw += header + b"\n" + body
+        obj = self.repo.base / f"obj-{random_text(6)}"
+        obj.write_bytes(raw)
+        oid = self.repo.git("hash-object", "-t", "commit", "-w", str(obj))
+        self.repo.git("update-ref", "refs/heads/main", oid)
+
+    def privacy_refuses(self, rule: str) -> None:
+        for args in (("--rev", "HEAD"), ("--range", "HEAD~1..HEAD"), ("--history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.privacy(*args)
+                self.assertEqual(scanned.returncode, 1, combined(scanned))
+                self.assertIn(rule, combined(scanned))
+        pushed = self.repo.push("main")
+        self.assertNotEqual(pushed.returncode, 0, combined(pushed))
+        self.assertNotEqual(
+            self.repo.git("rev-parse", "HEAD"),
+            self.repo.git("--git-dir", str(self.repo.remote), "rev-parse", "main"),
+        )
+
+    def test_message_file_is_read_in_the_commit_encoding(self) -> None:
+        self.repo.git("config", "i18n.commitEncoding", "GBK")
+        scanned = self.repo.privacy("--message", str(self.gbk))
+        self.assertEqual(scanned.returncode, 1, combined(scanned))
+        self.assertIn("synthetic_cjk_marker", combined(scanned))
+        before = self.repo.git("rev-parse", "HEAD")
+        self.repo.add_file("x.txt", "x\n")
+        committed = self.repo.run("git", "commit", "-q", "-F", str(self.gbk))
+        self.assertNotEqual(committed.returncode, 0, combined(committed))
+        self.assertIn("synthetic_cjk_marker", combined(committed))
+        self.assertEqual(self.repo.git("rev-parse", "HEAD"), before)
+
+    def test_encoding_given_on_the_command_line_reaches_the_hook(self) -> None:
+        before = self.repo.git("rev-parse", "HEAD")
+        self.repo.add_file("x.txt", "x\n")
+        committed = self.repo.run(
+            "git", "-c", "i18n.commitEncoding=GBK", "commit", "-q", "-F", str(self.gbk)
+        )
+        self.assertNotEqual(committed.returncode, 0, combined(committed))
+        self.assertIn("synthetic_cjk_marker", combined(committed))
+        self.assertEqual(self.repo.git("rev-parse", "HEAD"), before)
+
+    def test_message_file_that_does_not_decode_is_refused(self) -> None:
+        clean = self.write_message("gbk", "\u63d0\u4ea4\u8bf4\u660e\n")
+        for config in ((), ("UTF-8",), ("no-such-encoding-zq",)):
+            with self.subTest(config=config):
+                if config:
+                    self.repo.git("config", "i18n.commitEncoding", config[0])
+                scanned = self.repo.privacy("--message", str(clean))
+                self.assertEqual(scanned.returncode, 1, combined(scanned))
+                self.assertIn("undecodable", combined(scanned))
+
+    def test_message_file_in_its_encoding_without_a_marker_is_clean(self) -> None:
+        self.repo.git("config", "i18n.commitEncoding", "GBK")
+        clean = self.write_message("gbk", "\u63d0\u4ea4\u8bf4\u660e\n")
+        scanned = self.repo.privacy("--message", str(clean))
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+        utf8 = self.write_message("utf-8", "\u63d0\u4ea4\u8bf4\u660e\n")
+        self.repo.run("git", "config", "--unset", "i18n.commitEncoding")
+        scanned = self.repo.privacy("--message", str(utf8))
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+
+    def test_commit_is_read_in_its_encoding_header(self) -> None:
+        self.unchecked_commit_file(self.gbk, "i18n.commitEncoding=GBK")
+        self.assertEqual(self.repo.git("log", "-1", "--format=%e"), "GBK")
+        self.privacy_refuses("synthetic_cjk_marker")
+
+    def test_commit_that_does_not_decode_is_refused(self) -> None:
+        body = "\u63d0\u4ea4\u8bf4\u660e\n".encode("gbk")
+        for header in (b"", b"encoding UTF-8\n", b"encoding no-such-encoding-zq\n"):
+            with self.subTest(header=header):
+                self.write_commit(body, header)
+                self.privacy_refuses("undecodable")
+
+    def test_commit_in_its_encoding_without_a_marker_is_clean(self) -> None:
+        clean = self.write_message("gbk", "\u63d0\u4ea4\u8bf4\u660e\n")
+        self.unchecked_commit_file(clean, "i18n.commitEncoding=GBK")
+        for args in (("--rev", "HEAD"), ("--history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.privacy(*args)
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
+        pushed = self.repo.push("main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+
+    def test_secret_scan_reads_the_raw_bytes_of_a_message_in_another_encoding(self) -> None:
+        token = registry_token()
+        message = self.write_message("gbk", f"\u63d0\u4ea4 key = {token}\n")
+        refused_by_secret_scan(self, self.repo.secret("message", str(message)), token)
+        self.unchecked_commit_file(message, "i18n.commitEncoding=GBK")
+        self.assertEqual(self.repo.git("log", "-1", "--format=%e"), "GBK")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
 
 
 if __name__ == "__main__":

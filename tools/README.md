@@ -67,7 +67,7 @@ Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations loo
 | `lan_hostname` | `<name>.local`, `.lan`, `.internal`, `.home.arpa` |
 | `generation_metadata` | PNG text chunks `prompt`, `workflow`, `parameters`, `Comment`, `Description`, or a ComfyUI graph; raw-byte check for JPEG, WEBP, GIF |
 | `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes` |
-| `undecodable` | a file that is not valid UTF-8, or a file, PNG chunk or git object that cannot be read or parsed |
+| `undecodable` | a file that is not valid UTF-8, a commit message not valid in its encoding (the commit's `encoding` header, `i18n.commitEncoding` for the commit-msg hook, else UTF-8), or a file, PNG chunk or git object that cannot be read or parsed |
 
 Author, committer and tagger emails (`--identity`, `--history`) face a stricter test than `email`: only `allowed_emails` patterns pass.
 
@@ -233,7 +233,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `lan_hostname` | `<name>.local`、`.lan`、`.internal`、`.home.arpa` |
 | `generation_metadata` | PNG 文本块 `prompt`、`workflow`、`parameters`、`Comment`、`Description`，或 ComfyUI 节点图；JPEG、WEBP、GIF 查原始字节 |
 | `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件 |
-| `undecodable` | 不是合法 UTF-8 的文件，或读不了、解析不了的文件、PNG 数据块、git 对象 |
+| `undecodable` | 不是合法 UTF-8 的文件，按自己的编码（提交的 `encoding` 头；commit-msg 钩子看 `i18n.commitEncoding`；都没有就是 UTF-8）解不开的提交说明，或读不了、解析不了的文件、PNG 数据块、git 对象 |
 
 作者、提交者和标签者的邮箱（`--identity`、`--history`）要过更严的一关：只有匹配 `allowed_emails` 的才放行。
 

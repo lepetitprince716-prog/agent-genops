@@ -76,6 +76,10 @@ WHY_BINARY = (
     "binary file cannot be scanned; only image suffixes in allowed_binary_suffixes may be binary"
 )
 WHY_NOT_UTF8 = "file is not valid UTF-8, so it cannot be scanned"
+WHY_BAD_ENCODING = (
+    "commit message is not valid in its encoding (the commit's encoding header, "
+    "i18n.commitEncoding for a message file, else UTF-8), so it cannot be scanned"
+)
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
@@ -795,14 +799,50 @@ def scan_identity(rules: RuleSet, cwd: Path | None = None) -> list[Finding]:
     return findings
 
 
+def message_views(data: bytes, encoding: str | None) -> tuple[list[str], bool]:
+    """The texts to scan for a message stored in ``encoding`` (UTF-8 when None).
+
+    git keeps a message in the bytes of i18n.commitEncoding and shows it converted, so a rule
+    with non-ASCII text matches only the decoded form. The UTF-8 reading (bad bytes replaced) is
+    scanned as well, so a declared encoding can only add findings. The flag is False when the
+    bytes are not valid in the encoding or the encoding is unknown: that text cannot be
+    scanned, and the caller reports it.
+    """
+    views = [data.decode("utf-8", "replace")]
+    try:
+        declared = data.decode(encoding or "utf-8")
+    except (LookupError, UnicodeDecodeError):
+        return views, False
+    if declared != views[0]:
+        views.insert(0, declared)
+    return views, True
+
+
+def object_encoding(data: bytes) -> str | None:
+    """The value of a commit object's top-level ``encoding`` header, if any."""
+    for line in data.partition(b"\n\n")[0].split(b"\n"):
+        if line.startswith(b"encoding "):
+            return line[len(b"encoding ") :].decode("latin-1").strip()
+    return None
+
+
 def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = "") -> list[Finding]:
     """Scan a commit or tag object: identities by the email list, everything else by the rules.
 
     Every header is read, not only the known ones: git keeps extra headers, and a mergetag header
     (written when a signed tag is merged) carries a whole tag object, one space in, whose tagger
-    is checked like any identity."""
-    head, _, body = data.decode("utf-8", "replace").partition("\n\n")
+    is checked like any identity. The object is read in the encoding its header names."""
     where = f"{prefix}{kind} {oid[:SHORT_SHA]}"
+    views, readable = message_views(data, object_encoding(data))
+    findings = [] if readable else [Finding(f"{where} message", 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        findings += scan_object_text(kind, where, text, rules)
+    return unique(findings)
+
+
+def scan_object_text(kind: str, where: str, text: str, rules: RuleSet) -> list[Finding]:
+    """Scan one decoded reading of a commit or tag object."""
+    head, _, body = text.partition("\n\n")
     findings = []
     other: list[str] = []
     header = ""
@@ -1120,14 +1160,41 @@ def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = Non
 # --- files and messages ------------------------------------------------------------
 
 
-def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
-    """Scan a commit message file; lines starting with ``#`` are comments."""
+def read_commit_encoding(cwd: Path | None = None) -> str | None:
+    """``i18n.commitEncoding`` as git would apply it to the next commit; None when not set."""
     try:
-        text = path.read_bytes().decode("utf-8", "replace")
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "--get", "i18n.commitEncoding"],
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ScanError(f"cannot read i18n.commitEncoding: cannot run git: {exc}") from exc
+    if done.returncode == 1:
+        return None
+    if done.returncode != 0:
+        detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
+        raise ScanError(f"cannot read i18n.commitEncoding: git config failed: {detail}")
+    return done.stdout.decode("latin-1").strip() or None
+
+
+def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
+    """Scan a commit message file; lines starting with ``#`` are comments.
+
+    There is no commit object yet, so the bytes are read in i18n.commitEncoding (UTF-8 when it
+    is not set), the encoding git will store them under."""
+    try:
+        data = path.read_bytes()
     except OSError as exc:
         raise ScanError(f"cannot read message file {path}: {exc.strerror}") from exc
-    kept = "\n".join("" if line.startswith("#") else line for line in text.split("\n"))
-    return to_findings(path.as_posix(), scan_text(kept, rules, ""))
+    where = path.as_posix()
+    views, readable = message_views(data, read_commit_encoding())
+    findings = [] if readable else [Finding(where, 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        kept = "\n".join("" if line.startswith("#") else line for line in text.split("\n"))
+        findings += to_findings(where, scan_text(kept, rules, ""))
+    return unique(findings)
 
 
 def walk_error(exc: OSError) -> None:
