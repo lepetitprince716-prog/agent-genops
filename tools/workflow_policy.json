@@ -8,6 +8,11 @@
       "files": ["sdxl-txt2img.json", "sdxl-txt2img.ui.json", "sdxl-txt2img.api.json", "README.md"],
       "nodes": ["CheckpointLoaderSimple", "CLIPTextEncode", "EmptyLatentImage", "KSampler", "VAEDecode", "SaveImage"],
       "models": ["sd_xl_base_1.0.safetensors"]
+    },
+    "sdxl-hires-fix": {
+      "files": ["sdxl-hires-fix.json", "sdxl-hires-fix.ui.json", "sdxl-hires-fix.api.json", "README.md"],
+      "nodes": ["CheckpointLoaderSimple", "CLIPTextEncode", "EmptyLatentImage", "KSampler", "LatentUpscaleBy", "VAEDecode", "SaveImage"],
+      "models": ["sd_xl_base_1.0.safetensors"]
     }
   }
 }

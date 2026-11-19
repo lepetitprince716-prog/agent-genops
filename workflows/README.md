@@ -7,6 +7,7 @@ model source, licence, settings and what was tested.
 | Folder | What it does |
 |---|---|
 | `sdxl-txt2img/` | SDXL base 1.0 text to image, the smallest graph |
+| `sdxl-hires-fix/` | The same, with a latent upscale and a second low-denoise pass |
 
 Every file here is checked by `tools/workflow_policy.py` against the registry
 `tools/workflow_policy.json`: registered files only, registered node types and model names,
