@@ -250,7 +250,13 @@ def private_rules_path() -> Path:
 
 
 def read_clone_mode(cwd: Path | None = None) -> str | None:
-    """Read clone-level ``genops.mode`` without modifying git config; None if unset or not in git."""
+    """Read clone-level ``genops.mode`` without modifying git config.
+
+    None means the key is not set (``git config --get`` exits 1), which is the contributor
+    mode. Any other failure (git cannot run, an unreadable configuration) raises ScanError:
+    a read that failed is not an answer, and treating it as "not set" would let a maintainer
+    clone drop to the contributor mode.
+    """
     target = cwd or Path.cwd()
     try:
         done = subprocess.run(
@@ -259,10 +265,13 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
             capture_output=True,
             check=False,
         )
-    except OSError:
+    except OSError as exc:
+        raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: cannot run git: {exc}") from exc
+    if done.returncode == 1:
         return None
     if done.returncode != 0:
-        return None
+        detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
+        raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: git config failed: {detail}")
     return done.stdout.decode("utf-8", "replace").strip().lower() or None
 
 
@@ -1368,7 +1377,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.clone_mode:
         if args.redact_stream or any(modes):
             parser.error("--clone-mode takes no other mode")
-        print(MAINTAINER_MODE_VALUE if is_maintainer_required() else CONTRIBUTOR_MODE_VALUE)
+        try:
+            maintainer = is_maintainer_required()
+        except ScanError as exc:
+            print(f"privacy_scan: error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        print(MAINTAINER_MODE_VALUE if maintainer else CONTRIBUTOR_MODE_VALUE)
         return EXIT_CLEAN
     if args.redact_stream:
         sys.stdout.reconfigure(errors="backslashreplace")

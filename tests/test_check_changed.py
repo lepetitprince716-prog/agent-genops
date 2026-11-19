@@ -164,5 +164,102 @@ class WorkflowPolicyStepTests(unittest.TestCase):
         self.assertEqual(step(data, "workflow-policy")["status"], "NOT RUN")
 
 
+
+def stub_scanner(repo: SyntheticRepo, body: str) -> None:
+    """Replace the repository's scanner by a committed, pushed stub so the tree stays clean."""
+    repo.write("tools/privacy_scan.py", body)
+    repo.git("add", "tools/privacy_scan.py")
+    repo.commit_unchecked("stub scanner")
+    # The stub would answer the pre-push hook too: record the commit as already published.
+    repo.git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+
+def clone_mode_stub(answer: str, status: int = 0) -> str:
+    return (
+        "import sys\n"
+        "if sys.argv[1:] == ['--clone-mode']:\n"
+        f"    print({answer!r})\n"
+        f"    sys.exit({status})\n"
+        "sys.exit(2)\n"
+    )
+
+
+class CloneModeSourceTests(unittest.TestCase):
+    """./check reads the clone mode from the scanner's --clone-mode, the one implementation."""
+
+    def test_the_scanner_answer_decides_the_mode_not_a_second_reading_of_the_config(self) -> None:
+        need_betterleaks(self)
+        # The scanner says maintainer; the clone config is unset and no private rules exist.
+        repo = SyntheticRepo(self, maintainer=False)
+        stub_scanner(repo, clone_mode_stub("maintainer"))
+        os.unlink(repo.private_rules_file)
+        res = repo.check("changed", "--no-tests")
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertIn("private rules", combined(res))
+
+        # The scanner says contributor; the clone config says maintainer.
+        repo = SyntheticRepo(self, maintainer=True)
+        stub_scanner(repo, clone_mode_stub("contributor"))
+        res = repo.check("changed", "--no-tests")
+        self.assertEqual(res.returncode, 0, combined(res))
+        self.assertIn("NOT a release check", res.stdout)
+
+    def test_a_scanner_that_cannot_answer_stops_the_check(self) -> None:
+        need_betterleaks(self)
+        for name, body in (
+            ("garbage", clone_mode_stub("banana")),
+            ("failure", clone_mode_stub("maintainer", status=2)),
+        ):
+            with self.subTest(stub=name):
+                repo = SyntheticRepo(self, maintainer=True)
+                stub_scanner(repo, body)
+                res = repo.check("changed", "--no-tests")
+                self.assertEqual(res.returncode, 2, combined(res))
+                self.assertIn("clone mode", combined(res))
+
+
+class CloneModeReadErrorTests(unittest.TestCase):
+    """An unset genops.mode is the contributor mode; a failed read is not an answer."""
+
+    GIT_SHIM = (
+        "#!/bin/sh\n"
+        'for a in "$@"; do\n'
+        '  if [ "$a" = genops.mode ]; then\n'
+        '    echo "fatal: simulated failure while reading the configuration" >&2\n'
+        "    exit 128\n"
+        "  fi\n"
+        "done\n"
+        'exec "$REAL_GIT" "$@"\n'
+    )
+
+    def failing_env(self, repo: SyntheticRepo) -> dict[str, str]:
+        # A stand-in for a git that cannot read its configuration: only the read of
+        # genops.mode fails (exit 128, what git prints for an unreadable config); every
+        # other git call goes to the real git.
+        shim = repo.base / "git_shim"
+        shim.mkdir()
+        (shim / "git").write_text(self.GIT_SHIM)
+        (shim / "git").chmod(0o755)
+        real = shutil.which("git")
+        assert real is not None
+        return dict(repo.env, PATH=f"{shim}{os.pathsep}{repo.env.get('PATH', '')}", REAL_GIT=real)
+
+    def test_a_failed_read_is_refused_by_the_scanner_and_by_check(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        env = self.failing_env(repo)
+        asked = repo.run(sys.executable, "-B", "tools/privacy_scan.py", "--clone-mode", env=env)
+        self.assertEqual(asked.returncode, 2, combined(asked))
+        self.assertNotIn("contributor", asked.stdout)
+        res = repo.check("changed", "--no-tests", env=env)
+        self.assertEqual(res.returncode, 2, combined(res))
+        self.assertNotIn("PASS", combined(res))
+
+    def test_an_unset_mode_is_the_contributor_mode(self) -> None:
+        repo = SyntheticRepo(self, maintainer=False)
+        asked = repo.run(sys.executable, "-B", "tools/privacy_scan.py", "--clone-mode")
+        self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "contributor"), combined(asked))
+
+
 if __name__ == "__main__":
     unittest.main()

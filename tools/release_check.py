@@ -34,8 +34,8 @@ from typing import Any
 EXIT_CLEAN, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 PRIVATE_RULES_ENV = "AGENT_GENOPS_PRIVATE_RULES"
 REQUIRE_PRIVATE_ENV = "AGENT_GENOPS_REQUIRE_PRIVATE"
-MAINTAINER_MODE_CONFIG_KEY = "genops.mode"
 MAINTAINER_MODE_VALUE = "maintainer"
+CONTRIBUTOR_MODE_VALUE = "contributor"
 
 ZERO_OID = "0" * 40
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -151,11 +151,20 @@ def repo_root(cwd: Path | None = None) -> Path:
     return Path(git_text(["rev-parse", "--show-toplevel"], cwd or Path.cwd()))
 
 
-def is_maintainer_required(root: Path) -> bool:
-    if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
-        return True
-    mode = git_optional(["config", "--get", MAINTAINER_MODE_CONFIG_KEY], root)
-    return (mode or "").lower() == MAINTAINER_MODE_VALUE
+def clone_mode_is_maintainer(root: Path) -> bool:
+    """Ask the scanner for the clone mode: its ``--clone-mode`` is the one reading of
+    ``genops.mode`` (the hooks use it too). Anything but its two answers stops the check."""
+    scanner = root / "tools" / "privacy_scan.py"
+    cmd = [sys.executable, "-I", "-B", str(scanner), "--clone-mode"]
+    try:
+        proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise CheckError(f"cannot read the clone mode: cannot run {scanner.name}: {exc}") from exc
+    answer = proc.stdout.strip()
+    if proc.returncode != 0 or answer not in (MAINTAINER_MODE_VALUE, CONTRIBUTOR_MODE_VALUE):
+        detail = proc.stderr.strip() or f"exit {proc.returncode}, answer {answer!r}"
+        raise CheckError(f"cannot read the clone mode from tools/privacy_scan.py --clone-mode: {detail}")
+    return answer == MAINTAINER_MODE_VALUE
 
 
 def validate_private_rules_file(require_non_empty: bool) -> tuple[bool, int, str]:
@@ -507,7 +516,7 @@ def cmd_changed(args: argparse.Namespace) -> int:
     elif args.contributor:
         maintainer = False
     else:
-        maintainer = is_maintainer_required(root)
+        maintainer = clone_mode_is_maintainer(root)
 
     mode_label = "maintainer" if maintainer else "contributor"
     errors: list[str] = []
