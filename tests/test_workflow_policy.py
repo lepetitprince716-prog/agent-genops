@@ -278,6 +278,89 @@ class GraphShapeTest(Tree):
         self.assertRefused("json")
 
 
+class StringLimitsTest(Tree):
+    def test_an_address_that_is_not_https_is_refused(self):
+        tail = token(20)
+        doc = self.load(".json")
+        doc["_workflow"]["models"][0]["url"] = f"http://huggingface.co/x/resolve/main/{tail}/sd_xl_base_1.0.safetensors"
+        self.save(".json", doc)
+        self.assertRefused("url_scheme", tail)
+        # The host is registered and the address carries no credentials: only the scheme is wrong.
+        self.assertEqual([r for r in self.rules() if r.startswith("url_")], ["url_scheme"])
+
+    def test_a_string_over_the_length_limit_is_refused(self):
+        marker = token(16)
+        doc = self.load(".api.json")
+        node = next(n for n in doc.values() if n["class_type"] == "CLIPTextEncode")
+        # Short words with spaces, so only the length rule can fire (no blob, path or address).
+        node["inputs"]["text"] = marker + " " + "lake " * (workflow_policy.MAX_STRING // 5 + 1)
+        self.save(".api.json", doc)
+        self.assertRefused("oversize_string", marker)
+        self.assertEqual(self.rules(), ["oversize_string"])
+
+    def test_a_string_at_the_length_limit_is_accepted(self):
+        doc = self.load(".api.json")
+        node = next(n for n in doc.values() if n["class_type"] == "CLIPTextEncode")
+        node["inputs"]["text"] = ("lake " * workflow_policy.MAX_STRING)[: workflow_policy.MAX_STRING]
+        self.save(".api.json", doc)
+        self.assertEqual(self.rules(), [])
+
+
+class EncodingTest(Tree):
+    def test_a_json_file_that_is_not_utf8_is_refused(self):
+        path = self.folder / f"{SLUG}.api.json"
+        path.write_bytes(path.read_bytes() + b"\xff\xfe")
+        self.assertRefused("encoding")
+        self.assertNotIn("json", [f.rule for f in workflow_policy.check(self.root, POLICY, RULES)])
+
+    def test_a_readme_that_is_not_utf8_is_refused(self):
+        readme = self.folder / "README.md"
+        readme.write_bytes(readme.read_bytes() + b"\n\xc3\x28 broken\n")
+        self.assertRefused("encoding")
+
+    def test_the_top_level_readme_that_is_not_utf8_is_refused(self):
+        readme = self.root / "README.md"
+        readme.write_bytes(readme.read_bytes() + b"\xff")
+        self.assertRefused("encoding")
+
+
+class DocumentShapeTest(Tree):
+    def test_a_graph_that_is_not_an_object_is_refused(self):
+        self.save(".api.json", [1, 2, 3])
+        self.assertRefused("shape")
+
+    def test_a_graph_entry_that_is_not_a_node_is_refused(self):
+        doc = self.load(".api.json")
+        doc["99"] = "not a node"
+        self.save(".api.json", doc)
+        self.assertRefused("shape")
+
+    def test_a_canvas_without_a_nodes_list_is_refused(self):
+        doc = self.load(".ui.json")
+        doc["nodes"] = {"1": {}}
+        self.save(".ui.json", doc)
+        self.assertRefused("shape")
+
+
+class FileTypeTest(Tree):
+    def test_a_registered_file_of_an_unreadable_type_is_refused(self):
+        name = "notes-" + token() + ".txt"
+        registry = json.loads((workflow_policy.POLICY_PATH).read_text(encoding="utf-8"))
+        registry["workflows"][SLUG]["files"].append(name)
+        policy_path = Path(self.tmp.name) / "policy.json"
+        policy_path.write_text(json.dumps(registry), encoding="utf-8")
+        (self.folder / name).write_text("plain text the policy cannot read", encoding="utf-8")
+        policy = workflow_policy.load_policy(policy_path)
+        self.assertEqual([f.rule for f in workflow_policy.check(self.root, policy, RULES)], ["file_type"])
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = workflow_policy.main(["--root", str(self.root), "--policy", str(policy_path)])
+        self.assertEqual(code, 1)
+        self.assertIn("file_type", out.getvalue())
+        # The same file is unregistered under the committed registry, so it is refused there too.
+        self.assertIn("unregistered_entry", self.rules())
+
+
 class RegistryTest(Tree):
     def test_a_missing_registered_file_is_reported(self):
         (self.folder / f"{SLUG}.api.json").rename(Path(self.tmp.name) / "moved.json")
