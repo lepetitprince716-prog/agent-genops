@@ -1,0 +1,170 @@
+{
+  "_workflow": {
+    "format": 1,
+    "title": "SDXL text to image with optional LoRAs",
+    "locale": "en",
+    "layout": {
+      "preset": "bento"
+    },
+    "models": [
+      {
+        "name": "sd_xl_base_1.0.safetensors",
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+        "directory": "checkpoints"
+      }
+    ],
+    "groups": {
+      "loras": {
+        "title": "Optional LoRAs"
+      }
+    }
+  },
+  "ckpt": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    },
+    "_meta": {
+      "title": "SDXL base 1.0"
+    }
+  },
+  "lora_a": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": [
+        "ckpt",
+        "MODEL"
+      ],
+      "clip": [
+        "ckpt",
+        "CLIP"
+      ],
+      "lora_name": "your_lora_a.safetensors",
+      "strength_model": 0.8,
+      "strength_clip": 0.8
+    },
+    "_meta": {
+      "title": "LoRA 1",
+      "ui_optional": true,
+      "ui_group": "loras"
+    }
+  },
+  "lora_b": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": [
+        "lora_a",
+        "MODEL"
+      ],
+      "clip": [
+        "lora_a",
+        "CLIP"
+      ],
+      "lora_name": "your_lora_b.safetensors",
+      "strength_model": 0.8,
+      "strength_clip": 0.8
+    },
+    "_meta": {
+      "title": "LoRA 2",
+      "ui_optional": true,
+      "ui_group": "loras"
+    }
+  },
+  "pos": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "lora_b",
+        "CLIP"
+      ],
+      "text": "a quiet alpine lake at dawn, thin mist over the water, pine forest on the shore, snow on the far peaks, soft morning light"
+    },
+    "_meta": {
+      "title": "Positive prompt",
+      "ui_role": "cockpit",
+      "ui_expose": [
+        "text"
+      ]
+    }
+  },
+  "neg": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "lora_b",
+        "CLIP"
+      ],
+      "text": "lowres, blurry, watermark, text, logo, signature"
+    },
+    "_meta": {
+      "title": "Negative prompt",
+      "ui_role": "cockpit"
+    }
+  },
+  "latent": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Image size",
+      "ui_role": "cockpit"
+    }
+  },
+  "sampler": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "lora_b",
+        "MODEL"
+      ],
+      "positive": [
+        "pos",
+        0
+      ],
+      "negative": [
+        "neg",
+        0
+      ],
+      "latent_image": [
+        "latent",
+        0
+      ],
+      "seed": 0,
+      "steps": 25,
+      "cfg": 7.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1.0
+    },
+    "_meta": {
+      "title": "Sampler",
+      "ui_seed": "fixed"
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "sampler",
+        0
+      ],
+      "vae": [
+        "ckpt",
+        "VAE"
+      ]
+    }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "decode",
+        0
+      ],
+      "filename_prefix": "sdxl_lora"
+    }
+  }
+}

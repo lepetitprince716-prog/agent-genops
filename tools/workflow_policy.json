@@ -13,6 +13,11 @@
       "files": ["sdxl-hires-fix.json", "sdxl-hires-fix.ui.json", "sdxl-hires-fix.api.json", "README.md"],
       "nodes": ["CheckpointLoaderSimple", "CLIPTextEncode", "EmptyLatentImage", "KSampler", "LatentUpscaleBy", "VAEDecode", "SaveImage"],
       "models": ["sd_xl_base_1.0.safetensors"]
+    },
+    "sdxl-lora": {
+      "files": ["sdxl-lora.json", "sdxl-lora.ui.json", "sdxl-lora.api.json", "README.md"],
+      "nodes": ["CheckpointLoaderSimple", "LoraLoader", "CLIPTextEncode", "EmptyLatentImage", "KSampler", "VAEDecode", "SaveImage"],
+      "models": ["sd_xl_base_1.0.safetensors", "your_lora_a.safetensors", "your_lora_b.safetensors"]
     }
   }
 }
