@@ -401,6 +401,15 @@ class RegistryTest(Tree):
         (self.folder / f"{SLUG}.api.json").rename(Path(self.tmp.name) / "moved.json")
         self.assertIn("missing", self.rules())
 
+    def test_a_workflows_folder_that_is_a_symlink_is_refused(self):
+        """A good tree behind a link is not the folder that gets committed."""
+        real = Path(self.tmp.name) / "elsewhere"
+        self.root.rename(real)
+        self.root.symlink_to(real, target_is_directory=True)
+        self.assertEqual([f.rule for f in workflow_policy.check(self.root, POLICY, RULES)], ["missing"])
+        code, _output = run_cli(self.root)
+        self.assertEqual(code, 1)
+
     def test_a_broken_registry_exits_2(self):
         bad = Path(self.tmp.name) / "policy.json"
         bad.write_text(json.dumps({"version": 2}))
