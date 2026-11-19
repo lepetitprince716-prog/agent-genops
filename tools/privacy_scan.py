@@ -567,12 +567,13 @@ def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
 # --- git ---------------------------------------------------------------------------
 
 
-def git(args: list[str], cwd: Path) -> bytes:
+def git(args: list[str], cwd: Path, stdin: bytes | None = None) -> bytes:
     """Run git with ``--no-replace-objects`` and return stdout; any failure is a ScanError."""
     try:
         done = subprocess.run(
             ["git", "--no-replace-objects", *args],
             cwd=cwd,
+            input=stdin,
             capture_output=True,
             check=False,
         )
@@ -779,6 +780,13 @@ def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = 
         field, _, value = line.partition(" ")
         if field in IDENT_FIELDS:
             findings += check_ident(f"{where} {field}", value, rules)
+        elif kind == "tag" and field == "tag":
+            # The name stored inside the tag object outlives its ref; never print it.
+            hits = scan_text(value, rules, "")
+            findings += [
+                Finding(f"{where} name", 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})")
+                for hit in hits
+            ]
     return findings + to_findings(f"{where} message", scan_text(body, rules, ""))
 
 
@@ -850,19 +858,90 @@ def extract_commit_tree(data: bytes) -> str | None:
     return None
 
 
+def tag_target(data: bytes) -> str | None:
+    """The object id a raw tag object points at (its ``object`` header)."""
+    head, _, _ = data.partition(b"\n\n")
+    for line in head.split(b"\n"):
+        if line.startswith(b"object "):
+            return line[7:].decode("ascii").strip()
+    return None
+
+
+class Peeled(NamedTuple):
+    """What a set of starting objects resolves to once every tag layer is read."""
+
+    findings: list[Finding]
+    commits: set[str]
+    trees: set[str]
+    blobs: set[str]
+
+
+def peel_objects(root: Path, oids: Iterable[str], rules: RuleSet, prefix: str = "") -> Peeled:
+    """Read every tag layer above ``oids`` (scanning each tag object) and sort the rest by type.
+
+    A ref may point at a commit, a tree, a blob or an annotated tag, and a tag may point at
+    another tag. Each tag object is scanned (name, tagger, message); what the chain ends in is
+    returned so the caller can scan it. An unknown or missing object is a finding, never a pass.
+    """
+    findings: list[Finding] = []
+    commits: set[str] = set()
+    trees: set[str] = set()
+    blobs: set[str] = set()
+    seen: set[str] = set()
+    pending = sorted(set(oids))
+    while pending:
+        seen.update(pending)
+        next_round: set[str] = set()
+        for oid, kind, data in batch_read_objects(root, pending):
+            short = oid[:SHORT_SHA]
+            if kind == "tag":
+                findings += scan_commit("tag", oid, data, rules, prefix=prefix)
+                target = tag_target(data)
+                if target is None:
+                    findings.append(Finding(f"{prefix}tag {short}", 1, "undecodable", WHY_MISSING))
+                elif target not in seen:
+                    next_round.add(target)
+            elif kind == "commit":
+                commits.add(oid)
+            elif kind == "tree":
+                trees.add(oid)
+            elif kind == "blob":
+                blobs.add(oid)
+            else:
+                findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
+        pending = sorted(next_round)
+    return Peeled(findings, commits, trees, blobs)
+
+
+def resolve_object(root: Path, rev: str) -> str:
+    """The full object id ``rev`` names, whatever its type; ScanError if it names nothing."""
+    try:
+        out = git(["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{object}}"], root)
+    except ScanError as exc:
+        raise ScanError(f"not a git object: {rev}") from exc
+    oid = out.strip()
+    if not OBJECT_ID.fullmatch(oid):
+        raise ScanError(f"not a git object: {rev}")
+    return oid.decode("ascii")
+
+
 def scan_history_scope(
     root: Path,
     rules: RuleSet,
     *,
     rev_args: list[str],
+    start_objects: Iterable[str] = (),
     redactor: NameRedactor | None = None,
     ref_names: Iterable[str] = (),
-    include_all_tags: bool = False,
     check_replace: bool = True,
     prefix: str = "",
 ) -> list[Finding]:
     """Scan commits, tags, all historical tree paths (incl. deleted/renamed/duplicate blobs),
-    submodules, LFS pointers, and ref names for ``rev_args``."""
+    submodules, LFS pointers, and ref names for ``rev_args`` plus ``start_objects``.
+
+    ``start_objects`` are object ids of any type (what refs point at): every tag layer above them
+    is scanned, commits they reach join the history walk, and trees or blobs they end in are
+    scanned directly."""
     red = redactor or NameRedactor(rules)
     if git(["rev-parse", "--is-shallow-repository"], root).strip() == b"true":
         raise ScanError("shallow clone: history is incomplete, run git fetch --unshallow")
@@ -874,48 +953,37 @@ def scan_history_scope(
     for ref in ref_names:
         findings += red.scan_ref(ref, prefix=prefix)
 
-    commit_oids = [
-        line.decode("ascii")
-        for line in git(["rev-list", *rev_args], root).split(b"\n")
-        if OBJECT_ID.fullmatch(line)
-    ]
+    peeled = peel_objects(root, start_objects, rules, prefix=prefix)
+    findings += peeled.findings
 
-    tag_oids: list[str] = []
-    if include_all_tags:
-        for line in git(
-            ["for-each-ref", "--format=%(objecttype) %(objectname) %(refname)", "refs/tags"],
-            root,
-        ).split(b"\n"):
-            if not line:
-                continue
-            parts = line.decode("utf-8", "replace").split(" ", 2)
-            if len(parts) == 3:
-                obj_type, oid, ref_name = parts
-                findings += red.scan_ref(ref_name, prefix=prefix)
-                if obj_type == "tag":
-                    tag_oids.append(oid)
+    commit_oids: list[str] = []
+    if rev_args or peeled.commits:
+        feed = "".join(f"{oid}\n" for oid in sorted(peeled.commits)).encode("ascii")
+        commit_oids = [
+            line.decode("ascii")
+            for line in git(["rev-list", "--stdin", *rev_args], root, stdin=feed).split(b"\n")
+            if OBJECT_ID.fullmatch(line)
+        ]
 
-    if not commit_oids and not tag_oids:
-        return findings
-
-    root_trees: set[str] = set()
-    for oid, kind, data in batch_read_objects(root, commit_oids + tag_oids):
+    root_trees: set[str] = set(peeled.trees)
+    for oid, kind, data in batch_read_objects(root, commit_oids):
         short = oid[:SHORT_SHA]
-        if kind in ("commit", "tag"):
+        if kind == "commit":
             findings += scan_commit(kind, oid, data, rules, prefix=prefix)
-            if kind == "commit":
-                tree_oid = extract_commit_tree(data)
-                if tree_oid:
-                    root_trees.add(tree_oid)
-        elif kind == "missing":
+            tree_oid = extract_commit_tree(data)
+            if tree_oid:
+                root_trees.add(tree_oid)
+        else:
             findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
 
     # Walk every unique (tree_oid, path_prefix) across all historical commits so deleted paths,
-    # renamed endpoints, and multiple paths sharing one blob are all checked.
+    # renamed endpoints, and multiple paths sharing one blob are all checked. A blob a ref or tag
+    # points at directly has no path: it is scanned once with no suffix.
     parsed_trees: dict[str, list[tuple[str, str, str]]] = {}
     visited_tree_paths: set[tuple[str, str]] = set()
     frontier: list[tuple[str, str]] = [(tree_oid, "") for tree_oid in sorted(root_trees)]
     blob_paths: dict[str, set[str]] = defaultdict(set)
+    direct_blobs: set[str] = set(peeled.blobs)
     checked_paths: set[str] = set()
 
     while frontier:
@@ -962,15 +1030,17 @@ def scan_history_scope(
         frontier = next_frontier
 
     # Read each unique blob once, caching content hits by (oid, suffix).
-    for oid, kind, data in batch_read_objects(root, sorted(blob_paths)):
+    for oid, kind, data in batch_read_objects(root, sorted(set(blob_paths) | direct_blobs)):
         short = oid[:SHORT_SHA]
-        if kind == "missing":
+        if kind != "blob":
+            # A tree entry or ref that names a missing object, or an object of the wrong type.
             findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
             continue
-        if kind != "blob":
-            continue
         hits_by_suffix: dict[str, list[Hit]] = {}
-        for full_path in sorted(blob_paths[oid]):
+        if oid in direct_blobs:
+            hits_by_suffix[""] = scan_bytes("", data, rules)
+            findings += to_findings(f"{prefix}blob {short}", hits_by_suffix[""])
+        for full_path in sorted(blob_paths.get(oid, ())):
             suffix = Path(full_path).suffix.lower()
             if suffix not in hits_by_suffix:
                 hits_by_suffix[suffix] = scan_bytes(full_path, data, rules)
@@ -983,19 +1053,25 @@ def scan_history_scope(
 
 
 def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = None) -> list[Finding]:
-    """Scan every blob, commit, tag, historical path and ref reachable from any ref."""
-    all_refs = [
-        line.decode("utf-8", "replace")
-        for line in git(["for-each-ref", "--format=%(refname)"], root).split(b"\n")
-        if line
-    ]
+    """Scan every object reachable from any ref: commits, every tag layer (nested tags too),
+    trees and blobs, including refs that point straight at a tree or a blob, plus every
+    historical path and every ref name. Covers at least what ``git rev-list --objects --all``
+    lists."""
+    all_refs: list[str] = []
+    ref_objects: list[str] = []
+    for line in git(["for-each-ref", "--format=%(objectname) %(refname)"], root).split(b"\n"):
+        if not line:
+            continue
+        oid, _, ref = line.decode("utf-8", "replace").partition(" ")
+        ref_objects.append(oid)
+        all_refs.append(ref)
     return scan_history_scope(
         root,
         rules,
         rev_args=["--all"],
+        start_objects=ref_objects,
         redactor=redactor,
         ref_names=all_refs,
-        include_all_tags=True,
         check_replace=True,
     )
 
@@ -1100,13 +1176,15 @@ def run_scans(
         findings += scan_history(root, rules, redactor=redactor)
     if args.rev:
         assert root is not None
+        # The object may be a commit, an annotated (possibly nested) tag, a tree or a blob:
+        # each tag layer is scanned and what the chain ends in is scanned by its type.
         findings += scan_history_scope(
             root,
             rules,
-            rev_args=[args.rev],
+            rev_args=[],
+            start_objects=[resolve_object(root, args.rev)],
             redactor=redactor,
             ref_names=args.ref_names,
-            include_all_tags=False,
             check_replace=True,
         )
     if args.range_spec:
@@ -1118,7 +1196,6 @@ def run_scans(
             rev_args=[args.range_spec],
             redactor=redactor,
             ref_names=args.ref_names,
-            include_all_tags=False,
             check_replace=True,
             prefix=prefix,
         )
@@ -1137,7 +1214,6 @@ def run_scans(
             rev_args=rev_args,
             redactor=redactor,
             ref_names=other_refs,
-            include_all_tags=False,
             check_replace=False,
             prefix="[other-refs] ",
         )
@@ -1195,7 +1271,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rev",
         metavar="COMMIT",
-        help="scan a specific commit and its full reachable history (paths, blobs, messages)",
+        help="scan one object and everything it reaches: a commit and its history, an annotated (nested) tag layer by layer, a tree or a blob",
     )
     parser.add_argument(
         "--range",

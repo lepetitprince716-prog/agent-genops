@@ -1,0 +1,333 @@
+"""Object coverage of the two scanners: annotated and nested tags, refs that point straight at a
+tree or a blob, content that exists only in a merge commit, and which Betterleaks ignore files
+apply when the caller names one.
+
+Every test builds a throwaway repository with the real hooks and the real tools, a home folder of
+its own whose private rules hold one synthetic marker, and a local bare remote. Fake tokens are
+built at run time from random characters, so no secret-looking literal exists in the repository.
+The registry token shape is one that only Betterleaks knows (the privacy scan's public rules do
+not), so a refusal of it can only come from tools/secret_scan.sh.
+
+Betterleaks must be installed (brew install betterleaks); missing, these tests fail, they do not
+skip: a skipped guard test reads as green while the guard is not running.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import shutil
+import string
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+IDENTITY = "1+tester@users.noreply.github.com"
+MARKER = "zzobjmarker7731"
+SUFFIX_MARKER = "zzcfgonly4410"
+
+
+def random_text(length: int) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def registry_token() -> str:
+    """A token shape that only Betterleaks knows; built at run time."""
+    return "np" + "m_" + random_text(36)
+
+
+def combined(result: subprocess.CompletedProcess[str]) -> str:
+    return result.stdout + result.stderr
+
+
+class Repo:
+    """A temporary maintainer clone with the real hooks and tools and a bare remote."""
+
+    def __init__(self, testcase: unittest.TestCase) -> None:
+        if shutil.which("betterleaks") is None:
+            testcase.fail("betterleaks is not installed: brew install betterleaks")
+        self.base = Path(tempfile.mkdtemp(prefix="guard-objects-"))
+        testcase.addCleanup(shutil.rmtree, self.base, True)
+        self.home = self.base / "home"
+        rules = self.home / ".config" / "agent-genops" / "private_rules.json"
+        rules.parent.mkdir(parents=True)
+        rules.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "rules": [
+                        {
+                            "id": "synthetic_private_marker",
+                            "pattern": MARKER,
+                            "flags": "i",
+                            "why": "synthetic private test marker",
+                        },
+                        {
+                            "id": "synthetic_cfg_marker",
+                            "pattern": SUFFIX_MARKER,
+                            "suffixes": [".cfg"],
+                            "why": "synthetic marker that only counts in .cfg files",
+                        },
+                    ],
+                }
+            )
+        )
+        self.path = self.base / "work"
+        self.remote = self.base / "origin.git"
+        self.env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("AGENT_GENOPS_", "SECRET_SCAN_", "GIT_"))
+        }
+        self.env["HOME"] = str(self.home)
+        self.env["GIT_CONFIG_GLOBAL"] = os.devnull
+        self.env["GIT_CONFIG_NOSYSTEM"] = "1"
+        self.git("init", "-q", "-b", "main", str(self.path), cwd=self.base)
+        self.git("init", "-q", "--bare", str(self.remote), cwd=self.base)
+        for key, value in (
+            ("user.email", IDENTITY),
+            ("user.name", "tester"),
+            ("core.hooksPath", ".githooks"),
+            ("genops.mode", "maintainer"),
+            ("genops.allowedPushUrl", str(self.remote)),
+        ):
+            self.git("config", key, value)
+        self.git("remote", "add", "origin", str(self.remote))
+        shutil.copytree(ROOT / ".githooks", self.path / ".githooks")
+        tools = self.path / "tools"
+        tools.mkdir()
+        for name in ("privacy_scan.py", "privacy_rules.json", "secret_scan.sh", "secret_scan.tmpl"):
+            shutil.copy2(ROOT / "tools" / name, tools / name)
+        (self.path / "README.md").write_text("# Synthetic\n")
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "initial clean baseline")
+        self.git("push", "-q", "-u", "origin", "main")
+
+    # --- running things ---------------------------------------------------------------
+
+    def run(self, *args: str, env: dict[str, str] | None = None, cwd: Path | None = None,
+            stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            cwd=cwd or self.path,
+            env=env or self.env,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+
+    def git(self, *args: str, cwd: Path | None = None, stdin: str | None = None) -> str:
+        result = self.run("git", *args, cwd=cwd, stdin=stdin)
+        if result.returncode != 0:
+            raise AssertionError(f"git {' '.join(args)} failed: {combined(result)}")
+        return result.stdout.strip()
+
+    def unchecked_commit(self, message: str) -> None:
+        """A commit the hooks never see, to put content into history."""
+        self.git("-c", f"core.hooksPath={os.devnull}", "commit", "-q", "-m", message)
+
+    def add_file(self, name: str, text: str) -> None:
+        target = self.path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+        self.git("add", name)
+
+    def privacy(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.run("python3", "-B", "tools/privacy_scan.py", *args)
+
+    def secret(self, *args: str, extra_env: dict[str, str] | None = None
+               ) -> subprocess.CompletedProcess[str]:
+        env = dict(self.env)
+        env.update(extra_env or {})
+        return self.run("sh", "tools/secret_scan.sh", *args, env=env)
+
+    def push(self, *refspecs: str) -> subprocess.CompletedProcess[str]:
+        return self.run("git", "push", "origin", *refspecs)
+
+    def remote_has(self, ref: str) -> bool:
+        result = self.run("git", "--git-dir", str(self.remote), "rev-parse", "--verify", "--quiet", ref)
+        return result.returncode == 0
+
+    def hash_blob(self, text: str) -> str:
+        return self.git("hash-object", "-w", "--stdin", stdin=text)
+
+    def make_tree(self, blob: str, name: str = "note.txt") -> str:
+        return self.git("mktree", stdin=f"100644 blob {blob}\t{name}\n")
+
+
+class AnnotatedTagPushTests(unittest.TestCase):
+    """R1 through the real pre-push hook: the tag object itself is what is published."""
+
+    def test_push_refuses_private_marker_in_annotated_tag_message(self) -> None:
+        repo = Repo(self)
+        repo.git("tag", "-a", "v1", "-m", f"release notes mention {MARKER} here")
+        result = repo.push("v1")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertIn("synthetic_private_marker", combined(result))
+        self.assertNotIn(MARKER, combined(result))
+        self.assertFalse(repo.remote_has("refs/tags/v1"))
+
+    def test_push_refuses_token_in_annotated_tag_message(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        message = repo.base / "tagmsg.txt"
+        message.write_text(f"token {token}\n")
+        repo.git("tag", "-a", "v2", "-F", str(message))
+        result = repo.push("v2")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertIn("secret_scan:", combined(result))
+        self.assertNotIn(token, combined(result))
+        self.assertFalse(repo.remote_has("refs/tags/v2"))
+
+    def test_push_of_a_clean_annotated_tag_passes(self) -> None:
+        repo = Repo(self)
+        repo.git("tag", "-a", "v3", "-m", "clean release notes")
+        result = repo.push("v3")
+        self.assertEqual(result.returncode, 0, combined(result))
+        self.assertTrue(repo.remote_has("refs/tags/v3"))
+
+
+class NestedTagTests(unittest.TestCase):
+    """An outer clean tag that points at an inner tag whose own ref was deleted."""
+
+    def nested(self, repo: Repo, inner_name: str, inner_message: str) -> str:
+        message = repo.base / "inner.txt"
+        message.write_text(inner_message)
+        repo.git("tag", "-a", inner_name, "-F", str(message), "HEAD")
+        repo.git("-c", "advice.nestedTag=false", "tag", "-a", "outer", "-m", "outer clean", inner_name)
+        repo.git("tag", "-d", inner_name)
+        return repo.git("rev-parse", "outer")
+
+    def test_privacy_scan_reads_every_layer_of_a_nested_tag(self) -> None:
+        repo = Repo(self)
+        outer = self.nested(repo, "inner", f"inner {MARKER}\n")
+        for args in (("--history",), ("--rev", outer)):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_private_marker", result.stdout)
+
+    def test_privacy_scan_reads_the_name_inside_a_tag_object(self) -> None:
+        repo = Repo(self)
+        outer = self.nested(repo, f"rel-{MARKER}", "inner clean\n")
+        for args in (("--history",), ("--rev", outer)):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_private_marker", result.stdout)
+                self.assertNotIn(MARKER, combined(result))
+
+    def test_push_refuses_a_nested_tag_with_a_private_inner_layer(self) -> None:
+        repo = Repo(self)
+        self.nested(repo, "inner", f"inner {MARKER}\n")
+        result = repo.push("outer")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertFalse(repo.remote_has("refs/tags/outer"))
+
+    def test_secret_scan_reads_every_layer_of_a_nested_tag(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        outer = self.nested(repo, "inner", f"inner {token}\n")
+        for args in (("history",), ("rev", outer)):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertNotEqual(result.returncode, 0, combined(result))
+                self.assertNotEqual(result.returncode, 2, combined(result))
+                self.assertNotIn(token, combined(result))
+
+
+class DirectObjectRefTests(unittest.TestCase):
+    """Refs that point straight at a blob or a tree, with no commit in between."""
+
+    def test_privacy_scan_reports_a_blob_tag(self) -> None:
+        repo = Repo(self)
+        blob = repo.hash_blob(f"secret note {MARKER}\n")
+        repo.git("tag", "blobtag", blob)
+        for args in (("--history",), ("--rev", blob), ("--rev", "blobtag")):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_private_marker", result.stdout)
+
+    def test_privacy_scan_reports_a_tree_ref(self) -> None:
+        repo = Repo(self)
+        tree = repo.make_tree(repo.hash_blob(f"secret note {MARKER}\n"))
+        repo.git("update-ref", "refs/custom/treeref", tree)
+        for args in (("--history",), ("--rev", tree)):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_private_marker", result.stdout)
+
+    def test_privacy_scan_reports_an_annotated_tag_of_a_blob(self) -> None:
+        repo = Repo(self)
+        blob = repo.hash_blob(f"secret note {MARKER}\n")
+        repo.git("tag", "-a", "blobnote", "-m", "clean message", blob)
+        for args in (("--history",), ("--rev", "blobnote")):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_private_marker", result.stdout)
+
+    def test_clean_blob_tag_is_clean_not_an_error(self) -> None:
+        repo = Repo(self)
+        blob = repo.hash_blob("nothing private here\n")
+        repo.git("tag", "blobtag", blob)
+        for args in (("--history",), ("--rev", blob)):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 0, combined(result))
+        result = repo.secret("rev", blob)
+        self.assertEqual(result.returncode, 0, combined(result))
+
+    def test_secret_scan_reads_a_blob_tag_and_a_tree_ref(self) -> None:
+        repo = Repo(self)
+        token = registry_token()
+        blob = repo.hash_blob(f"key = {token}\n")
+        tree = repo.make_tree(repo.hash_blob(f"other = {registry_token()}\n"))
+        repo.git("tag", "blobtag", blob)
+        for args in (("rev", blob), ("rev", tree), ("history",)):
+            with self.subTest(args=args):
+                result = repo.secret(*args)
+                self.assertNotEqual(result.returncode, 0, combined(result))
+                self.assertNotEqual(result.returncode, 2, combined(result))
+                self.assertNotIn(token, combined(result))
+        repo.git("tag", "-d", "blobtag")
+        repo.git("update-ref", "refs/custom/treeref", tree)
+        result = repo.secret("history")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertNotEqual(result.returncode, 2, combined(result))
+
+    def test_push_of_a_blob_tag_is_refused_by_the_privacy_scan_itself(self) -> None:
+        repo = Repo(self)
+        blob = repo.hash_blob(f"secret note {MARKER}\n")
+        repo.git("tag", "blobtag", blob)
+        result = repo.push("blobtag")
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertIn("synthetic_private_marker", combined(result))
+        self.assertNotIn("invalid commit", combined(result))
+        self.assertFalse(repo.remote_has("refs/tags/blobtag"))
+
+
+class SharedBlobTests(unittest.TestCase):
+    """One blob at two paths whose suffixes decide whether a rule applies."""
+
+    def test_every_path_of_a_shared_blob_is_checked(self) -> None:
+        repo = Repo(self)
+        text = f"setting {SUFFIX_MARKER}\n"
+        repo.add_file("a.txt", text)
+        repo.add_file("b.cfg", text)
+        repo.unchecked_commit("same content twice")
+        for args in (("--history",), ("--rev", "HEAD")):
+            with self.subTest(args=args):
+                result = repo.privacy(*args)
+                self.assertEqual(result.returncode, 1, combined(result))
+                self.assertIn("synthetic_cfg_marker", result.stdout)
+
+

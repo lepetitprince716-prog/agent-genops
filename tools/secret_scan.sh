@@ -4,15 +4,23 @@
 #   sh tools/secret_scan.sh staged           the index, as the next commit would contain it
 #   sh tools/secret_scan.sh unstaged         working-tree diff relative to the index
 #   sh tools/secret_scan.sh message FILE     one commit message file
-#   sh tools/secret_scan.sh history          every commit diff on any ref, plus all commit
-#                                            and tag messages (Betterleaks itself scans diffs only)
-#   sh tools/secret_scan.sh rev COMMIT       commits reachable from COMMIT, plus their messages
+#   sh tools/secret_scan.sh history          every object any ref reaches: every commit diff
+#                                            all commit messages,
+#                                            every tag object (nested tags
+#                                            layer by layer), and trees or blobs a ref or tag
+#                                            points at directly
+#   sh tools/secret_scan.sh rev OBJECT       one pushed object: a commit and its history, an
+#                                            annotated (nested) tag layer by layer plus what it
+#                                            ends in, a tree or a blob
 #   sh tools/secret_scan.sh range BASE..HEAD commits in a range, plus their messages
 #   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
 #
+# Betterleaks itself scans diffs only. Tag objects, messages and directly referenced trees and
+# blobs go through stdin.
+#
 # Optional environment controls:
 #   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory
-#   SECRET_SCAN_IGNORE_ALLOW  when "1", pass --ignore-gitleaks-allow
+#   SECRET_SCAN_IGNORE_ALLOW  when "1", pass --ignore-gitleaks-allow (inline allow comments off)
 #   SECRET_SCAN_REDACT_SCANNER path to privacy_scan.py used to redact sensitive file paths
 #   SECRET_SCAN_RULES         optional public rules file for path redaction
 #   SECRET_SCAN_NO_PRIVATE    when "1", pass --no-private during path redaction
@@ -25,7 +33,7 @@
 set -eu
 
 usage() {
-  echo "usage: sh tools/secret_scan.sh staged | unstaged | message FILE | history | rev COMMIT | range SPEC | files FILE..." >&2
+  echo "usage: sh tools/secret_scan.sh staged | unstaged | message FILE | history | rev OBJECT | range SPEC | files FILE..." >&2
   exit 2
 }
 
@@ -49,6 +57,15 @@ here=$(cd "$(dirname "$0")" && pwd)
 template="$here/secret_scan.tmpl"
 redact_scanner=${SECRET_SCAN_REDACT_SCANNER:-"$here/privacy_scan.py"}
 
+g() {
+  git --no-replace-objects "$@"
+}
+
+# Scratch space for content streams.
+work=$(mktemp -d "${TMPDIR:-/tmp}/secret-scan.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT TERM HUP
+
 redact_output() {
   if [ -f "$redact_scanner" ] && grep -q -- '--redact-stream' "$redact_scanner" 2>/dev/null; then
     set -- -I -B "$redact_scanner" --redact-stream
@@ -68,27 +85,25 @@ redact_output() {
   fi
 }
 
-# scan LABEL SUBCOMMAND [ARGS...]: stdin, when the subcommand reads it, is passed through.
+# bl SUBCOMMAND [ARGS...]: one Betterleaks run with the shared flags; stdin is passed through.
+bl() {
+  if [ -n "${SECRET_SCAN_IGNORE_PATH:-}" ]; then
+    set -- "$@" -i "$SECRET_SCAN_IGNORE_PATH"
+  fi
+  if [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
+    set -- "$@" --ignore-gitleaks-allow
+  fi
+  set -- "$@" --redact --no-banner --no-color --log-level warn \
+    --report-format template --report-template "$template" --report-path -
+  betterleaks "$@"
+}
+
+# scan LABEL SUBCOMMAND [ARGS...]
 scan() {
   label=$1
   shift
   rc=0
-  if [ -n "${SECRET_SCAN_IGNORE_PATH:-}" ] && [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
-    out=$(betterleaks "$@" -i "$SECRET_SCAN_IGNORE_PATH" --ignore-gitleaks-allow \
-      --redact --no-banner --no-color --log-level warn \
-      --report-format template --report-template "$template" --report-path -) || rc=$?
-  elif [ -n "${SECRET_SCAN_IGNORE_PATH:-}" ]; then
-    out=$(betterleaks "$@" -i "$SECRET_SCAN_IGNORE_PATH" \
-      --redact --no-banner --no-color --log-level warn \
-      --report-format template --report-template "$template" --report-path -) || rc=$?
-  elif [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
-    out=$(betterleaks "$@" --ignore-gitleaks-allow \
-      --redact --no-banner --no-color --log-level warn \
-      --report-format template --report-template "$template" --report-path -) || rc=$?
-  else
-    out=$(betterleaks "$@" --redact --no-banner --no-color --log-level warn \
-      --report-format template --report-template "$template" --report-path -) || rc=$?
-  fi
+  out=$(bl "$@") || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "secret_scan: $label: betterleaks exited $rc" >&2
     if [ -n "$out" ]; then
@@ -97,6 +112,59 @@ scan() {
     echo "secret_scan: values are redacted. For a false positive see 'Second scan: Betterleaks' in PRIVACY.md." >&2
     return 1
   fi
+}
+
+content="$work/content"
+commits="$work/commits"
+: >"$content"
+: >"$commits"
+
+# peel OID: append every tag object above OID to $content, then sort out what the chain ends in:
+# a commit id goes to $commits, a tree's blobs and a blob's bytes go to $content. Nothing is
+# passed as clean without being read; an unreadable object is a usage error (exit 2).
+peel() {
+  oid=$1
+  depth=0
+  while :; do
+    type=$(g cat-file -t "$oid" 2>/dev/null) || {
+      echo "secret_scan: cannot read object $oid" >&2
+      exit 2
+    }
+    case "$type" in
+      tag)
+        g cat-file tag "$oid" >"$work/tag"
+        cat "$work/tag" >>"$content"
+        printf '\n' >>"$content"
+        oid=$(sed -n '1s/^object //p' "$work/tag")
+        depth=$((depth + 1))
+        if [ -z "$oid" ] || [ "$depth" -gt 64 ]; then
+          echo "secret_scan: malformed or too deeply nested tag object" >&2
+          exit 2
+        fi
+        ;;
+      commit)
+        printf '%s\n' "$oid" >>"$commits"
+        return 0
+        ;;
+      tree)
+        g ls-tree -r "$oid" >"$work/tree"
+        awk '$2 == "blob" { print $3 }' "$work/tree" >"$work/blobs"
+        if [ -s "$work/blobs" ]; then
+          g cat-file --batch <"$work/blobs" >>"$content"
+        fi
+        return 0
+        ;;
+      blob)
+        g cat-file blob "$oid" >>"$content"
+        printf '\n' >>"$content"
+        return 0
+        ;;
+      *)
+        echo "secret_scan: unsupported object type '$type' for $oid" >&2
+        exit 2
+        ;;
+    esac
+  done
 }
 
 case "$mode" in
@@ -110,31 +178,40 @@ case "$mode" in
     scan "commit message" stdin <"$2"
     ;;
   history)
-    scan "history" git .
-    refs=$(git --no-replace-objects for-each-ref --count=1)
-    if [ -n "$refs" ]; then
-      commits=$(git --no-replace-objects log --all --format='%B')
-      tags=$(git --no-replace-objects for-each-ref --format='%(contents)' refs/tags)
-      printf '%s\n%s\n' "$commits" "$tags" | scan "commit and tag messages" stdin
+    scan "history" git --log-opts="--full-history --all" .
+    g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
+    if [ -s "$work/refs" ]; then
+      # Refs to commits are covered by the diff walk above; every other ref is peeled.
+      awk '$1 != "commit" { print $2 }' "$work/refs" >"$work/others"
+      while read -r oid; do
+        peel "$oid" </dev/null
+      done <"$work/others"
+      g log --all --format='%B' >>"$content"
+      scan "commit messages, tag objects, and trees or blobs refs point at" stdin <"$content"
     fi
     ;;
   rev)
-    rev=$2
-    git --no-replace-objects rev-parse --verify --quiet "$rev^{commit}" >/dev/null || {
-      echo "secret_scan: invalid commit: $rev" >&2
+    obj=$(g rev-parse --verify --quiet --end-of-options "$2^{object}") || {
+      echo "secret_scan: not a git object: $2" >&2
       exit 2
     }
-    scan "candidate history" git --log-opts="$rev" .
-    commits=$(git --no-replace-objects log "$rev" --format='%B')
-    printf '%s\n' "$commits" | scan "candidate commit messages" stdin
+    peel "$obj"
+    if [ -s "$commits" ]; then
+      commit=$(cat "$commits")
+      scan "candidate history" git --log-opts="$commit" .
+      g log "$commit" --format='%B' >>"$content"
+    fi
+    if [ -s "$content" ]; then
+      scan "candidate messages, tag objects, and tree or blob content" stdin <"$content"
+    fi
     ;;
   range)
     spec=$2
-    count=$(git --no-replace-objects rev-list --count "$spec")
+    count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
       scan "branch commit range" git --log-opts="$spec" .
-      commits=$(git --no-replace-objects log "$spec" --format='%B')
-      printf '%s\n' "$commits" | scan "branch commit messages" stdin
+      g log "$spec" --format='%B' >"$content"
+      scan "branch commit messages" stdin <"$content"
     fi
     ;;
   files)
