@@ -7,10 +7,15 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
-RULES = Path(__file__).resolve().parents[1] / "tools" / "privacy_rules.json"
+ROOT = Path(__file__).resolve().parents[1]
+RULES = ROOT / "tools" / "privacy_rules.json"
+SCANNER = ROOT / "tools" / "privacy_scan.py"
 
 
 def rule(rule_id: str) -> re.Pattern[str]:
@@ -43,6 +48,34 @@ class LanHostname(unittest.TestCase):
         ):
             with self.subTest(text=text):
                 self.assertIsNone(self.pattern.search(text))
+
+    def test_a_hostname_closed_by_an_underscore_is_still_reported(self) -> None:
+        # Markdown italics put an underscore right after the name; only an underscore that goes
+        # on into a letter or digit makes an identifier such as local_addr.
+        for host, suffix in (("nas", "local"), ("box", "lan"), ("db", "internal")):
+            name = f"{host}.{suffix}"
+            for text in (f"_ssh {name}_ first", f"see {name}_.", f"{name}_", f"{name}_, then",
+                         f"{name}__"):
+                with self.subTest(text=text):
+                    self.assertTrue(self.pattern.search(text))
+
+    def test_the_command_line_scanner_reports_an_italic_hostname_and_not_an_identifier(self) -> None:
+        dot = "."
+        cases = (
+            (f"Connect with _ssh nas{dot}local_ first.\n", 1),
+            (f"let addr = listener{dot}local_addr().unwrap();\n", 0),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp) / "note.md"
+                target.write_text(text)
+                done = subprocess.run(
+                    [sys.executable, "-I", "-B", str(SCANNER), "--no-private", str(target)],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(done.returncode, expected, done.stdout + done.stderr)
+                if expected:
+                    self.assertIn("lan_hostname", done.stdout)
 
 
 if __name__ == "__main__":

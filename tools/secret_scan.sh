@@ -15,6 +15,8 @@
 #   sh tools/secret_scan.sh range BASE..HEAD commits in a range (merges against their first
 #                                            parent), plus their messages
 #   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
+#                                            (a file Betterleaks' dir mode skips by its head is
+#                                            read again from a copy with an empty first line)
 #   sh tools/secret_scan.sh ignore-check --index | OBJECT
 #                                            exit 1 unless the working tree's .betterleaksignore
 #                                            and .gitleaksignore are byte for byte the versions in
@@ -23,7 +25,8 @@
 #
 # Betterleaks itself scans diffs only and shows a merge commit no diff, so content that only a
 # merge adds would pass unseen; every diff walk here asks git for merges against their first
-# parent. Tag objects, messages and directly referenced trees and blobs go through stdin.
+# parent. Tag objects, whole commit objects (every header and the message) and directly
+# referenced trees and blobs go through stdin.
 #
 # Without SECRET_SCAN_IGNORE_PATH, Betterleaks applies the ignore files it finds on disk at the root
 # of its source (and, for stdin, in the current directory), whatever the scanned commit holds. A
@@ -46,8 +49,11 @@
 # betterleaks failure. Secret values are never printed (--redact); a finding is one line,
 # "rule path:line commit", with sensitive paths redacted by the privacy scanner; when that cannot
 # redact, a placeholder is printed in place of the finding.
-# Validation is off (it would send candidates to the network) and the repository's own
-# Betterleaks config is not loaded (--unsafe-auto-load-config is not used).
+# Validation is off (it would send candidates to the network). The rules are Betterleaks' default
+# rules, named with --config: the repository's own Betterleaks config is not loaded
+# (--unsafe-auto-load-config is not used), and a config named in the environment
+# (BETTERLEAKS_CONFIG, GITLEAKS_CONFIG and their _TOML forms) is cleared before the scan. The
+# default config's path prefilter, which skips whole files by name, is switched off (see below).
 set -eu
 
 usage() {
@@ -83,6 +89,22 @@ g() {
 work=$(mktemp -d "${TMPDIR:-/tmp}/secret-scan.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT TERM HUP
+
+# Betterleaks takes its config from --config, else from these variables (the names its 1.10.1
+# --help lists, and the only ones its binary holds). One left in the shell for another project
+# would replace the rules and allowlists here, so they are cleared and the default rules are
+# named explicitly.
+#
+# The default config of 1.10.1 (`betterleaks config show`) opens with a prefilter that drops a
+# file by its path before any rule runs: image and font suffixes (.svg among them), office
+# documents and executables, lock files (yarn.lock, package-lock.json, go.sum, poetry.lock and
+# more), node_modules, vendor and virtualenv folders. Its git and dir modes alike never read
+# such a file, so a token in it, or in any file renamed to look like one, would pass. A top-level
+# prefilter here replaces the default one (`config show` prints ours; checked with 1.10.1), and
+# 'false' drops nothing. The default rules and their per-finding filters stay as they are.
+unset BETTERLEAKS_CONFIG GITLEAKS_CONFIG BETTERLEAKS_CONFIG_TOML GITLEAKS_CONFIG_TOML
+config="$work/config.toml"
+printf "prefilter = 'false'\n\n[extend]\nuseDefault = true\n" >"$config"
 
 ignore_path=${SECRET_SCAN_IGNORE_PATH:-}
 src=.
@@ -148,7 +170,7 @@ bl() {
   if [ "${SECRET_SCAN_IGNORE_ALLOW:-0}" = "1" ]; then
     set -- "$@" --ignore-gitleaks-allow
   fi
-  set -- "$@" --redact --no-banner --no-color --log-level warn \
+  set -- "$@" --config "$config" --redact --no-banner --no-color --log-level warn \
     --report-format template --report-template "$template" --report-path -
   if [ -n "$iso" ] && [ "$sub" != dir ]; then
     (
@@ -230,6 +252,93 @@ peel() {
   done
 }
 
+# scan_binary staged | unstaged | log REV-ARGS... | file PATH: read again, through stdin, what
+# Betterleaks' own scan skips. Its git mode prints "Binary files differ" for content git treats as
+# binary (a NUL byte in the first 8000 bytes, or -diff or binary in a committed .gitattributes,
+# which its own git run reads whatever GIT_ATTR_SOURCE, --text in --log-opts or the clone's
+# info/attributes say), and its dir mode skips a file with a NUL byte too (checked with 1.10.1).
+# So the selection is binary by git's rule. A dir scan is no way round: it also skips a file by a
+# head that looks like an executable, a document or an archive. Stdin sniffs only the head of the
+# stream (checked up to 10 MiB in), so the stream starts with an empty line. Findings here carry
+# no path; a false positive is allowed inline or by its ":rule:line" fingerprint, the line counted
+# in this stream. The log form takes every blob the walked commits add or change (merges against
+# their first parent), once each.
+scan_binary() {
+  python3 -I -B -c '
+import os, subprocess, sys
+
+stream, mode, *rest = sys.argv[1:]
+git = ["git", "--no-replace-objects"]
+
+def wanted(data):
+    return b"\0" in data[:8000]
+
+def run(args, data=None):
+    return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
+
+def batch(oids):
+    out = run(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
+    pos = 0
+    for _ in oids:
+        header, _, out_rest = out[pos:].partition(b"\n")
+        size = int(header.split()[2])
+        start = pos + len(header) + 1
+        yield out[start : start + size]
+        pos = start + size + 1
+
+found = []
+if mode in ("staged", "unstaged"):
+    cmd = ["diff", "--numstat", "-z", "--no-renames", "--no-textconv", "--no-ext-diff",
+           "--ignore-submodules=all", "--diff-filter=ACMT"]
+    if mode == "staged":
+        cmd.append("--cached")
+    for record in run(cmd).split(b"\0"):
+        if not record:
+            continue
+        added, deleted, path = record.split(b"\t", 2)
+        marked = added == b"-" and deleted == b"-"
+        if mode == "staged":
+            data = run(["cat-file", "blob", b":0:" + path])
+        else:
+            local = os.fsdecode(path)
+            if os.path.islink(local):
+                # What git would store for a symlink: its target text.
+                data = os.fsencode(os.readlink(local))
+            elif os.path.exists(local):
+                with open(local, "rb") as handle:
+                    data = handle.read()
+            else:
+                continue
+        if marked or wanted(data):
+            found.append(data)
+elif mode == "log":
+    raw = run(["log", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-merges=first-parent",
+               "--format=", *rest])
+    seen, fields = {}, iter(raw.split(b"\0"))
+    for token in fields:
+        if not token.startswith(b":"):
+            continue
+        next(fields)  # the path that follows each raw record
+        _, new_mode, _, oid, status = token[1:].split(b" ")
+        if new_mode.startswith(b"100") and status[:1] in b"AMT":
+            seen[oid] = None
+    oids = list(seen)
+    found = [data for data in batch(oids) if wanted(data)]
+else:
+    with open(rest[0], "rb") as handle:
+        data = handle.read()
+    if wanted(data):
+        found.append(data)
+with open(stream, "wb") as out:
+    out.write(b"\n")
+    for data in found:
+        out.write(data + b"\n")
+' "$work/binary-stream" "$@"
+  if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
+    scan "content Betterleaks skips as binary" stdin <"$work/binary-stream"
+  fi
+}
+
 case "$mode" in
   ignore-check)
     top=$(g rev-parse --show-toplevel)
@@ -278,15 +387,18 @@ case "$mode" in
     ;;
   staged)
     scan "staged changes" git --pre-commit --staged "$src"
+    scan_binary staged
     ;;
   unstaged)
     scan "unstaged changes" git --pre-commit .
+    scan_binary unstaged
     ;;
   message)
     scan "commit message" stdin <"$2"
     ;;
   history)
     scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" "$src"
+    scan_binary log --full-history --all
     g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
     if [ -s "$work/refs" ]; then
       # Refs to commits are covered by the diff walk above; every other ref is peeled.
@@ -294,7 +406,8 @@ case "$mode" in
       while read -r oid; do
         peel "$oid" </dev/null
       done <"$work/others"
-      g log --all --format='%B' >>"$content"
+      g rev-list --all >"$work/revs"
+      g cat-file --batch <"$work/revs" >>"$content"
       scan "commit messages, tag objects, and trees or blobs refs point at" stdin <"$content"
     fi
     ;;
@@ -307,7 +420,9 @@ case "$mode" in
     if [ -s "$commits" ]; then
       commit=$(cat "$commits")
       scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" "$src"
-      g log "$commit" --format='%B' >>"$content"
+      scan_binary log "$commit"
+      g rev-list "$commit" >"$work/revs"
+      g cat-file --batch <"$work/revs" >>"$content"
     fi
     if [ -s "$content" ]; then
       scan "candidate messages, tag objects, and tree or blob content" stdin <"$content"
@@ -318,19 +433,39 @@ case "$mode" in
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
       scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" "$src"
-      g log "$spec" --format='%B' >"$content"
+      scan_binary log "$spec"
+      g rev-list "$spec" >"$work/revs"
+      g cat-file --batch <"$work/revs" >"$content"
       scan "branch commit messages" stdin <"$content"
     fi
     ;;
   files)
     shift
     rc_all=0
+    sniffed=0
     for target in "$@"; do
       if [ -L "$target" ]; then
         link_text=$(readlink "$target")
         printf '%s\n' "$link_text" | scan "symlink target" stdin || rc_all=1
       elif [ -f "$target" ]; then
-        scan "working-tree file" dir "$target" || rc_all=1
+        # The dir mode also skips a file by a head that sniffs as an executable, an archive or a
+        # document (%PDF-, an ELF header, PK, MZ and others; checked with 1.10.1), text or not.
+        # So when it finds nothing, a copy with an empty first line (its head then sniffs as
+        # nothing) is read under the file's own name; its line numbers count that line. Content
+        # git calls binary then goes through stdin as well. The reads run in turn and the first
+        # to report ends the file, so one finding is not printed twice.
+        sniffed=$((sniffed + 1))
+        copy="$work/sniff$sniffed"
+        mkdir "$copy"
+        base=${target##*/}
+        { printf '\n'; cat "$target"; } >"$copy/$base"
+        if scan "working-tree file" dir "$target" &&
+          (cd "$copy" && scan "working-tree file past its head (line numbers count an added empty first line)" dir "./$base") &&
+          scan_binary file "$target"; then
+          :
+        else
+          rc_all=1
+        fi
       else
         echo "secret_scan: unreadable or missing file: $target" >&2
         exit 2

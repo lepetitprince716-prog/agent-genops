@@ -304,6 +304,32 @@ class CloneModeTests(TemplateCase):
                 self.assert_refused(pushed, "pre-push:")
                 self.assertEqual(repo.refs_of(repo.other), [])
 
+    def test_an_unknown_mode_value_is_refused_not_read_as_contributor(self) -> None:
+        for value in ("maintainers", "maintainer,", "maintaner", "true", "1", ""):
+            with self.subTest(mode=value):
+                repo = self.repo()
+                repo.git("config", "genops.mode", value)
+                asked = repo.privacy("--clone-mode")
+                self.assertEqual(asked.returncode, 2, combined(asked))
+                self.assertEqual(asked.stdout.strip(), "", combined(asked))
+                self.assertIn("maintainer", asked.stderr)
+                self.assertIn("contributor", asked.stderr)
+                scanned = repo.privacy("--staged")
+                self.assertEqual(scanned.returncode, 2, combined(scanned))
+                pushed = repo.push("other", "main")
+                self.assert_refused(pushed, "pre-push:")
+                self.assertEqual(repo.refs_of(repo.other), [])
+
+    def test_contributor_may_be_set_explicitly_in_any_case(self) -> None:
+        repo = self.repo()
+        repo.git("config", "genops.mode", "Contributor")
+        asked = repo.privacy("--clone-mode")
+        self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "contributor"),
+                         combined(asked))
+        pushed = repo.push("other", "main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        self.assertEqual(repo.refs_of(repo.other), ["refs/heads/main"])
+
     def test_clone_mode_is_a_mode_of_its_own(self) -> None:
         repo = self.repo()
         result = repo.privacy("--clone-mode", "--staged")
@@ -375,6 +401,35 @@ class PerRefPathTests(TemplateCase):
         before = repo.remote_tip()
         pushed = repo.push("origin", "main")
         self.assert_refused(pushed, "secret_scan:")
+        self.assertEqual(repo.remote_tip(), before)
+
+    def test_secret_scan_rev_reads_every_message_below_the_tip(self) -> None:
+        repo = self.repo()
+        token = registry_token()
+        repo.add_file("ok.txt", "clean\n")
+        repo.unchecked_commit(f"note the token {token}")
+        repo.add_file("later.txt", "clean too\n")
+        repo.unchecked_commit("a clean commit on top")
+        scanned = repo.run("sh", "tools/secret_scan.sh", "rev", "HEAD")
+        self.assert_refused(scanned, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(scanned))
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "secret_scan:")
+        self.assertNotIn(token, combined(pushed))
+        self.assertEqual(repo.remote_tip(), before)
+
+    def test_pre_push_stops_when_the_other_refs_cannot_be_checked(self) -> None:
+        # A local ref to an object the clone does not have makes the other-refs scan fail
+        # (exit 2); the candidate itself is clean, and the push still stops.
+        repo = self.repo()
+        repo.add_file("more.txt", "clean\n")
+        repo.unchecked_commit("clean work")
+        gitdir = Path(repo.git("rev-parse", "--absolute-git-dir"))
+        (gitdir / "refs" / "heads" / "broken").write_text("1" * 40 + "\n")
+        before = repo.remote_tip()
+        pushed = repo.push("origin", "main")
+        self.assert_refused(pushed, "error checking non-candidate local refs (exit 2)")
         self.assertEqual(repo.remote_tip(), before)
 
 
@@ -507,6 +562,59 @@ class MaintainerRulesTests(TemplateCase):
                 pushed = repo.push("origin", "main")
                 self.assert_refused(pushed, "maintainer")
                 self.assertEqual(repo.remote_tip(), remote_before)
+
+
+class MessageCommentLineTests(TemplateCase):
+    """A line starting with # stays in the message when git does not strip it, so it is scanned."""
+
+    def message_file(self, repo: Repo, text: str) -> Path:
+        path = repo.base / "message.txt"
+        path.write_text(text)
+        return path
+
+    def test_commit_f_keeps_hash_lines_and_the_hook_refuses_a_marker_in_one(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        message = self.message_file(repo, f"subject\n\n# a note about {MARKER}\n")
+        committed = repo.run("git", "commit", "-q", "-F", str(message))
+        self.assert_refused(committed, "synthetic_private_marker")
+        self.assertNotIn(MARKER, combined(committed))
+        self.assertEqual(repo.head(), before)
+        # What git stores for -F without --cleanup: the # line is part of the message, which is
+        # why the hook has to read it.
+        repo.git("-c", NO_HOOKS, "commit", "-q", "-F", str(message))
+        self.assertIn("# a note about", repo.git("log", "-1", "--format=%B"))
+
+    def test_commit_f_refuses_a_token_in_a_hash_line(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        before = repo.head()
+        token = registry_token()
+        message = self.message_file(repo, f"subject\n\n# value {token}\n")
+        committed = repo.run("git", "commit", "-q", "-F", str(message))
+        self.assert_refused(committed, "secret_scan:", "npm-access-token")
+        self.assertNotIn(token, combined(committed))
+        self.assertEqual(repo.head(), before)
+
+    def test_an_editor_commit_with_git_comments_is_not_refused(self) -> None:
+        repo = self.repo()
+        repo.add_file("note.txt", "clean\n")
+        seen = repo.base / "editor-saw.txt"
+        editor = repo.base / "editor.sh"
+        editor.write_text(
+            "#!/bin/sh\n"
+            f"cp \"$1\" {seen}\n"
+            "{ printf 'a clean subject\\n'; cat \"$1\"; } > \"$1.new\" && mv \"$1.new\" \"$1\"\n"
+        )
+        editor.chmod(0o755)
+        env = dict(repo.env, GIT_EDITOR=str(editor))
+        committed = repo.run("git", "commit", "-q", env=env)
+        self.assertEqual(committed.returncode, 0, combined(committed))
+        shown = seen.read_text()
+        self.assertIn("# Please enter the commit message", shown)
+        self.assertIn("#\tnew file:   note.txt", shown)
+        self.assertEqual(repo.git("log", "-1", "--format=%s"), "a clean subject")
 
 
 class SubmoduleTests(TemplateCase):

@@ -39,7 +39,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 | `--other-refs-except REV` | local history reachable from the other refs, leaving out the given revs (repeatable); the pre-push hook uses it for its warning |
 | `--ref-name REF` | check a target ref name against the rules (repeatable) |
 | `--identity` | the email in `GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` must match `allowed_emails` |
-| `--message FILE` | a commit message file; lines starting with `#` are ignored |
+| `--message FILE` | a commit message file; every line is scanned, `#` lines too |
 | `--rules FILE` | use another public rules file |
 | `--no-private` | do not load the private rules |
 | `--require-private` | fail unless non-empty private rules are loaded |
@@ -48,7 +48,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 | `--clone-mode` | print `maintainer` or `contributor` and exit; the hooks act on this answer |
 | `--redact-stream` | read lines from stdin and print them with sensitive paths redacted |
 
-The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set. Any other value, or none, is `contributor`.
+The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set, and `contributor` when the key is `contributor` or not set. Any other value is refused (exit 2) by the scanner and so by every hook.
 
 Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations look like `docs/a.md:12`, `blob 1a2b3c4d5e6f docs/a.md:12` (history), `commit 1a2b3c4d5e6f author:1` or `message:3` (annotated tags say `tag`), and `identity author:1`. Images report line 1. The guard fails closed: a file it cannot read or decode is a finding.
 
@@ -66,8 +66,9 @@ Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations loo
 | `tunnel_host` | hosts under ts.net, trycloudflare.com, cfargotunnel.com and ngrok |
 | `lan_hostname` | `<name>.local`, `.lan`, `.internal`, `.home.arpa` |
 | `generation_metadata` | PNG text chunks `prompt`, `workflow`, `parameters`, `Comment`, `Description`, or a ComfyUI graph; raw-byte check for JPEG, WEBP, GIF |
-| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes` |
-| `undecodable` | a file that is not valid UTF-8, or a file, PNG chunk or git object that cannot be read or parsed |
+| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes`; the rules still read its raw bytes, as they do for a file that is not valid UTF-8 |
+| `image_header` | a file with an image suffix that does not start with that format's header (PNG signature, JPEG `FF D8 FF`, `GIF87a`/`GIF89a`, `RIFF`…`WEBP`, ICO `00 00 01 00`) |
+| `undecodable` | a file that is not valid UTF-8, a commit message not valid in its encoding (the commit's `encoding` header, `i18n.commitEncoding` for the commit-msg hook, else UTF-8), or a file, PNG chunk or git object that cannot be read or parsed |
 
 Author, committer and tagger emails (`--identity`, `--history`) face a stricter test than `email`: only `allowed_emails` patterns pass.
 
@@ -92,23 +93,25 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 - Pattern based: base64, URL-encoded or split-up values are not decoded.
 - File names and ref names are scanned against the same rules, and a name that matches is printed as a redacted alias. Pixel data is not inspected, so keep generated images out of the repository.
+- A PNG's text chunks are decoded and read, and so is every other chunk except the pixel chunks (`IDAT`, `fdAT`): bytes in the pixel chunks are not matched against the rules.
+- A hostname with an underscore right in front of it (`_name.local_`, as Markdown emphasis writes it) is not caught by the `lan_hostname` rule.
 - JPEG, WEBP and GIF are scanned as raw bytes; a large photo can rarely trip a rule by chance.
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
 - With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
 
 ### Secret scan wrapper
 
-`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off and without loading the repository's own Betterleaks config. A finding is one line, `rule path:line commit`. It takes one mode:
+`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off, and always with Betterleaks' default rules: it loads neither the repository's own Betterleaks config nor one named in the environment (`BETTERLEAKS_CONFIG`, `GITLEAKS_CONFIG` and their `_TOML` forms are cleared). The default config's path prefilter, which skips whole files by name (image and font suffixes, office documents, lock files, `node_modules` and vendor folders), is replaced with one that skips nothing, so those files are read like any other. A finding is one line, `rule path:line commit`. It takes one mode:
 
 | Mode | Scans |
 | --- | --- |
-| `staged` | the index |
-| `unstaged` | working-tree changes relative to the index |
+| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`), which Betterleaks skips, is read again through stdin, so its findings carry no path and the fingerprint is `:rule:line`; `rev`, `range`, `history` and `files` do the same for the blobs and files they cover |
+| `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
 | `message FILE` | one commit message file |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
 | `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
 | `range BASE..HEAD` | the commits in a range, merges against their first parent, and their messages |
-| `files FILE...` | the named working-tree files; symlinks are not followed |
+| `files FILE...` | the named working-tree files; symlinks are not followed. A file whose head Betterleaks' dir mode sniffs and skips (PDF, ELF, ZIP, gzip, MZ and more) is read again from a copy with an added empty first line, so a finding there counts one line more |
 | `ignore-check --index` or `ignore-check OBJECT` | exits 1 unless `.betterleaksignore` and `.gitleaksignore` in the working tree are byte for byte the versions in the index or in the tree of `OBJECT`; a missing file counts as a version |
 
 Exit status: `0` clean, `2` usage error, `3` Betterleaks is missing, anything else is a finding or a Betterleaks failure. The hooks run `ignore-check` before each scan, so a working-tree ignore file that the commit does not carry cannot hide a finding. Environment controls (`SECRET_SCAN_IGNORE_PATH`, `SECRET_SCAN_IGNORE_ALLOW=1`, and the redaction settings) are described in the header of the script.
@@ -205,7 +208,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `--other-refs-except REV` | 其余 ref 可达的本地历史，排除给定的 rev（可重复）；pre-push 用它做告警 |
 | `--ref-name REF` | 按规则检查目标 ref 名（可重复） |
 | `--identity` | `GIT_AUTHOR_IDENT` 和 `GIT_COMMITTER_IDENT` 里的邮箱必须匹配 `allowed_emails` |
-| `--message FILE` | 一个提交说明文件，`#` 开头的行忽略 |
+| `--message FILE` | 一个提交说明文件，每一行都扫，`#` 开头的也算 |
 | `--rules FILE` | 换用另一份公开规则 |
 | `--no-private` | 不加载私有规则 |
 | `--require-private` | 没有加载到非空的私有规则就失败 |
@@ -214,7 +217,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `--clone-mode` | 打印 `maintainer` 或 `contributor` 然后退出；hook 按这个答案行事 |
 | `--redact-stream` | 从标准输入读行，把敏感路径脱敏后打印 |
 
-克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；其他值或没设，都是 `contributor`。
+克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；值是 `contributor` 或没设，是 `contributor`；其他值扫描器一律拒绝（exit 2），所以每个 hook 都拒绝。
 
 退出码：`0` 干净，`1` 有发现，`2` 用法错误或内部错误。位置写法见上面的英文部分，图片一律报第 1 行。宁可误报也不漏报：读不了或解不开的文件，本身就算一条发现。
 
@@ -232,8 +235,9 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `tunnel_host` | ts.net、trycloudflare.com、cfargotunnel.com、ngrok 下的主机名 |
 | `lan_hostname` | `<name>.local`、`.lan`、`.internal`、`.home.arpa` |
 | `generation_metadata` | PNG 文本块 `prompt`、`workflow`、`parameters`、`Comment`、`Description`，或 ComfyUI 节点图；JPEG、WEBP、GIF 查原始字节 |
-| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件 |
-| `undecodable` | 不是合法 UTF-8 的文件，或读不了、解析不了的文件、PNG 数据块、git 对象 |
+| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件；规则仍按原始字节读它，不是合法 UTF-8 的文件也一样 |
+| `image_header` | 带图片后缀、开头却不是该格式文件头的文件（PNG 签名、JPEG `FF D8 FF`、`GIF87a`/`GIF89a`、`RIFF`…`WEBP`、ICO `00 00 01 00`） |
+| `undecodable` | 不是合法 UTF-8 的文件，按自己的编码（提交的 `encoding` 头；commit-msg 钩子看 `i18n.commitEncoding`；都没有就是 UTF-8）解不开的提交说明，或读不了、解析不了的文件、PNG 数据块、git 对象 |
 
 作者、提交者和标签者的邮箱（`--identity`、`--history`）要过更严的一关：只有匹配 `allowed_emails` 的才放行。
 
@@ -247,23 +251,25 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 - 只做模式匹配：base64、URL 编码、被拆开的值都不会解码。
 - 文件名和 ref 名也按同一套规则检查，命中的名字以脱敏别名输出。不检查像素数据，所以生成的图片不要放进仓库。
+- PNG 的文本块（`tEXt`、`zTXt`、`iTXt`）会解码后读，除像素块（`IDAT`、`fdAT`）以外的其他块也按原始字节读；像素块里的字节不参与规则匹配。
+- 下划线紧贴在主机名开头的写法（如 Markdown 强调写成的 `_name.local_`）不会被 `lan_hostname` 规则抓到。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
 - 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
 
 #### 密钥扫描包装脚本
 
-`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，也不加载仓库自己的 Betterleaks 配置。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
+`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，始终用 Betterleaks 的默认规则：不加载仓库自己的 Betterleaks 配置，也不用环境变量指定的配置（`BETTERLEAKS_CONFIG`、`GITLEAKS_CONFIG` 及其 `_TOML` 形式会被清掉）。默认配置里按文件名整份跳过的路径预过滤（图片和字体后缀、办公文档、lock 文件、`node_modules` 和 vendor 目录等）换成了什么都不跳过的版本，这些文件和别的文件一样读。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
 
 | 模式 | 扫描对象 |
 | --- | --- |
-| `staged` | 暂存区 |
-| `unstaged` | 工作区里相对暂存区的改动 |
+| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）Betterleaks 会跳过，这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号`；`rev`、`range`、`history`、`files` 对各自覆盖的 blob 和文件同样处理 |
+| `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
 | `message FILE` | 一个提交说明文件 |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
 | `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |
 | `range BASE..HEAD` | 一个区间里的提交（合并提交对照第一个父提交）和它们的提交说明 |
-| `files FILE...` | 指定的工作区文件，不跟随符号链接 |
+| `files FILE...` | 指定的工作区文件，不跟随符号链接。文件头被 Betterleaks 的 dir 模式认成 PDF、ELF、ZIP、gzip、MZ 等而被跳过的文件，另用加了一个空行的副本再读一遍，命中的行号因此多 1 |
 | `ignore-check --index` 或 `ignore-check OBJECT` | 工作区里的 `.betterleaksignore` 和 `.gitleaksignore` 必须和暂存区里、或 `OBJECT` 的 tree 里的版本逐字节相同，否则退出码为 1；文件不存在也算一个版本 |
 
 退出码：`0` 干净，`2` 用法错误，`3` 找不到 Betterleaks，其余是命中或 Betterleaks 自己失败。hook 在每次扫描之前先跑 `ignore-check`，所以提交里没有的工作区 ignore 文件，不能用来遮住命中。环境变量（`SECRET_SCAN_IGNORE_PATH`、`SECRET_SCAN_IGNORE_ALLOW=1` 和脱敏相关的几个）写在脚本开头的注释里。

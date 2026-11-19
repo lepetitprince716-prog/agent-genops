@@ -68,6 +68,17 @@ MAX_INFLATED = 64 * 1024 * 1024
 
 LFS_HEADER = b"version https://git-lfs.github.com/spec/v1"
 
+# The head each allowed image suffix must start with: alternatives of (offset, bytes) pairs, from
+# the format specifications (PNG, JPEG SOI marker, GIF87a/GIF89a, RIFF....WEBP, ICO).
+IMAGE_SIGNATURES: dict[str, tuple[tuple[tuple[int, bytes], ...], ...]] = {
+    ".png": (((0, PNG_SIGNATURE),),),
+    ".jpg": (((0, b"\xff\xd8\xff"),),),
+    ".jpeg": (((0, b"\xff\xd8\xff"),),),
+    ".gif": (((0, b"GIF87a"),), ((0, b"GIF89a"),)),
+    ".webp": (((0, b"RIFF"), (8, b"WEBP")),),
+    ".ico": (((0, b"\x00\x00\x01\x00"),),),
+}
+
 WHY_GENERATION = (
     "image carries generation metadata (prompt, workflow or parameters); "
     "strip it or keep the image out of the repository"
@@ -76,8 +87,16 @@ WHY_BINARY = (
     "binary file cannot be scanned; only image suffixes in allowed_binary_suffixes may be binary"
 )
 WHY_NOT_UTF8 = "file is not valid UTF-8, so it cannot be scanned"
+WHY_BAD_ENCODING = (
+    "commit message is not valid in its encoding (the commit's encoding header, "
+    "i18n.commitEncoding for a message file, else UTF-8), so it cannot be scanned"
+)
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
+WHY_IMAGE_HEADER = (
+    "file does not start with the header of the image format its suffix names (or the suffix "
+    "has no known header), so it is not read as that image"
+)
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
 WHY_SUBMODULE = (
     "git submodule (gitlink 160000) points to external commits whose content was not scanned"
@@ -255,7 +274,9 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
     None means the key is not set (``git config --get`` exits 1), which is the contributor
     mode. Any other failure (git cannot run, an unreadable configuration) raises ScanError:
     a read that failed is not an answer, and treating it as "not set" would let a maintainer
-    clone drop to the contributor mode.
+    clone drop to the contributor mode. The value is ``maintainer`` or ``contributor`` in any
+    letter case; anything else (a typo such as ``maintaner``, ``true``, an empty value) raises
+    ScanError too, since reading it as the default would switch the maintainer checks off.
     """
     target = cwd or Path.cwd()
     try:
@@ -272,14 +293,25 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
     if done.returncode != 0:
         detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
         raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: git config failed: {detail}")
-    return done.stdout.decode("utf-8", "replace").strip().lower() or None
+    value = done.stdout.decode("utf-8", "replace").strip().lower()
+    if value not in (MAINTAINER_MODE_VALUE, CONTRIBUTOR_MODE_VALUE):
+        raise ScanError(
+            f"{MAINTAINER_MODE_CONFIG_KEY} is set to a value this scanner does not know; "
+            f"set it to '{MAINTAINER_MODE_VALUE}' or '{CONTRIBUTOR_MODE_VALUE}' (any letter case), "
+            f"or unset it for the contributor mode"
+        )
+    return value
 
 
 def is_maintainer_required(cwd: Path | None = None) -> bool:
-    """True when strict maintainer private-rule enforcement is active."""
+    """True when strict maintainer private-rule enforcement is active.
+
+    The configuration is read even when the environment switch is on, so a value the scanner
+    does not know is refused in every case."""
+    mode = read_clone_mode(cwd)
     if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
         return True
-    return read_clone_mode(cwd) == MAINTAINER_MODE_VALUE
+    return mode == MAINTAINER_MODE_VALUE
 
 
 def load_rules_detailed(
@@ -543,17 +575,32 @@ def read_png(data: bytes) -> tuple[list[str], bool]:
     return values + views, generated or any(map(has_class_type, views))
 
 
+def has_image_header(suffix: str, data: bytes) -> bool:
+    """True when ``data`` starts with the header of the format ``suffix`` names."""
+    return any(
+        all(data[offset : offset + len(magic)] == magic for offset, magic in alternative)
+        for alternative in IMAGE_SIGNATURES.get(suffix, ())
+    )
+
+
 def scan_image(data: bytes, rules: RuleSet, suffix: str) -> list[Hit]:
-    """Scan an image with an allowed suffix; PNG text is decoded, other formats are read raw."""
+    """Scan an image with an allowed suffix.
+
+    The head must match the suffix's format. PNG text chunks are decoded and its other chunks
+    read raw, pixel chunks excepted: compressed pixels match a short rule by chance (seven of
+    the twelve PNGs in this repository did). A PNG that does not parse is read raw whole, as
+    other formats are."""
+    hits = [] if has_image_header(suffix, data) else [Hit(1, "image_header", WHY_IMAGE_HEADER)]
+    values = raw_views(data)
     if data.startswith(PNG_SIGNATURE):
         try:
             values, generated = read_png(data)
         except (ValueError, struct.error, zlib.error):
-            return [Hit(1, "undecodable", WHY_BAD_IMAGE)]
+            generated = False
+            hits.append(Hit(1, "undecodable", WHY_BAD_IMAGE))
     else:
-        values = raw_views(data)
         generated = any(map(looks_generated, values))
-    hits = scan_values(values, rules, suffix)
+    hits += scan_values(values, rules, suffix)
     if generated:
         hits.append(Hit(1, "generation_metadata", WHY_GENERATION))
     return hits
@@ -570,8 +617,12 @@ def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        return binary + [Hit(1, "undecodable", WHY_NOT_UTF8)]
-    return binary or scan_text(text, rules, suffix)
+        binary.append(Hit(1, "undecodable", WHY_NOT_UTF8))
+    else:
+        if not binary:
+            return scan_text(text, rules, suffix)
+    # Refused already; the rules still read the raw bytes, so the report names what is inside.
+    return binary + scan_values(raw_views(data), rules, suffix)
 
 
 # --- git ---------------------------------------------------------------------------
@@ -782,22 +833,75 @@ def scan_identity(rules: RuleSet, cwd: Path | None = None) -> list[Finding]:
     return findings
 
 
+def message_views(data: bytes, encoding: str | None) -> tuple[list[str], bool]:
+    """The texts to scan for a message stored in ``encoding`` (UTF-8 when None).
+
+    git keeps a message in the bytes of i18n.commitEncoding and shows it converted, so a rule
+    with non-ASCII text matches only the decoded form. The UTF-8 reading (bad bytes replaced) is
+    scanned as well, so a declared encoding can only add findings. The flag is False when the
+    bytes are not valid in the encoding or the encoding is unknown: that text cannot be
+    scanned, and the caller reports it.
+    """
+    views = [data.decode("utf-8", "replace")]
+    try:
+        declared = data.decode(encoding or "utf-8")
+    except (LookupError, UnicodeDecodeError):
+        return views, False
+    if declared != views[0]:
+        views.insert(0, declared)
+    return views, True
+
+
+def object_encoding(data: bytes) -> str | None:
+    """The value of a commit object's top-level ``encoding`` header, if any."""
+    for line in data.partition(b"\n\n")[0].split(b"\n"):
+        if line.startswith(b"encoding "):
+            return line[len(b"encoding ") :].decode("latin-1").strip()
+    return None
+
+
 def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = "") -> list[Finding]:
-    """Scan a commit or tag object: identities by the email list, the message by the rules."""
-    head, _, body = data.decode("utf-8", "replace").partition("\n\n")
+    """Scan a commit or tag object: identities by the email list, everything else by the rules.
+
+    Every header is read, not only the known ones: git keeps extra headers, and a mergetag header
+    (written when a signed tag is merged) carries a whole tag object, one space in, whose tagger
+    is checked like any identity. The object is read in the encoding its header names."""
     where = f"{prefix}{kind} {oid[:SHORT_SHA]}"
+    views, readable = message_views(data, object_encoding(data))
+    findings = [] if readable else [Finding(f"{where} message", 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        findings += scan_object_text(kind, where, text, rules)
+    return unique(findings)
+
+
+def scan_object_text(kind: str, where: str, text: str, rules: RuleSet) -> list[Finding]:
+    """Scan one decoded reading of a commit or tag object."""
+    head, _, body = text.partition("\n\n")
     findings = []
+    other: list[str] = []
+    header = ""
     for line in head.split("\n"):
-        field, _, value = line.partition(" ")
-        if field in IDENT_FIELDS:
-            findings += check_ident(f"{where} {field}", value, rules)
-        elif kind == "tag" and field == "tag":
+        if line.startswith(" "):
+            # A continuation line of the header above it.
+            field, _, value = line[1:].partition(" ")
+            if header == "mergetag" and field in IDENT_FIELDS:
+                findings += check_ident(f"{where} mergetag {field}", value, rules)
+            else:
+                other.append(line[1:])
+            continue
+        header, _, value = line.partition(" ")
+        if header in IDENT_FIELDS:
+            findings += check_ident(f"{where} {header}", value, rules)
+        elif kind == "tag" and header == "tag":
             # The name stored inside the tag object outlives its ref; never print it.
             hits = scan_text(value, rules, "")
             findings += [
                 Finding(f"{where} name", 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})")
                 for hit in hits
             ]
+        else:
+            other.append(line)
+    findings += to_findings(f"{where} header", scan_text("\n".join(other), rules, ""))
     return findings + to_findings(f"{where} message", scan_text(body, rules, ""))
 
 
@@ -1090,14 +1194,43 @@ def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = Non
 # --- files and messages ------------------------------------------------------------
 
 
-def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
-    """Scan a commit message file; lines starting with ``#`` are comments."""
+def read_commit_encoding(cwd: Path | None = None) -> str | None:
+    """``i18n.commitEncoding`` as git would apply it to the next commit; None when not set."""
     try:
-        text = path.read_bytes().decode("utf-8", "replace")
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "--get", "i18n.commitEncoding"],
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ScanError(f"cannot read i18n.commitEncoding: cannot run git: {exc}") from exc
+    if done.returncode == 1:
+        return None
+    if done.returncode != 0:
+        detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
+        raise ScanError(f"cannot read i18n.commitEncoding: git config failed: {detail}")
+    return done.stdout.decode("latin-1").strip() or None
+
+
+def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
+    """Scan a commit message file, every line of it.
+
+    A line starting with ``#`` is not skipped: git keeps it in the stored message unless the
+    commit is cleaned up (``git commit -F FILE`` without ``--cleanup`` does not strip it), and
+    what an editor's template adds there (branch, file names) is as public as the commit.
+    There is no commit object yet, so the bytes are read in i18n.commitEncoding (UTF-8 when it
+    is not set), the encoding git will store them under."""
+    try:
+        data = path.read_bytes()
     except OSError as exc:
         raise ScanError(f"cannot read message file {path}: {exc.strerror}") from exc
-    kept = "\n".join("" if line.startswith("#") else line for line in text.split("\n"))
-    return to_findings(path.as_posix(), scan_text(kept, rules, ""))
+    where = path.as_posix()
+    views, readable = message_views(data, read_commit_encoding())
+    findings = [] if readable else [Finding(where, 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        findings += to_findings(where, scan_text(text, rules, ""))
+    return unique(findings)
 
 
 def walk_error(exc: OSError) -> None:
@@ -1314,7 +1447,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--message",
         type=Path,
         metavar="FILE",
-        help="scan a commit message file (lines starting with # are ignored)",
+        help="scan a commit message file, every line of it",
     )
     parser.add_argument(
         "--rules",
