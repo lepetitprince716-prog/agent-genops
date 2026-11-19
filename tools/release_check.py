@@ -679,43 +679,34 @@ def cmd_changed(args: argparse.Namespace) -> int:
 # --- release manifest --------------------------------------------------------------
 
 
-def resolve_trusted_commit(root: Path, remote: str, explicit: str | None) -> tuple[str, str]:
-    """Resolve trusted baseline ref/commit strictly via full ref or exact 40-hex SHA."""
-    if explicit:
-        if FULL_SHA_RE.fullmatch(explicit):
-            sha = git_optional(
-                ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{explicit}^{{commit}}"],
-                root,
-            )
-            if not sha:
-                raise CheckError(f"trusted commit not found: {explicit}")
-            return explicit, sha
-        if not explicit.startswith("refs/"):
-            raise CheckError(
-                f"--trusted-ref must be a full ref (refs/...) or 40-char SHA, got: {explicit}"
-            )
-        sha = git_optional(["show-ref", "--verify", "--hash", explicit], root)
-        if not sha:
-            raise CheckError(f"trusted ref not found: {explicit}")
-        commit_sha = git_optional(
-            ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{sha}^{{commit}}"], root
-        )
-        if not commit_sha:
-            raise CheckError(f"trusted ref does not point to a commit: {explicit}")
-        return explicit, commit_sha
+BASELINE_BRANCH = "refs/heads/main"
 
-    default_ref = f"refs/remotes/{remote}/main"
-    sha = git_optional(["show-ref", "--verify", "--hash", default_ref], root)
-    if not sha:
+
+def resolve_trusted_baseline(root: Path, remote: str, remote_refs: dict[str, str]) -> tuple[str, str]:
+    """The trusted baseline is the commit the remote's main holds now (from ``git ls-remote``).
+
+    The local tracking ref must hold the same commit: a stale or moved local copy is refused, so a
+    commit that never reached the remote cannot become the judge. Returns ``(label, sha)``."""
+    live = remote_refs.get(BASELINE_BRANCH)
+    if not live or live == ZERO_OID:
         raise CheckError(
-            f"trusted baseline {default_ref} not found; pass --trusted-ref <full-ref-or-sha>"
+            f"remote {remote!r} has no {BASELINE_BRANCH}, so there is no trusted baseline to judge with"
+        )
+    tracking = f"refs/remotes/{remote}/main"
+    local = git_optional(["show-ref", "--verify", "--hash", tracking], root)
+    if local != live:
+        raise CheckError(
+            f"local {tracking} ({(local or 'missing')[:12]}) is not the remote's {BASELINE_BRANCH} "
+            f"({live[:12]}); run 'git fetch {remote}' and retry"
         )
     commit_sha = git_optional(
-        ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{sha}^{{commit}}"], root
+        ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{live}^{{commit}}"], root
     )
-    if not commit_sha:
-        raise CheckError(f"trusted baseline {default_ref} is not a commit")
-    return default_ref, commit_sha
+    if commit_sha != live:
+        raise CheckError(
+            f"the remote's {BASELINE_BRANCH} ({live[:12]}) is not a commit in this clone; run 'git fetch {remote}' and retry"
+        )
+    return f"{remote} {BASELINE_BRANCH}", live
 
 
 def check_remote_policy(
@@ -914,7 +905,6 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
     expected_fetch = data["fetch_url"]
     expected_push = data["push_url"]
     expected_policy = data["policy_version"]
-    trusted_ref = data["trusted_ref"]
 
     mismatches: list[str] = []
     try:
@@ -939,7 +929,7 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
             f"local {target_ref} moved since manifest preparation: manifest={expected_new}, current={local_tip}"
         )
 
-    current_old, _ = query_remote_ref_sha(root, remote, target_ref)
+    current_old, live_refs = query_remote_ref_sha(root, remote, target_ref)
     if current_old != expected_old:
         mismatches.append(
             f"remote {target_ref} changed since preparation: manifest={expected_old}, live={current_old}"
@@ -951,7 +941,7 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
             mismatches.append("candidate is no longer a fast-forward of remote ref")
 
     try:
-        _label, trusted_sha = resolve_trusted_commit(root, remote, trusted_ref)
+        _label, trusted_sha = resolve_trusted_baseline(root, remote, live_refs)
         with tempfile.TemporaryDirectory(prefix="genops-verify-") as td:
             _, live_policy = extract_trusted_bundle(root, trusted_sha, Path(td))
         if live_policy != expected_policy:
@@ -1021,7 +1011,7 @@ def cmd_release(args: argparse.Namespace) -> int:
     _priv_loaded, private_rule_count, _priv_note = validate_private_rules_file(require_non_empty=True)
 
     fetch_url, push_url, _ = check_remote_policy(root, args.to, args.allowed_url)
-    remote_old_sha, _remote_refs = query_remote_ref_sha(root, args.to, args.ref)
+    remote_old_sha, remote_refs = query_remote_ref_sha(root, args.to, args.ref)
 
     if remote_old_sha == ZERO_OID:
         if not args.allow_new_ref:
@@ -1039,7 +1029,7 @@ def cmd_release(args: argparse.Namespace) -> int:
                 f"non-fast-forward refused: remote {args.ref} ({remote_old_sha[:12]}) is not an ancestor of {args.commit[:12]}"
             )
 
-    trusted_label, trusted_sha = resolve_trusted_commit(root, args.to, args.trusted_ref)
+    trusted_label, trusted_sha = resolve_trusted_baseline(root, args.to, remote_refs)
     manifest_dir = ensure_outside_repo(
         root, Path(args.manifest_dir) if args.manifest_dir else default_manifest_dir()
     )
@@ -1257,10 +1247,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-new-ref",
         action="store_true",
         help="explicitly allow staging a manifest for a ref that does not yet exist on the remote",
-    )
-    p_release.add_argument(
-        "--trusted-ref",
-        help="full ref (refs/...) or 40-char commit SHA from which trusted scanners/rules are loaded",
     )
     p_release.add_argument(
         "--allowed-url",
