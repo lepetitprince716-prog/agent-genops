@@ -805,5 +805,60 @@ class ReleaseAndCheckTests(unittest.TestCase):
             self.assertIn("email", combined(scan))
 
 
+class ReleaseInputValidationTests(unittest.TestCase):
+    """What ``./check release`` accepts as its target before it scans anything."""
+
+    def release(self, repo: SyntheticRepo, ref: str, commit: str, *more: str) -> subprocess.CompletedProcess[str]:
+        return repo.check(
+            "release",
+            "--to",
+            "origin",
+            "--ref",
+            ref,
+            "--commit",
+            commit,
+            "--allowed-url",
+            str(repo.remote),
+            "--manifest-dir",
+            str(repo.manifest_dir),
+            "--allow-new-ref",
+            *more,
+        )
+
+    def clean_candidate(self, repo: SyntheticRepo) -> str:
+        repo.write("docs/guide.md", "# Guide\n\nA clean change.\n")
+        repo.git("add", "docs/guide.md")
+        return repo.commit_unchecked("clean change")
+
+    def test_ref_must_be_one_valid_branch_ref(self) -> None:
+        if shutil.which("betterleaks") is None:
+            self.fail("betterleaks is not installed: brew install betterleaks")
+        repo = SyntheticRepo(self, maintainer=True)
+        commit = self.clean_candidate(repo)
+        bad = (
+            "refs/heads/*",
+            "refs/heads/a:refs/tags/v1",
+            "refs/heads/",
+            "refs/heads/a..b",
+            "refs/heads/a b",
+            "refs/heads//x",
+            "refs/heads/x.lock",
+            "refs/heads/x@{y}",
+            "refs/heads/x?",
+            "refs/heads/x[",
+            "refs/tags/v1",
+            "main",
+        )
+        for ref in bad:
+            with self.subTest(ref=ref):
+                res = self.release(repo, ref, commit)
+                self.assertEqual(res.returncode, 2, combined(res))
+                self.assertIn("--ref", combined(res))
+                self.assertEqual(list(repo.manifest_dir.iterdir()), [])
+        ok = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(ok.returncode, 0, combined(ok))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

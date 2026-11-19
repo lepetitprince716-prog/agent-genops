@@ -909,6 +909,20 @@ def verify_manifest_file(root: Path, manifest_path: Path, args: argparse.Namespa
     return 0
 
 
+def validate_target_ref(root: Path, ref: str) -> None:
+    """Accept exactly one valid branch ref: ``refs/heads/<name>``, no refspec or pattern syntax."""
+    prefix = "refs/heads/"
+    problem = None
+    if not ref.startswith(prefix) or ref == prefix:
+        problem = "it must start with 'refs/heads/' and name a branch"
+    elif any(ch in ref for ch in ":*") or any(ch.isspace() for ch in ref):
+        problem = "it must not contain ':', '*' or whitespace"
+    elif run_git(["check-ref-format", ref], root, check=False).returncode != 0:
+        problem = "git check-ref-format rejects it"
+    if problem:
+        raise CheckError(f"--ref must be one full branch ref (refs/heads/<name>); {problem}, got: {ref!r}")
+
+
 def cmd_release(args: argparse.Namespace) -> int:
     root = repo_root()
     if args.verify_manifest:
@@ -916,10 +930,7 @@ def cmd_release(args: argparse.Namespace) -> int:
 
     if not args.ref or not args.commit:
         raise CheckError("--ref <refs/heads/...> and --commit <40-hex-sha> are required")
-    if not args.ref.startswith("refs/heads/") or any(ch.isspace() for ch in args.ref):
-        raise CheckError(
-            f"--ref must be a single full branch ref starting with 'refs/heads/' (no tags/wildcards), got: {args.ref!r}"
-        )
+    validate_target_ref(root, args.ref)
     if not FULL_SHA_RE.fullmatch(args.commit):
         raise CheckError(f"--commit must be a full 40-char commit SHA, got: {args.commit!r}")
     verified_commit = git_optional(
