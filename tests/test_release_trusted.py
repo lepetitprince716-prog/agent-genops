@@ -367,5 +367,61 @@ class ReleaseWorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(manifest["workflow_policy"], "clean")
 
 
+def verify(repo: SyntheticRepo, manifest_path: Path, *more: str) -> subprocess.CompletedProcess[str]:
+    return repo.check("release", "--verify-manifest", str(manifest_path), "--allowed-url", str(repo.remote), *more)
+
+
+class ManifestReverifyTests(unittest.TestCase):
+    """R12: --verify-manifest runs the release check again and compares every field."""
+
+    def genuine(self, repo: SyntheticRepo, commit: str) -> tuple[Path, dict]:
+        res = release(repo, commit, "--json")
+        self.assertEqual(res.returncode, 0, combined(res))
+        payload = json.loads(res.stdout)
+        return Path(payload["manifest_path"]), payload["manifest"]
+
+    def test_a_hand_written_manifest_for_a_never_scanned_candidate_is_invalid(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        base = repo.head()
+        scanned = clean_candidate(repo)
+        _path, real = self.genuine(repo, scanned)
+        never_scanned = marker_candidate(repo)
+        # Every field a real manifest has, written by hand for a commit no check ever saw; the
+        # policy version is the real one (it does not depend on the candidate).
+        forged = {
+            **real,
+            "candidate_sha": never_scanned,
+            "remote_old_sha": base,
+            "commit_count": 2,
+            "changed_files": [{"status": "M", "path": "docs/guide.md"}, {"status": "A", "path": "docs/notes.md"}],
+            "control_plane_changes": [],
+            "inline_allow_additions": [],
+            "non_candidate_ref_warnings": [],
+            "unverified_items": [],
+        }
+        forged_path = repo.base / "forged.json"
+        forged_path.write_text(json.dumps(forged, indent=2) + "\n", encoding="utf-8")
+        res = verify(repo, forged_path)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("INVALID", combined(res))
+        self.assertNotIn(SYNTH_MARKER, combined(res))
+
+    def test_an_edited_field_of_a_real_manifest_is_invalid(self) -> None:
+        need_betterleaks(self)
+        repo = SyntheticRepo(self, maintainer=True)
+        repo.write("tests/test_guard_extra.py", "import unittest\n")
+        repo.git("add", "tests/test_guard_extra.py")
+        cand = repo.commit_unchecked("a guard test")
+        path, real = self.genuine(repo, cand)
+        self.assertEqual(verify(repo, path).returncode, 0)
+        self.assertEqual(real["control_plane_changes"], ["tests/test_guard_extra.py"])
+        edited = repo.base / "edited.json"
+        edited.write_text(json.dumps({**real, "control_plane_changes": []}, indent=2) + "\n", encoding="utf-8")
+        res = verify(repo, edited)
+        self.assertEqual(res.returncode, 1, combined(res))
+        self.assertIn("control_plane_changes", combined(res))
+
+
 if __name__ == "__main__":
     unittest.main()

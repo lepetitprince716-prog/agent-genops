@@ -1250,6 +1250,8 @@ def verify_manifest_file(root: Path, judge: Judge, manifest_path: Path, args: ar
     if hook_problems:
         mismatches.extend(hook_problems)
 
+    mismatches.extend(recheck_manifest(root, judge, data, args))
+
     if mismatches:
         print("MANIFEST VERIFICATION: INVALID (do NOT push)")
         for item in mismatches:
@@ -1261,6 +1263,43 @@ def verify_manifest_file(root: Path, judge: Judge, manifest_path: Path, args: ar
         f"{str(expected_old)[:12]} -> {expected_new[:12]} | policy={expected_policy}"
     )
     return 0
+
+
+# Fields a manifest carries that a fresh check does not reproduce.
+UNCOMPARED_MANIFEST_FIELDS = frozenset({"created_at"})
+
+
+def recheck_manifest(root: Path, judge: Judge, data: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    """Run the whole release check again for the manifest's candidate and compare every field.
+
+    A manifest is only as good as the check that wrote it: one that was edited, or written by
+    hand for a commit no check ever saw, does not match what the check says now. Options that
+    widen a release (--allow-new-ref, --bootstrap-self-judge) are taken from this call, never
+    from the manifest. Mismatches name the field, not its value."""
+    try:
+        result = prepare_release(
+            root,
+            judge,
+            remote=data["remote"],
+            ref=data["target_ref"],
+            commit=data["candidate_sha"],
+            allow_new_ref=bool(args.allow_new_ref),
+            allowed_url=args.allowed_url,
+        )
+    except CheckError as exc:
+        return [f"the release check cannot run again for this manifest: {exc}"]
+    if result.blocked or result.manifest is None:
+        return ["the candidate does not pass the release check now:", *result.blocked]
+    fresh = result.manifest
+    problems: list[str] = []
+    for key in sorted((fresh.keys() | data.keys()) - UNCOMPARED_MANIFEST_FIELDS):
+        if key not in data:
+            problems.append(f"manifest field {key!r} is missing (a fresh release check writes it)")
+        elif key not in fresh:
+            problems.append(f"manifest field {key!r} is not one a release check writes")
+        elif fresh[key] != data[key]:
+            problems.append(f"manifest field {key!r} does not match a fresh release check")
+    return problems
 
 
 def validate_target_ref(root: Path, ref: str) -> None:
