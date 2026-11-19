@@ -29,17 +29,38 @@ macOS). The hooks fail closed if Betterleaks is missing.
   machine's name. Set `user.email` as in step 2.
 - Any finding stops the commit. If the finding is in the message, the message is still in
   `.git/COMMIT_EDITMSG`; fix it and commit again.
+- A refusal about `.betterleaksignore` or `.gitleaksignore`: the file in your working tree differs
+  from the staged version (or from the pushed commit). Stage it, or restore it.
+
+## Contributor mode and maintainer mode
+
+- Contributor mode is the default. You need no private rules. `./check changed` says it is a
+  contributor check only and not a release check, and the hooks do not look at the push URL.
+- Maintainer mode is for the person who publishes. Turn it on with `git config genops.mode maintainer`
+  (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1`. Any other value is contributor mode. In
+  maintainer mode the hooks and `./check` fail instead of degrading: the private rules file must
+  exist, be non-empty and be valid, `./check changed` also needs `core.hooksPath` set to `.githooks`
+  with all three hooks executable, and `pre-push` refuses a remote that is not the registered
+  upstream. [AGENTS.md](AGENTS.md) describes `./check release`, which only a maintainer runs.
 
 ## Open a pull request
 
 1. Fork the repository and create a branch from `main`.
-2. Run `./check changed` while working (scans staged, unstaged, untracked and branch changes and
-   runs path-selected tests). Before pushing, you can also run
+2. Run `./check changed` while working. It scans staged, unstaged, untracked and branch changes, then
+   runs the tests that the changed paths select. The output has a `SUMMARY` line, a `STATES` line
+   with the counts of changed files, a `GUARD CHANGES` list and a `TESTS` table. `GUARD CHANGES`
+   names the changed guard files, guard tests and root code that select the guard tests. The tests
+   are chosen by path: a changed Markdown file runs `doc-links`, a change under `workflows/` or to
+   the workflow policy runs `workflow-policy` (this one also runs with `--no-tests`; the other
+   suites are then marked `NOT RUN`), a guard change runs `guard-tests`, and a change inside a
+   project folder runs that project's tests. There is no mode that runs everything: to run all
+   guard tests, use `python3 -B -m unittest discover -s tests`. Before pushing, you can also run
    `python3 tools/privacy_scan.py --tracked --history` and `sh tools/secret_scan.sh history`.
 3. Push the branch to your fork and open a pull request against `main`.
-4. CI runs the privacy and Betterleaks scans with the public rules on every push and pull request
-   (using the trusted base branch's scanner, rules, and ignore files on pull requests). A
-   first-time contributor's run may wait until a maintainer approves it.
+4. CI runs the privacy and Betterleaks scans with the public rules on every push and pull request.
+   On a pull request it uses the base branch's scanner, rules and ignore files, and it scans the
+   pull request's own commits again with inline allow comments off. A first-time contributor's run
+   may wait until a maintainer approves it.
 
 Fixing problems before a push:
 
@@ -49,7 +70,9 @@ Fixing problems before a push:
   your branch. Once pushed, say so in the pull request instead.
 - A false positive: an allow entry in your own private rules only silences your local hook, and
   CI still fails. Change `tools/privacy_rules.json` in the pull request and say why, or open an
-  issue without pasting sensitive values.
+  issue without pasting sensitive values. For a Betterleaks finding, an inline `betterleaks:allow`
+  comment or an entry in `.betterleaksignore` that your pull request adds does not silence CI;
+  a maintainer decides, see [PRIVACY.md](PRIVACY.md).
 - A finding in history that is not yours: do not rewrite history, and **do not paste matched
   values, secrets, or sensitive file paths into a public pull request or issue**. Notify the
   maintainer privately so it can be verified and handled safely.
@@ -97,18 +120,24 @@ them runs that project's workflow in `.github/workflows/`.
 - `identity author:1: email -- ...`：按第 2 步设置 `user.email`。
 - `identity author:1: lan_hostname -- ...`：git 没设邮箱，用你的机器名猜了一个。按第 2 步设置 `user.email`。
 - 有任何命中，提交都会被拦下。命中在提交信息里时，信息还留在 `.git/COMMIT_EDITMSG`，改好再提交一次。
+- 提示 `.betterleaksignore` 或 `.gitleaksignore` 的拒绝：工作区里的这个文件和暂存区的版本（或被推送的提交）不一致。把它暂存，或者还原。
+
+### 贡献者模式和维护者模式
+
+- 贡献者模式是默认的，不需要私有规则。`./check changed` 会说明这只是贡献者检查、不是发布检查，hook 也不看推送地址。
+- 维护者模式给负责发布的人用。用 `git config genops.mode maintainer`（大小写不限）或 `AGENT_GENOPS_REQUIRE_PRIVATE=1` 打开，其他取值一律是贡献者模式。维护者模式下，hook 和 `./check` 出问题就直接失败，不降级：私有规则文件必须存在、非空、格式正确；`./check changed` 还要求 `core.hooksPath` 设为 `.githooks`、三个 hook 都可执行；`pre-push` 会拒绝不是登记上游的远端。`./check release` 只有维护者运行，说明见 [AGENTS.md](AGENTS.md)。
 
 ### 开 pull request
 
 1. fork 这个仓库，从 `main` 建一个分支。
-2. 开发过程中运行 `./check changed`（会检查暂存、未暂存、未跟踪文件与分支提交，并按改动路径跑对应测试）。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
+2. 开发过程中运行 `./check changed`。它检查暂存、未暂存、未跟踪的文件和分支上的提交，然后跑改动路径选中的测试。输出有一行 `SUMMARY`、一行统计改动文件数的 `STATES`、一份 `GUARD CHANGES` 清单和一张 `TESTS` 表。`GUARD CHANGES` 列出改动了的防护文件、防护测试和根目录代码，正是它们选中了 guard 测试。测试按路径选：改了 Markdown 就跑 `doc-links`；改了 `workflows/` 或工作流策略就跑 `workflow-policy`（这一项连 `--no-tests` 也照跑，其余测试那时标成 `NOT RUN`）；改了防护就跑 `guard-tests`；改了项目文件夹里的内容就跑那个项目的测试。没有“全部跑一遍”的模式：要跑全部防护测试，用 `python3 -B -m unittest discover -s tests`。推送前也可手动跑 `python3 tools/privacy_scan.py --tracked --history` 和 `sh tools/secret_scan.sh history`。
 3. 把分支推到你的 fork，向 `main` 开 pull request。
-4. CI 在每次 push 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描（PR 阶段从受信任 base 分支加载扫描器、规则与 ignore 文件）。第一次贡献时，CI 可能要等维护者批准才会运行。
+4. CI 在每次 push 和 pull request 时只用公开规则跑隐私与 Betterleaks 扫描。pull request 上用 base 分支的扫描器、规则和 ignore 文件，并把 pull request 自己的提交关掉行内豁免再扫一遍。第一次贡献时，CI 可能要等维护者批准才会运行。
 
 推送之前遇到问题：
 
 - 还没推送的提交里邮箱写错了：先设置 `user.email`，最后一个提交用 `git commit --amend --reset-author --no-edit`，分支上的所有提交用 `git rebase -r main --exec 'git commit --amend --reset-author --no-edit'`。已经推送了，就在 pull request 里说明。
-- 误报：在自己的私有规则里加放行，只能让本地 hook 不报，CI 照样失败。请在 pull request 里修改 `tools/privacy_rules.json` 并写明理由，或者开一个不含敏感内容的 issue。
+- 误报：在自己的私有规则里加放行，只能让本地 hook 不报，CI 照样失败。请在 pull request 里修改 `tools/privacy_rules.json` 并写明理由，或者开一个不含敏感内容的 issue。Betterleaks 的命中也一样：你的 pull request 自己加的行内 `betterleaks:allow` 注释或 `.betterleaksignore` 条目，都压不住 CI，要由维护者来定，见 [PRIVACY.md](PRIVACY.md)。
 - 历史里有不是你造成的命中：不要改写历史，也**不要把命中值、密钥或敏感路径贴到公开 pull request 或 issue 里**；请私下通知维护者核查处理。
 
 ### 写作规则
