@@ -445,9 +445,14 @@ class E7StructureTest(CheckCase):
         self.assertEqual([(f.code, f.severity, f.nodes) for f in findings], [(Code.E7, Severity.WARNING, ("sampler",))])
         self.assertNotIn("note", authoring.full[authoring.ids["sampler"]])
 
-    def test_unknown_meta_key_is_a_warning(self):
+    def test_unknown_ui_meta_key_is_an_error(self):
         doc = txt2img()
         doc["sampler"]["_meta"]["ui_grup"] = "x"
+        self.assertIn("did you mean 'ui_group'", self.only(doc, Code.E7).message)
+
+    def test_unknown_meta_key_outside_ui_is_a_warning(self):
+        doc = txt2img()
+        doc["sampler"]["_meta"]["other_tool"] = "x"
         _, findings = self.passes(doc)
         self.assertEqual([(f.code, f.severity) for f in findings], [(Code.E7, Severity.WARNING)])
 

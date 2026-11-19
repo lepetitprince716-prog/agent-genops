@@ -56,5 +56,31 @@ class FindingsOnTheTerminalTest(Folder):
         self.assertIn("hint", summary["finding_list"][0])
 
 
+
+class MetaKeyTest(Folder):
+    """``_meta``: an unknown ``ui_*`` key fails, a known key without its prefix warns, other
+    tools' keys pass."""
+
+    def test_an_unknown_ui_key_is_an_error_with_a_suggestion(self):
+        code, _, err = run("compile", self.graph(with_meta(TXT2IMG, "decode", ui_optinal=True)), "-o", self.out)
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertIn("E7: node 'decode': _meta key 'ui_optinal' is not a cwc key", err)
+        self.assertIn("did you mean 'ui_optional'", err)
+        self.assertFalse((self.out / "graph.ui.json").exists())
+
+    def test_a_known_key_without_its_prefix_warns_with_the_right_name(self):
+        for key, right in (("optional", "ui_optional"), ("group", "ui_group"), ("role", "ui_role")):
+            with self.subTest(key=key):
+                value = {"optional": True, "group": "extras", "role": "cockpit"}[key]
+                code, _, err = run("compile", self.graph(with_meta(TXT2IMG, "decode", **{key: value})), "-o", self.out)
+                self.assertEqual(code, ExitCode.OK)
+                self.assertIn(f"E7 warning: node 'decode': _meta key {key!r} is ignored; did you mean {right!r}?", err)
+
+    def test_another_tools_key_does_not_fail_the_compile(self):
+        code, _, err = run("compile", self.graph(with_meta(TXT2IMG, "decode", some_tool_state={"x": 1})), "-o", self.out)
+        self.assertEqual(code, ExitCode.OK)
+        self.assertNotIn("E7: ", err)
+
+
 if __name__ == "__main__":
     unittest.main()

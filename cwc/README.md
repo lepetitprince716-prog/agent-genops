@@ -31,6 +31,14 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.
 
+`compile` writes every error and warning to stderr with its hint, and `--json` lists them
+in `finding_list` next to the `findings` counts.
+
+Inputs that used to pass and now do not, or now warn:
+
+- A `_meta` key that starts with `ui_` but is not one of cwc's keys is an error (E7, exit 3)
+  that names the closest key. It used to be a warning, and the misspelt key did nothing.
+
 `--nodedefs URL` reads `<URL>/api/object_info` from a running ComfyUI server. It follows at most
 three redirects, only to `http` or `https`, and never from `https` to `http`. It does not judge
 where the server or a redirect points: a server on this machine or the local network is the usual

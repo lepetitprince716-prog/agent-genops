@@ -1,11 +1,15 @@
 """Node ``_meta`` intents, and the purity rule for optional groups.
 
-Unknown ``_meta`` keys are kept out of the strict prompt and reported as warnings (the
-backend ignores them, but a misspelt ``ui_*`` key would silently do nothing).
+Unknown ``_meta`` keys are kept out of the strict prompt. An unknown ``ui_*`` key is an
+error with the closest known key (``ui_`` is cwc's namespace, so it can only be a typo). A
+known key written without its ``ui_`` prefix (``optional``) is a warning naming the right key.
+Any other key is a warning only: other tools write their own ``_meta`` keys, and a plain API
+graph from them must still compile.
 """
 
 from __future__ import annotations
 
+import difflib
 from typing import Any, Callable
 
 from cwc.normalize.diagnostics import Findings
@@ -71,12 +75,7 @@ def parse_intent(author_id: str, meta: dict[str, Any], out: Findings) -> NodeInt
     fields: dict[str, Any] = {}
     for key, value in meta.items():
         if key not in _KEYS:
-            out.warning(
-                Code.E7,
-                f"node {author_id!r}: _meta key {key!r} is not known and is ignored",
-                [author_id],
-                hint=f"known keys: {', '.join(_KEYS)}",
-            )
+            _unknown_key(author_id, key, out)
             continue
         parse, expected = _KEYS[key]
         parsed = parse(value)
@@ -85,6 +84,26 @@ def parse_intent(author_id: str, meta: dict[str, Any], out: Findings) -> NodeInt
             continue
         fields[key] = parsed
     return NodeIntent(**fields)
+
+
+UI_PREFIX = "ui_"
+
+
+def _unknown_key(author_id: str, key: str, out: Findings) -> None:
+    known = f"known keys: {', '.join(_KEYS)}"
+    if key.startswith(UI_PREFIX):
+        closest = difflib.get_close_matches(key, list(_KEYS), n=1, cutoff=0.6)
+        guess = f"; did you mean {closest[0]!r}?" if closest else ""
+        out.error(Code.E7, f"node {author_id!r}: _meta key {key!r} is not a cwc key{guess}", [author_id], hint=known)
+    elif UI_PREFIX + key in _KEYS:
+        out.warning(
+            Code.E7,
+            f"node {author_id!r}: _meta key {key!r} is ignored; did you mean {UI_PREFIX + key!r}?",
+            [author_id],
+            hint=f"cwc reads only the keys {', '.join(_KEYS)}",
+        )
+    else:
+        out.warning(Code.E7, f"node {author_id!r}: _meta key {key!r} is not known and is ignored", [author_id], hint=known)
 
 
 def check_group_purity(intents: dict[str, NodeIntent], out: Findings) -> None:
