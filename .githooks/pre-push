@@ -66,7 +66,8 @@ while IFS=' ' read -r local_ref local_sha remote_ref _remote_sha; do
   : "${_remote_sha:-}"
   seen_input=1
   if [ "$local_sha" = "$zero_oid" ]; then
-    python3 -B tools/privacy_scan.py --ref-name "$remote_ref"
+    # A deletion publishes no content and no new name, so nothing is checked.
+    echo "pre-push: deleting a remote ref publishes nothing; its name is not checked." >&2
     continue
   fi
   pushed_any=1

@@ -310,6 +310,25 @@ class CloneModeTests(TemplateCase):
         self.assertEqual(result.returncode, 2, combined(result))
 
 
+class RefNameTests(TemplateCase):
+    """Names a push publishes are checked; a deletion publishes none (R7)."""
+
+    def test_deleting_a_remote_ref_with_a_private_name_is_allowed(self) -> None:
+        repo = self.repo()
+        name = f"refs/heads/{MARKER}"
+        repo.git("--git-dir", str(repo.remote), "update-ref", name, repo.head())
+        deleted = repo.push("origin", "--delete", MARKER)
+        self.assertEqual(deleted.returncode, 0, combined(deleted))
+        self.assertIn("pre-push: deleting", deleted.stderr)
+        self.assertEqual(repo.refs_of(repo.remote), ["refs/heads/main"])
+
+    def test_pushing_to_a_private_ref_name_is_refused(self) -> None:
+        repo = self.repo()
+        pushed = repo.push("origin", f"main:refs/heads/{MARKER}")
+        self.assert_refused(pushed, "synthetic_private_marker")
+        self.assertEqual(repo.refs_of(repo.remote), ["refs/heads/main"])
+
+
 class PerRefPathTests(TemplateCase):
     """pre-push scans each pushed ref, whatever the scanner's source looks like (R8)."""
 
