@@ -342,6 +342,11 @@ if mode in ("staged", "unstaged"):
     cmd = ["diff", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
     if mode == "staged":
         cmd.append("--cached")
+    else:
+        top = run(["rev-parse", "--show-toplevel"]).removesuffix(b"\n")
+        if not top:
+            fail("git rev-parse --show-toplevel printed nothing")
+        top = os.fsdecode(top)
     for record in run(cmd).split(b"\0"):
         if not record:
             continue
@@ -349,15 +354,19 @@ if mode in ("staged", "unstaged"):
         if mode == "staged":
             data = run(["cat-file", "blob", b":0:" + path])
         else:
-            local = os.fsdecode(path)
-            if os.path.islink(local):
-                # What git would store for a symlink: its target text.
-                data = os.fsencode(os.readlink(local))
-            elif os.path.exists(local):
-                with open(local, "rb") as handle:
-                    data = handle.read()
-            else:
-                continue
+            # git names a changed path from the top of the repository, whatever the current
+            # directory is; --diff-filter has left out the deleted ones, so a listed path that
+            # cannot be read is a failure, not something to skip.
+            local = os.path.join(top, os.fsdecode(path))
+            try:
+                if os.path.islink(local):
+                    # What git would store for a symlink: its target text.
+                    data = os.fsencode(os.readlink(local))
+                else:
+                    with open(local, "rb") as handle:
+                        data = handle.read()
+            except OSError as error:
+                fail(f"a changed file that git lists cannot be read ({error.strerror})")
         if is_binary or wanted(data):
             found.append(data)
 elif mode == "log":

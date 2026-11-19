@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -664,6 +665,56 @@ class ImageAndBinaryTests(unittest.TestCase):
         for args in (("range", "HEAD~1..HEAD"), ("rev", "HEAD")):
             with self.subTest(args=args):
                 refused_by_secret_scan(self, self.repo.secret(*args), token)
+
+    def test_the_unstaged_mode_reads_binary_content_from_a_subdirectory(self) -> None:
+        # git prints the paths of a diff relative to the top of the repository; run from a
+        # subdirectory, opening them as given found no file and the pass skipped it.
+        token = registry_token()
+        (self.repo.path / "docs").mkdir()
+        self.repo.add_file("docs/guide.txt", "guide\n")
+        self.repo.add_file("top.dat", "\0placeholder\n")
+        self.repo.unchecked_commit("tracked files")
+        (self.repo.path / "top.dat").write_bytes(b"\x00key = " + token.encode() + b"\n")
+        for name in (".", "docs"):
+            with self.subTest(directory=name):
+                refused_by_secret_scan(self, self.unstaged_from(self.repo.path / name), token)
+
+    def unstaged_from(self, where: Path) -> subprocess.CompletedProcess[str]:
+        return self.repo.run("sh", str(self.repo.path / "tools" / "secret_scan.sh"), "unstaged", cwd=where)
+
+    def test_the_unstaged_mode_from_a_subdirectory_passes_clean_changes(self) -> None:
+        self.repo.add_file("docs/guide.txt", "guide\n")
+        self.repo.add_file("top.dat", "\0placeholder\n")
+        self.repo.unchecked_commit("tracked files")
+        (self.repo.path / "top.dat").write_bytes(b"\x00still nothing to see\n")
+        scanned = self.unstaged_from(self.repo.path / "docs")
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+
+    def test_the_unstaged_mode_fails_on_a_listed_file_it_cannot_open(self) -> None:
+        # A file git lists as changed and that is gone (removed between the two reads) must not
+        # pass as clean. No ordinary state of the working tree reaches this (a deleted file is
+        # not listed, and git itself refuses an unreadable one), so a git that names a file
+        # which is not there stands in for the race. Fault injection: the wrapper changes only
+        # the one --numstat answer.
+        real_git = shutil.which("git", path=self.repo.env["PATH"])
+        self.assertIsNotNone(real_git)
+        bin_dir = self.repo.base / "fake-bin"
+        bin_dir.mkdir()
+        wrapper = bin_dir / "git"
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            'case " $* " in\n'
+            "  *' --numstat '*) printf '1\\t0\\tghost.txt\\0'; exit 0 ;;\n"
+            "esac\n"
+            f'exec "{real_git}" "$@"\n'
+        )
+        wrapper.chmod(0o755)
+        env = dict(self.repo.env)
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+        scanned = self.repo.run("sh", "tools/secret_scan.sh", "unstaged", env=env)
+        self.assertEqual(scanned.returncode, 1, combined(scanned))
+        self.assertIn("secret_scan: binary content:", combined(scanned))
+        self.assertIn("nothing was passed as clean", combined(scanned))
 
     def test_real_images_stay_clean(self) -> None:
         for suffix in self.suffixes:
