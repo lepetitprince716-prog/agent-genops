@@ -19,7 +19,9 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # the hooks rejec
 python3 tools/privacy_scan.py --tracked --history              # expect: clean
 ```
 
-`pre-commit` runs `--identity --staged`, `commit-msg` runs `--message "$1"`, `pre-push` runs `--history`. CI runs `--no-private --tracked --history` on every push to `main` and every pull request.
+The hooks run the scanner like this. `pre-commit` runs `--identity --staged`. `commit-msg` runs `--message "$1"`. `pre-push` runs `--rev <sha> --ref-name <ref>` once for each ref being pushed, and then looks at the other local refs only to warn. A push that deletes a remote ref publishes nothing, so it is not checked. Only a hand run of `.githooks/pre-push` with no arguments, or from a terminal, scans `--history`. Each hook also runs the Betterleaks wrapper; see [PRIVACY.md](../PRIVACY.md#how-the-guard-works).
+
+CI runs `--no-private --tracked --history` on every push and every pull request. On a pull request the scanner and rules come from the base branch commit, not from the pull request.
 
 ### Modes
 
@@ -27,13 +29,26 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 
 | Flag | Scans |
 | --- | --- |
-| `--staged` | the index: what the next commit will contain |
+| `--staged` | the index, content and file names: what the next commit will contain |
+| `--unstaged` | working-tree changes relative to the index |
+| `--untracked` | untracked files that git does not ignore |
 | `--tracked` | every tracked file as it is in the working tree |
-| `--history` | every blob, commit and tag reachable from any ref, plus author, committer and tagger emails and messages |
+| `--history` | everything reachable from any ref: every blob, commit and tag, the file names in every commit, the ref names, nested tags layer by layer, refs that point straight at a tree or a blob, and the author, committer and tagger emails and messages. A `refs/replace` entry is a finding. A shallow clone is an error |
+| `--rev COMMIT` | one object and everything it reaches: a commit and its history, an annotated tag layer by layer, a tree or a blob |
+| `--range BASE..HEAD` | the commits in a range and their file names |
+| `--other-refs-except REV` | local history reachable from the other refs, leaving out the given revs (repeatable); the pre-push hook uses it for its warning |
+| `--ref-name REF` | check a target ref name against the rules (repeatable) |
 | `--identity` | the email in `GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` must match `allowed_emails` |
 | `--message FILE` | a commit message file; lines starting with `#` are ignored |
 | `--rules FILE` | use another public rules file |
 | `--no-private` | do not load the private rules |
+| `--require-private` | fail unless non-empty private rules are loaded |
+| `--source-labels` | prefix staged, unstaged, untracked and branch findings with their source |
+| `--json` | print a redacted JSON report on stdout |
+| `--clone-mode` | print `maintainer` or `contributor` and exit; the hooks act on this answer |
+| `--redact-stream` | read lines from stdin and print them with sensitive paths redacted |
+
+The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set. Any other value, or none, is `contributor`.
 
 Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations look like `docs/a.md:12`, `blob 1a2b3c4d5e6f docs/a.md:12` (history), `commit 1a2b3c4d5e6f author:1` or `message:3` (annotated tags say `tag`), and `identity author:1`. Images report line 1. The guard fails closed: a file it cannot read or decode is a finding.
 
@@ -76,10 +91,27 @@ Your own patterns (names, handles, machine names) live outside the repository in
 ### Limits
 
 - Pattern based: base64, URL-encoded or split-up values are not decoded.
-- File names are not scanned and pixel data is not inspected, so keep generated images out of the repository.
+- File names and ref names are scanned against the same rules, and a name that matches is printed as a redacted alias. Pixel data is not inspected, so keep generated images out of the repository.
 - JPEG, WEBP and GIF are scanned as raw bytes; a large photo can rarely trip a rule by chance.
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
 - With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
+
+### Secret scan wrapper
+
+`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off and without loading the repository's own Betterleaks config. A finding is one line, `rule path:line commit`. It takes one mode:
+
+| Mode | Scans |
+| --- | --- |
+| `staged` | the index |
+| `unstaged` | working-tree changes relative to the index |
+| `message FILE` | one commit message file |
+| `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
+| `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
+| `range BASE..HEAD` | the commits in a range, merges against their first parent, and their messages |
+| `files FILE...` | the named working-tree files; symlinks are not followed |
+| `ignore-check --index` or `ignore-check OBJECT` | exits 1 unless `.betterleaksignore` and `.gitleaksignore` in the working tree are byte for byte the versions in the index or in the tree of `OBJECT`; a missing file counts as a version |
+
+Exit status: `0` clean, `2` usage error, `3` Betterleaks is missing, anything else is a finding or a Betterleaks failure. The hooks run `ignore-check` before each scan, so a working-tree ignore file that the commit does not carry cannot hide a finding. Environment controls (`SECRET_SCAN_IGNORE_PATH`, `SECRET_SCAN_IGNORE_ALLOW=1`, and the redaction settings) are described in the header of the script.
 
 ## Kernel classes
 
@@ -153,7 +185,9 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # hook 只放行 
 python3 tools/privacy_scan.py --tracked --history              # 应当输出 clean
 ```
 
-`pre-commit` 运行 `--identity --staged`，`commit-msg` 运行 `--message "$1"`，`pre-push` 运行 `--history`。CI 在每次推送 `main` 和每个 pull request 时运行 `--no-private --tracked --history`。
+hook 这样调用扫描器：`pre-commit` 运行 `--identity --staged`；`commit-msg` 运行 `--message "$1"`；`pre-push` 对每个被推送的 ref 运行一次 `--rev <sha> --ref-name <ref>`，再检查本地其余的 ref，但那一步只告警。删除远端 ref 的推送不发布任何内容，所以不检查。只有不带参数、或在终端里手动运行 `.githooks/pre-push` 时，才会扫 `--history`。每个 hook 还会运行 Betterleaks 包装脚本，见 [PRIVACY.md](../PRIVACY.md#防护怎么工作)。
+
+CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --history`。pull request 上，扫描器和规则取自 base 分支的那个提交，不用 pull request 自己带的版本。
 
 #### 参数
 
@@ -161,13 +195,26 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 
 | 参数 | 扫描对象 |
 | --- | --- |
-| `--staged` | 暂存区，也就是下一次提交会包含的内容 |
+| `--staged` | 暂存区的内容和文件名，也就是下一次提交会包含的东西 |
+| `--unstaged` | 工作区里相对暂存区有改动的文件 |
+| `--untracked` | 没被 git 忽略的未跟踪文件 |
 | `--tracked` | 工作区里每个已跟踪的文件 |
-| `--history` | 所有引用可达的 blob、提交和标签，外加作者、提交者、标签者的邮箱和提交说明 |
+| `--history` | 所有 ref 可达的一切：每个 blob、提交和标签，每个提交里的文件名，ref 名，逐层展开的嵌套标签，直接指向 tree 或 blob 的 ref，以及作者、提交者、标签者的邮箱和提交说明。`refs/replace` 里有条目就算一条发现。浅克隆会报错 |
+| `--rev COMMIT` | 一个对象和它能到达的一切：一个提交连同它的历史、逐层展开的带注释标签、一个 tree 或 blob |
+| `--range BASE..HEAD` | 一个提交区间里的提交和文件名 |
+| `--other-refs-except REV` | 其余 ref 可达的本地历史，排除给定的 rev（可重复）；pre-push 用它做告警 |
+| `--ref-name REF` | 按规则检查目标 ref 名（可重复） |
 | `--identity` | `GIT_AUTHOR_IDENT` 和 `GIT_COMMITTER_IDENT` 里的邮箱必须匹配 `allowed_emails` |
 | `--message FILE` | 一个提交说明文件，`#` 开头的行忽略 |
 | `--rules FILE` | 换用另一份公开规则 |
 | `--no-private` | 不加载私有规则 |
+| `--require-private` | 没有加载到非空的私有规则就失败 |
+| `--source-labels` | 在暂存、未暂存、未跟踪和分支的命中前加上来源标签 |
+| `--json` | 在标准输出打印脱敏的 JSON 报告 |
+| `--clone-mode` | 打印 `maintainer` 或 `contributor` 然后退出；hook 按这个答案行事 |
+| `--redact-stream` | 从标准输入读行，把敏感路径脱敏后打印 |
+
+克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；其他值或没设，都是 `contributor`。
 
 退出码：`0` 干净，`1` 有发现，`2` 用法错误或内部错误。位置写法见上面的英文部分，图片一律报第 1 行。宁可误报也不漏报：读不了或解不开的文件，本身就算一条发现。
 
@@ -199,10 +246,27 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 #### 局限
 
 - 只做模式匹配：base64、URL 编码、被拆开的值都不会解码。
-- 不检查文件名，也不检查像素数据，所以生成的图片不要放进仓库。
+- 文件名和 ref 名也按同一套规则检查，命中的名字以脱敏别名输出。不检查像素数据，所以生成的图片不要放进仓库。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
 - 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
+
+#### 密钥扫描包装脚本
+
+`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，也不加载仓库自己的 Betterleaks 配置。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
+
+| 模式 | 扫描对象 |
+| --- | --- |
+| `staged` | 暂存区 |
+| `unstaged` | 工作区里相对暂存区的改动 |
+| `message FILE` | 一个提交说明文件 |
+| `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
+| `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |
+| `range BASE..HEAD` | 一个区间里的提交（合并提交对照第一个父提交）和它们的提交说明 |
+| `files FILE...` | 指定的工作区文件，不跟随符号链接 |
+| `ignore-check --index` 或 `ignore-check OBJECT` | 工作区里的 `.betterleaksignore` 和 `.gitleaksignore` 必须和暂存区里、或 `OBJECT` 的 tree 里的版本逐字节相同，否则退出码为 1；文件不存在也算一个版本 |
+
+退出码：`0` 干净，`2` 用法错误，`3` 找不到 Betterleaks，其余是命中或 Betterleaks 自己失败。hook 在每次扫描之前先跑 `ignore-check`，所以提交里没有的工作区 ignore 文件，不能用来遮住命中。环境变量（`SECRET_SCAN_IGNORE_PATH`、`SECRET_SCAN_IGNORE_ALLOW=1` 和脱敏相关的几个）写在脚本开头的注释里。
 
 ### 内核分类
 
