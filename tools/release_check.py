@@ -1714,7 +1714,7 @@ def print_and_store_manifest(manifest: dict[str, Any], manifest_dir: Path, json_
     print(
         f"Privacy: maintainer rules loaded ({manifest['privacy_scan']['private_rules_loaded']}); history, paths and ref passed; "
         f"Betterleaks passed; workflow policy {manifest['workflow_policy']}; policy version {manifest['policy_version']}"
-        f"（trusted={manifest['trusted_sha'][:12]}，checker={manifest['checker_sha'][:12]}）"
+        f" (trusted={manifest['trusted_sha'][:12]}, checker={manifest['checker_sha'][:12]})"
     )
     print(
         f"For a person to decide: control-plane changes {len(control_changes)}; new inline exemptions {len(inline_allows)}; "
