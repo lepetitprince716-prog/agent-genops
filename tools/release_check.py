@@ -1246,7 +1246,9 @@ def prepare_release(
     _priv_loaded, private_rule_count, _priv_note = validate_private_rules_file(require_non_empty=True)
 
     fetch_url, push_url, approved_urls = check_remote_policy(root, remote, allowed_url)
-    rehearsal_remote = approved_urls != DEFAULT_ALLOWED_URLS
+    # A rehearsal is a remote outside the registered upstream addresses; naming one of them with
+    # --allowed-url or genops.allowedPushUrl is still the repository's own remote.
+    rehearsal_remote = not approved_urls <= DEFAULT_ALLOWED_URLS
     remote_old_sha, remote_refs = query_remote_ref_sha(root, remote, ref)
     trusted_label, live_trusted = resolve_trusted_baseline(root, remote, remote_refs)
     if live_trusted != judge.trusted_sha:
