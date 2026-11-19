@@ -67,7 +67,9 @@ class Folder(unittest.TestCase):
 class CompileTest(Folder):
     def test_writes_canvas_prompt_and_report(self):
         code, out, err = run("compile", self.graph(with_lora(TXT2IMG)), "-o", self.out)
-        self.assertEqual((code, err), (ExitCode.OK, ""))
+        self.assertEqual(code, ExitCode.OK)
+        [summary] = err.splitlines()  # no finding, only the success summary
+        self.assertTrue(summary.startswith("cwc compile: ok; "), summary)
         self.assertEqual(sorted(p.name for p in self.out.iterdir()), ["graph.api.json", "graph.report.json", "graph.ui.json"])
         self.assertEqual(out.count("wrote "), 3)
         report = self.read(".report.json")

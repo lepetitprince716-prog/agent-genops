@@ -37,6 +37,42 @@ AUTO_PARALLEL_BRANCHES = 3  # at least this many control or mask branches: swiml
 AUTO_LARGE_NODES = 60  # at least this many nodes: cockpit-split
 
 
+# `cwc presets`: what each preset looks like and when to pick it. A test keeps this table and
+# presets.json naming the same presets.
+PRESET_GUIDE: dict[str, tuple[str, str]] = {
+    "bento": (
+        "Controls group first, then model and prompts, sampling, post-processing and output in one row; "
+        "control and optional modules in a second row below it.",
+        "most graphs; the default",
+    ),
+    "swimlanes": (
+        "Controls group first, then the stages repeated left to right, each control branch attached to the "
+        "stage it feeds, with a link corridor above the row.",
+        f"several parallel control or mask branches (auto picks it at {AUTO_PARALLEL_BRANCHES} or more)",
+    ),
+    "cockpit-split": (
+        "The Controls group splits in two boxes, prompts, reference image, size and seed on top and the other "
+        "controls under them; the stages stack in columns to the right of a vertical link corridor.",
+        f"large graphs (auto picks it at {AUTO_LARGE_NODES} nodes or more)",
+    ),
+    "tower-preview": (
+        "The bento arrangement, with the output group enlarged so its image preview is large on the first "
+        "screen.",
+        f"small graphs whose result you look at while tuning (auto picks it at {AUTO_SMALL_NODES} nodes or "
+        "fewer with no optional module)",
+    ),
+    "stepped": (
+        "Groups titled Step 1, Step 2 and so on; model and controls share the first step; no link corridor.",
+        "a graph meant to be followed in order, like a tutorial",
+    ),
+    AUTO: (
+        "Picks one of the presets above from the graph's size and shape; the compile summary and the "
+        "report say which and why.",
+        "you have no preference",
+    ),
+}
+
+
 @dataclass(frozen=True)
 class AutoChoice:
     preset: str
@@ -50,6 +86,7 @@ class Compiled:
     report: Report  # verification and geometry findings plus the authoring warnings
     layout: LayoutResult
     routes: RouteResult
+    counts: PlanCounts  # what auto read; the command line's summary reports the optional modules
 
 
 def compile_document(
@@ -95,7 +132,7 @@ def compile_document(
     report.metrics["geometry"] = geometry.metrics
     report.metrics["route"] = _route_metrics(routes)
     report.extend(warnings)
-    return Compiled(authoring, canvas, report, laid, routes)
+    return Compiled(authoring, canvas, report, laid, routes, plan.counts)
 
 
 def choose_auto(counts: PlanCounts) -> AutoChoice:

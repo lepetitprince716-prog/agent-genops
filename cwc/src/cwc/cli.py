@@ -19,7 +19,8 @@ from cwc.nodedefs.derive import slot_layout
 from cwc.nodedefs.learn import command as learn_command
 from cwc.nodedefs.registry import NodeDefs, read_source
 from cwc.nodedefs.types import NodeDef
-from cwc.pipeline import compile_document
+from cwc.layout.presets import load_presets
+from cwc.pipeline import AUTO, PRESET_GUIDE, Compiled, compile_document
 from cwc.render.command import command as render_command
 from cwc.report import CwcError, ExitCode, Mode, Report, Severity, sort_findings
 
@@ -45,12 +46,16 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--preset",
         metavar="NAME",
-        help="layout preset, or auto to choose one by the graph's size and shape (default: the graph's _workflow.layout.preset, else bento)",
+        help="layout preset, or auto to choose one by the graph's size and shape (default: the graph's _workflow.layout.preset, else bento); `cwc presets` describes each",
     )
     build.add_argument("--all-enabled", action="store_true", help="also write <name>.full.api.json")
     build.add_argument("--allow-unknown", action="store_true", help="accept node types with no definition")
     build.add_argument("--json", action="store_true", help="print a JSON summary")
     build.set_defaults(run=_compile)
+
+    presets = commands.add_parser("presets", help="list the layout presets, what each looks like and when to pick it")
+    presets.add_argument("--json", action="store_true", help="print JSON")
+    presets.set_defaults(run=_presets)
 
     learn = commands.add_parser("learn", help="learn widget templates from canvases paired with their API prompts")
     learn.add_argument("files", nargs="+", metavar="FILE", help="PNG with workflow and prompt chunks, or x_ui.json / x.ui.json beside x_api.json / x.api.json")
@@ -148,6 +153,23 @@ def _node(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     return ExitCode.OK
 
 
+# --- cwc presets ----------------------------------------------------------------------
+
+
+def _presets(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
+    rows = [
+        {"name": name, "description": PRESET_GUIDE[name][0], "use_when": PRESET_GUIDE[name][1]}
+        for name in [*load_presets(), AUTO]
+    ]
+    if args.json:
+        out.write(json_bytes(rows).decode("utf-8"))
+    else:
+        width = max(len(row["name"]) for row in rows)
+        for row in rows:
+            out.write(f"{row['name']:<{width}}  {row['description']}\n{'':<{width}}  use when: {row['use_when']}\n")
+    return ExitCode.OK
+
+
 # --- cwc compile ----------------------------------------------------------------------
 
 # Artefact kind -> file name suffix after <name>. All of them are written or removed on
@@ -170,6 +192,7 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     source = Path(args.graph)
     paths = {kind: Path(args.out) / f"{source.stem}{suffix}" for kind, suffix in ARTEFACTS.items()}
     files: dict[str, bytes] = {}
+    compiled: Compiled | None = None
     try:
         doc = load_authoring(read_file(source, "authoring file"))
         defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
@@ -213,7 +236,24 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     _print_findings(report, err)
     if not report.ok:
         err.write(f"{TOOL_NAME} compile: {counts['error']} error(s); see {written['report']}\n")
+    elif compiled is not None:
+        err.write(_success_line(compiled, written["ui"], counts["warning"]) + "\n")
     return exit_code
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def _success_line(compiled: Compiled, ui_path: str, warnings: int) -> str:
+    metrics = compiled.report.metrics
+    auto = metrics.get("preset_auto")
+    preset = metrics["preset"] + (f" ({AUTO}: {auto['rule']})" if auto else "")
+    return (
+        f"{TOOL_NAME} compile: ok; preset {preset}; {_plural(len(compiled.canvas.groups), 'group')}, "
+        f"{_plural(compiled.counts.optional_modules, 'optional module')}, {_plural(warnings, 'warning')}; "
+        f"preview: {TOOL_NAME} render {ui_path} -o {Path(ui_path).name.removesuffix('.ui.json')}.svg"
+    )
 
 
 def _print_findings(report: Report, err: TextIO) -> None:

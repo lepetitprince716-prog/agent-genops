@@ -176,5 +176,68 @@ class UnknownTypeHintTest(Folder):
         self.assertEqual(code, ExitCode.OK, err)
 
 
+
+class SummaryTest(Folder):
+    def test_success_prints_one_summary_line(self):
+        code, _, err = run("compile", self.graph(base.with_lora(TXT2IMG)), "-o", self.out, "--preset", "auto")
+        self.assertEqual(code, ExitCode.OK)
+        canvas = json.loads((self.out / "graph.ui.json").read_text(encoding="utf-8"))
+        groups = len(canvas["groups"])
+        self.assertEqual(
+            err,
+            f"cwc compile: ok; preset bento (auto: no other rule holds); {groups} groups, 1 optional module, "
+            f"0 warnings; preview: cwc render {self.out / 'graph.ui.json'} -o graph.svg\n",
+        )
+
+    def test_the_summary_counts_warnings_and_names_a_chosen_preset(self):
+        doc = with_meta(TXT2IMG, "decode", optional=True)
+        code, _, err = run("compile", self.graph(doc), "-o", self.out, "--preset", "stepped")
+        self.assertEqual(code, ExitCode.OK)
+        summary = err.splitlines()[-1]
+        self.assertTrue(summary.startswith("cwc compile: ok; preset stepped; "), summary)
+        self.assertIn(" 0 optional modules, 1 warning;", summary)
+
+    def test_a_failed_run_prints_no_summary(self):
+        doc = copy.deepcopy(TXT2IMG)
+        doc["sampler"]["inputs"]["positive"] = ["nowhere", 0]
+        _, _, err = run("compile", self.graph(doc), "-o", self.out)
+        self.assertNotIn("cwc compile: ok", err)
+
+
+class PresetsCommandTest(unittest.TestCase):
+    def test_lists_every_preset_and_auto_with_a_description(self):
+        from cwc.layout.presets import load_presets
+
+        code, out, err = run("presets")
+        self.assertEqual((code, err), (ExitCode.OK, ""))
+        names = [line.split()[0] for line in out.splitlines() if line and not line.startswith(" ")]
+        self.assertEqual(names, [*load_presets(), "auto"])
+        for line in out.splitlines():
+            if line and not line.startswith(" "):
+                self.assertGreater(len(line.split(None, 1)[1]), 20, line)
+
+    def test_json(self):
+        from cwc.layout.presets import load_presets
+
+        code, out, _ = run("presets", "--json")
+        self.assertEqual(code, ExitCode.OK)
+        rows = json.loads(out)
+        self.assertEqual([row["name"] for row in rows], [*load_presets(), "auto"])
+        self.assertTrue(all(row["description"] and row["use_when"] for row in rows))
+
+    def test_the_help_names_the_command(self):
+        _, out, _ = run("--help")
+        self.assertIn("presets", out)
+
+
+class UnknownPresetTest(Folder):
+    def test_the_error_lists_the_names(self):
+        code, _, err = run("compile", self.graph(TXT2IMG), "-o", self.out, "--preset", "bentoo")
+        self.assertEqual(code, ExitCode.INPUT_ERROR)
+        self.assertIn("unknown preset 'bentoo'", err)
+        for name in ("auto", "bento", "cockpit-split", "stepped", "swimlanes", "tower-preview"):
+            self.assertIn(name, err.split("unknown preset 'bentoo'", 1)[1])
+
+
 if __name__ == "__main__":
     unittest.main()

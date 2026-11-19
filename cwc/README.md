@@ -20,6 +20,7 @@ running frontend are not available as commands yet. Details: `docs/ARCHITECTURE.
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
 cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--all-enabled]
              [--allow-unknown] [--json]
+cwc presets  [--json]
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
 cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 ```
@@ -28,11 +29,14 @@ cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
 - `compile` turns an authoring graph into a canvas and its API prompts.
   `--preset` takes one of `bento`, `swimlanes`, `cockpit-split`, `tower-preview`,
   `stepped`, or `auto`, which chooses by the size and shape of the graph.
+- `presets` lists the presets, what each looks like and when to pick it.
 - `learn` learns widget templates from canvases paired with their API prompts.
 - `render` draws a canvas as an SVG, without a browser.
 
 `compile` writes every error and warning to stderr with its hint, and `--json` lists them
-in `finding_list` next to the `findings` counts.
+in `finding_list` next to the `findings` counts. A successful run ends with one stderr line:
+the preset (and why, under `auto`), the number of groups, optional modules and warnings, and
+the `cwc render` command that previews the canvas.
 
 Inputs that used to pass and now do not, or now warn:
 
