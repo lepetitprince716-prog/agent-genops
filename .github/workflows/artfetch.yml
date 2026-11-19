@@ -1,0 +1,38 @@
+name: artfetch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "artfetch/**"
+      - ".github/workflows/artfetch.yml"
+  pull_request:
+    paths:
+      - "artfetch/**"
+      - ".github/workflows/artfetch.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: artfetch
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner image ships rustup; this avoids third-party setup actions.
+      - name: Install the stable toolchain
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --no-self-update
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+      - name: Clippy
+        run: cargo +stable clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo +stable test --all-targets
