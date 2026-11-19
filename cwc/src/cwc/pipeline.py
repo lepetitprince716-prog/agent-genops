@@ -11,8 +11,9 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from cwc.annotate import annotate, apply_notes
-from cwc.annotate.types import AUTHOR_GROUP_PREFIX, Annotations, PlanCounts
+from cwc.annotate.types import PlanCounts
 from cwc.canvas.model import Canvas, id_order
+from cwc.effects import authoring_effects, overridden_keys
 from cwc.instantiate import instantiate
 from cwc.layout import layout
 from cwc.canvas.geometry import snap_up
@@ -21,7 +22,7 @@ from cwc.layout.section import BAND_GAP, SCREEN_W
 from cwc.layout.types import LayoutResult
 from cwc.nodedefs.registry import NodeDefs
 from cwc.normalize import normalize
-from cwc.normalize.types import Authoring, NodeIntent, Role
+from cwc.normalize.types import Authoring
 from cwc.report import Code, CwcError, ExitCode, Finding, Mode, Report, Severity
 from cwc.route import RouteResult, route
 from cwc.verify import verify_compile
@@ -153,8 +154,10 @@ def compile_document(
         report.metrics["preset_auto"] = {"rule": auto.rule, **_counts_json(plan.counts)}
     report.metrics["geometry"] = geometry.metrics
     report.metrics["route"] = _route_metrics(routes)
-    report.metrics["authoring_keys"] = authoring_effects(authoring, plan, canvas)
+    effects = authoring_effects(authoring, plan, canvas)
+    report.metrics["authoring_keys"] = effects
     report.extend(warnings)
+    report.extend(overridden_keys(authoring, effects))
     report.extend(authoring.notices)
     return Compiled(authoring, canvas, report, laid, routes, plan.counts)
 
@@ -229,62 +232,6 @@ def _with_unresolved(findings: list[Finding], canvas: Canvas, routes: RouteResul
                 data={"link": link_id, "unresolved": True},
             )
         )
-    return out
-
-
-def _took_effect(key: str, intent: NodeIntent, canvas_id: str, plan: Annotations, titles: dict[str, str | None]) -> bool | None:
-    """Whether the ``_meta`` key ``key`` changed the canvas for this node; None when not set.
-
-    Each answer reads the compiled result, not the intent: ``title`` the node's title,
-    ``ui_group`` the group the node ended up in, ``ui_role`` the node's role in the plan,
-    ``ui_optional`` the bypass, ``ui_order`` membership of the Controls group (the only place
-    it sorts by). ``ui_seed`` is written into the widget whenever normalize accepted it.
-    """
-    note = plan.nodes[canvas_id]
-    if key == "title":
-        return None if intent.title is None else titles[canvas_id] == intent.title
-    if key == "ui_group":
-        if intent.ui_group is None:
-            return None
-        own = f"{AUTHOR_GROUP_PREFIX}{intent.ui_group}"
-        return any(group.key == own and canvas_id in group.members for group in plan.groups)
-    if key == "ui_role":
-        if intent.ui_role is None:
-            return None
-        return (note.role is Role.COCKPIT) == (intent.ui_role is Role.COCKPIT) and (
-            intent.ui_role is not Role.PLUMBING or note.role is Role.PLUMBING
-        )
-    if key == "ui_optional":
-        return note.optional if intent.ui_optional else None
-    if key == "ui_order":
-        return None if intent.ui_order is None else note.cockpit is not None
-    if key == "ui_seed":
-        return None if intent.ui_seed is None else True
-    raise ValueError(key)
-
-
-EFFECT_KEYS = ("title", "ui_group", "ui_role", "ui_optional", "ui_seed", "ui_order")
-
-
-def authoring_effects(authoring: Authoring, plan: Annotations, canvas: Canvas) -> list[dict[str, Any]]:
-    """``metrics["authoring_keys"]``: for each ``_meta`` key with an effect that some node sets,
-    the authoring ids of the nodes it changed and, when any, of those it did not
-    (``no_effect_on``). The keys without any effect yet are E8's, not listed here."""
-    author = {prompt_id: author_id for author_id, prompt_id in authoring.ids.items()}
-    titles = {key: node.title for key, node in canvas.node_map().items()}
-    out: list[dict[str, Any]] = []
-    for key in EFFECT_KEYS:
-        changed: list[str] = []
-        missed: list[str] = []
-        for prompt_id, intent in authoring.intents.items():
-            effect = _took_effect(key, intent, prompt_id, plan, titles)
-            if effect is not None:
-                (changed if effect else missed).append(author[prompt_id])
-        if changed or missed:
-            entry: dict[str, Any] = {"key": f"_meta.{key}", "nodes": sorted(changed, key=id_order)}
-            if missed:
-                entry["no_effect_on"] = sorted(missed, key=id_order)
-            out.append(entry)
     return out
 
 

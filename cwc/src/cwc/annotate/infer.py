@@ -90,7 +90,7 @@ def _groups(
     return tuple(plans)
 
 
-def _author_group(key: str, zone: Zone, keys: list[str], intents: Mapping[str, NodeIntent]) -> str | None:
+def author_group(key: str, zone: Zone, keys: list[str], intents: Mapping[str, NodeIntent]) -> str | None:
     """The author's group id when the author alone names this group, else None.
 
     A group keyed ``group:<id>`` was built from the author's ``ui_group``; nodes the compiler
@@ -125,7 +125,7 @@ def _name(
     workflow: WorkflowInfo,
 ) -> str:
     """A human name without a number; layout adds the numbers."""
-    group_id = _author_group(key, zone, keys, intents)
+    group_id = author_group(key, zone, keys, intents)
     if group_id is not None:
         info = workflow.groups.get(group_id)
         if info is not None and info.title:

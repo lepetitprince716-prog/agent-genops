@@ -43,6 +43,12 @@ key from the table written without `ui_` (`optional`, `group`, `role`) is ignore
 that names the right key. Any other key is ignored with a warning, so prompts written by other
 tools still compile.
 
+Two keys on one node can disagree. `ui_role: "cockpit"` beats `ui_group` (the node stays in
+Controls), `ui_group` beats `ui_role: "plumbing"` (the node is not collapsed), and `ui_optional`
+beats `ui_role` `cockpit` and `plumbing` (the node stays in its optional module). The losing key
+does nothing, and cwc says so in an `E7 warning` that names both keys. The warning does not
+change the exit code or `ok`. Write one of the two keys.
+
 Without any `_meta`, cwc groups the graph by itself: positive and negative prompts and the empty
 latent (the image size) go into the Controls group, the rest into Models, Sampling,
 Post-processing and Output. Use `ui_role: "cockpit"` to add another node to Controls, for

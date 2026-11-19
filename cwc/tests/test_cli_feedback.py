@@ -87,6 +87,75 @@ class MetaKeyTest(Folder):
 
 
 
+class OverriddenKeyTest(Folder):
+    """A ``_meta`` key that another key of the same node overrides is a warning that names both and
+    says how to write it. Removing the overridden key gives the same canvas, which is what makes the
+    warning true."""
+
+    def compiled(self, doc, name="graph.json"):
+        out = self.out / name.removesuffix(".json")
+        code, _, err = run("compile", self.graph(doc, name), "-o", out)
+        self.assertEqual(code, ExitCode.OK, err)
+        report = json.loads((out / f"{name.removesuffix('.json')}.report.json").read_text(encoding="utf-8"))
+        warnings = [f for f in report["findings"] if f["severity"] == "warning" and f["data"].get("overridden_by")]
+        return err, warnings, (out / f"{name.removesuffix('.json')}.ui.json").read_bytes(), report
+
+    def check(self, doc, node, key, winner):
+        err, warnings, canvas, report = self.compiled(doc)
+        [warning] = warnings
+        self.assertEqual((warning["code"], warning["nodes"]), ("E7", [node]))
+        self.assertEqual((warning["data"]["key"], warning["data"]["overridden_by"]), (key, winner))
+        self.assertIn(f"_meta.{key}", warning["message"])
+        self.assertIn(f"_meta.{winner}", warning["message"])
+        self.assertTrue(warning["hint"])
+        self.assertIn(f"E7 warning: {warning['message']}\n  hint: {warning['hint']}\n", err)
+        self.assertTrue(report["ok"])
+        stripped = copy.deepcopy(doc)
+        del stripped[node]["_meta"][key]
+        _, none, plain, _ = self.compiled(stripped, "stripped.json")
+        self.assertEqual(none, [])
+        self.assertEqual(canvas, plain)  # the key did nothing
+        return warning
+
+    def test_ui_group_on_a_cockpit_node(self):
+        warning = self.check(with_meta(TXT2IMG, "pos", ui_group="words"), "pos", "ui_group", "ui_role")
+        self.assertIn("cockpit", warning["message"])
+
+    def test_ui_role_plumbing_on_a_node_in_a_group(self):
+        doc = with_meta(TXT2IMG, "decode", ui_role="plumbing", ui_group="finish")
+        warning = self.check(doc, "decode", "ui_role", "ui_group")
+        self.assertIn("plumbing", warning["message"])
+
+    def test_ui_role_on_an_optional_node(self):
+        for role in ("cockpit", "plumbing"):
+            with self.subTest(role=role):
+                self.check(with_meta(base.with_lora(TXT2IMG), "lora", ui_role=role), "lora", "ui_role", "ui_optional")
+
+    def test_keys_that_do_not_override_each_other_do_not_warn(self):
+        for doc in (
+            with_meta(base.with_lora(TXT2IMG), "lora", ui_group="styles"),  # names the optional module
+            with_meta(TXT2IMG, "decode", ui_role="plumbing"),
+            with_meta(TXT2IMG, "decode", ui_role="pipeline", ui_group="finish"),
+            with_meta(TXT2IMG, "decode", ui_group="finish"),
+            with_meta(base.with_primitives(1, 2), "steps_p", ui_order=3),
+            with_meta(TXT2IMG, "decode", ui_order=1),  # not in Controls: nothing else explains it, so no warning
+        ):
+            _, warnings, _, report = self.compiled(doc)
+            self.assertEqual(warnings, [])
+        self.assertEqual(self.compiled(TXT2IMG)[1], [])
+
+    def test_the_report_counts_a_group_that_names_an_optional_module_as_effective(self):
+        _, _, _, report = self.compiled(with_meta(base.with_lora(TXT2IMG), "lora", ui_group="styles"))
+        group = next(entry for entry in report["metrics"]["authoring_keys"] if entry["key"] == "_meta.ui_group")
+        self.assertEqual(group["nodes"], ["lora"])
+        self.assertNotIn("no_effect_on", group)
+
+    def test_every_overridden_node_gets_its_own_warning(self):
+        doc = with_meta(with_meta(TXT2IMG, "pos", ui_group="words"), "neg", ui_group="words")
+        _, warnings, _, _ = self.compiled(doc)
+        self.assertEqual([w["nodes"] for w in warnings], [["neg"], ["pos"]])
+
+
 class NoEffectKeyTest(Folder):
     """Keys cwc parses but does not use yet: accepted, and said so in one E8 info finding per
     compile, on one stderr line and in the report with the data key by key, without changing the
