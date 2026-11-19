@@ -514,6 +514,9 @@ class PrivacyWorkflowPullRequests(unittest.TestCase):
                 # Betterleaks itself honours the comment when allowed to.
                 self.assertEqual(pr.betterleaks_alone(), 0)
                 self.assertScanBlocked(results["betterleaks"], "betterleaks exited 1")
+                # The refusal says that the PR's own inline comment was not honoured.
+                self.assertRegex(results["betterleaks"].failed.output,
+                                 r"\b1 added line\(s\) carry an inline allow comment")
 
     def test_pull_request_replacing_the_scanners_or_rules_is_blocked(self) -> None:
         stub_py = "import sys\nsys.exit(0)\n"
