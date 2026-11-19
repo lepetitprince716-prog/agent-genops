@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import struct
+import subprocess
 import sys
 import unittest
 import zlib
@@ -587,6 +588,58 @@ class ImageAndBinaryTests(unittest.TestCase):
                 self.assertEqual(scanned.returncode, 0, combined(scanned))
         pushed = self.repo.push("main")
         self.assertEqual(pushed.returncode, 0, combined(pushed))
+
+
+def png_with_chunks(*chunks: tuple[bytes, bytes], pixels: bytes | None = None) -> bytes:
+    """A 1x1 grey PNG with extra chunks (kind, payload) between the header and the pixels."""
+    idat = pixels if pixels is not None else zlib.compress(b"\x00\x80")
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+        + b"".join(png_chunk(kind, payload) for kind, payload in chunks)
+        + png_chunk(b"IDAT", idat)
+        + png_chunk(b"IEND", b"")
+    )
+
+
+class PngChunkTests(unittest.TestCase):
+    """The privacy rules read a PNG's text and other metadata chunks, not its pixel chunk."""
+
+    def setUp(self) -> None:
+        self.repo = Repo(self)
+        self.marker = MARKER.encode()
+
+    def staged_scan(self, name: str, data: bytes) -> "subprocess.CompletedProcess[str]":
+        (self.repo.path / name).write_bytes(data)
+        self.repo.git("add", name)
+        return self.repo.privacy("--staged")
+
+    def test_a_private_marker_in_a_text_chunk_is_found(self) -> None:
+        text = {
+            "text.png": (b"tEXt", b"Title\x00 " + self.marker),
+            "ztxt.png": (b"zTXt", b"Title\x00\x00" + zlib.compress(self.marker)),
+            "itxt.png": (b"iTXt", b"Title\x00\x00\x00\x00\x00" + self.marker),
+            "other.png": (b"prVt", self.marker),
+        }
+        for name, chunk in text.items():
+            with self.subTest(name=name):
+                scanned = self.staged_scan(name, png_with_chunks(chunk))
+                self.assertEqual(scanned.returncode, 1, combined(scanned))
+                self.assertTrue(
+                    lines_naming(combined(scanned), name, "synthetic_private_marker"), combined(scanned)
+                )
+                self.repo.git("rm", "-q", "--cached", name)
+
+    def test_a_clean_text_chunk_passes(self) -> None:
+        scanned = self.staged_scan("clean.png", png_with_chunks((b"tEXt", b"Title\x00 a plain note")))
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
+
+    def test_bytes_in_the_pixel_chunk_are_not_matched_against_the_rules(self) -> None:
+        # Compressed pixels can match a short rule by chance, so the pixel chunk is left out; a
+        # marker there is not found (the documented limit), while the same marker one chunk
+        # earlier is.
+        scanned = self.staged_scan("pixels.png", png_with_chunks(pixels=b"\x00 " + self.marker + b" \x00"))
+        self.assertEqual(scanned.returncode, 0, combined(scanned))
 
 
 # One path from each family the prefilter of Betterleaks 1.10.1's default config drops by name

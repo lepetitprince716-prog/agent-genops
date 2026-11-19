@@ -93,6 +93,8 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 - Pattern based: base64, URL-encoded or split-up values are not decoded.
 - File names and ref names are scanned against the same rules, and a name that matches is printed as a redacted alias. Pixel data is not inspected, so keep generated images out of the repository.
+- A PNG's text chunks are decoded and read, and so is every other chunk except the pixel chunks (`IDAT`, `fdAT`): bytes in the pixel chunks are not matched against the rules.
+- A hostname with an underscore right in front of it (`_name.local_`, as Markdown emphasis writes it) is not caught by the `lan_hostname` rule.
 - JPEG, WEBP and GIF are scanned as raw bytes; a large photo can rarely trip a rule by chance.
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
 - With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
@@ -249,6 +251,8 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 - 只做模式匹配：base64、URL 编码、被拆开的值都不会解码。
 - 文件名和 ref 名也按同一套规则检查，命中的名字以脱敏别名输出。不检查像素数据，所以生成的图片不要放进仓库。
+- PNG 的文本块（`tEXt`、`zTXt`、`iTXt`）会解码后读，除像素块（`IDAT`、`fdAT`）以外的其他块也按原始字节读；像素块里的字节不参与规则匹配。
+- 下划线紧贴在主机名开头的写法（如 Markdown 强调写成的 `_name.local_`）不会被 `lan_hostname` 规则抓到。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
 - 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
