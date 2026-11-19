@@ -304,6 +304,32 @@ class CloneModeTests(TemplateCase):
                 self.assert_refused(pushed, "pre-push:")
                 self.assertEqual(repo.refs_of(repo.other), [])
 
+    def test_an_unknown_mode_value_is_refused_not_read_as_contributor(self) -> None:
+        for value in ("maintainers", "maintainer,", "maintaner", "true", "1", ""):
+            with self.subTest(mode=value):
+                repo = self.repo()
+                repo.git("config", "genops.mode", value)
+                asked = repo.privacy("--clone-mode")
+                self.assertEqual(asked.returncode, 2, combined(asked))
+                self.assertEqual(asked.stdout.strip(), "", combined(asked))
+                self.assertIn("maintainer", asked.stderr)
+                self.assertIn("contributor", asked.stderr)
+                scanned = repo.privacy("--staged")
+                self.assertEqual(scanned.returncode, 2, combined(scanned))
+                pushed = repo.push("other", "main")
+                self.assert_refused(pushed, "pre-push:")
+                self.assertEqual(repo.refs_of(repo.other), [])
+
+    def test_contributor_may_be_set_explicitly_in_any_case(self) -> None:
+        repo = self.repo()
+        repo.git("config", "genops.mode", "Contributor")
+        asked = repo.privacy("--clone-mode")
+        self.assertEqual((asked.returncode, asked.stdout.strip()), (0, "contributor"),
+                         combined(asked))
+        pushed = repo.push("other", "main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
+        self.assertEqual(repo.refs_of(repo.other), ["refs/heads/main"])
+
     def test_clone_mode_is_a_mode_of_its_own(self) -> None:
         repo = self.repo()
         result = repo.privacy("--clone-mode", "--staged")

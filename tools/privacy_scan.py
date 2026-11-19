@@ -255,7 +255,9 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
     None means the key is not set (``git config --get`` exits 1), which is the contributor
     mode. Any other failure (git cannot run, an unreadable configuration) raises ScanError:
     a read that failed is not an answer, and treating it as "not set" would let a maintainer
-    clone drop to the contributor mode.
+    clone drop to the contributor mode. The value is ``maintainer`` or ``contributor`` in any
+    letter case; anything else (a typo such as ``maintaner``, ``true``, an empty value) raises
+    ScanError too, since reading it as the default would switch the maintainer checks off.
     """
     target = cwd or Path.cwd()
     try:
@@ -272,14 +274,25 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
     if done.returncode != 0:
         detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
         raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: git config failed: {detail}")
-    return done.stdout.decode("utf-8", "replace").strip().lower() or None
+    value = done.stdout.decode("utf-8", "replace").strip().lower()
+    if value not in (MAINTAINER_MODE_VALUE, CONTRIBUTOR_MODE_VALUE):
+        raise ScanError(
+            f"{MAINTAINER_MODE_CONFIG_KEY} is set to a value this scanner does not know; "
+            f"set it to '{MAINTAINER_MODE_VALUE}' or '{CONTRIBUTOR_MODE_VALUE}' (any letter case), "
+            f"or unset it for the contributor mode"
+        )
+    return value
 
 
 def is_maintainer_required(cwd: Path | None = None) -> bool:
-    """True when strict maintainer private-rule enforcement is active."""
+    """True when strict maintainer private-rule enforcement is active.
+
+    The configuration is read even when the environment switch is on, so a value the scanner
+    does not know is refused in every case."""
+    mode = read_clone_mode(cwd)
     if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
         return True
-    return read_clone_mode(cwd) == MAINTAINER_MODE_VALUE
+    return mode == MAINTAINER_MODE_VALUE
 
 
 def load_rules_detailed(

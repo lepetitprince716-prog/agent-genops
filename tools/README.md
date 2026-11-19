@@ -48,7 +48,7 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 | `--clone-mode` | print `maintainer` or `contributor` and exit; the hooks act on this answer |
 | `--redact-stream` | read lines from stdin and print them with sensitive paths redacted |
 
-The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set. Any other value, or none, is `contributor`.
+The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set, and `contributor` when the key is `contributor` or not set. Any other value is refused (exit 2) by the scanner and so by every hook.
 
 Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations look like `docs/a.md:12`, `blob 1a2b3c4d5e6f docs/a.md:12` (history), `commit 1a2b3c4d5e6f author:1` or `message:3` (annotated tags say `tag`), and `identity author:1`. Images report line 1. The guard fails closed: a file it cannot read or decode is a finding.
 
@@ -214,7 +214,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `--clone-mode` | 打印 `maintainer` 或 `contributor` 然后退出；hook 按这个答案行事 |
 | `--redact-stream` | 从标准输入读行，把敏感路径脱敏后打印 |
 
-克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；其他值或没设，都是 `contributor`。
+克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；值是 `contributor` 或没设，是 `contributor`；其他值扫描器一律拒绝（exit 2），所以每个 hook 都拒绝。
 
 退出码：`0` 干净，`1` 有发现，`2` 用法错误或内部错误。位置写法见上面的英文部分，图片一律报第 1 行。宁可误报也不漏报：读不了或解不开的文件，本身就算一条发现。
 
