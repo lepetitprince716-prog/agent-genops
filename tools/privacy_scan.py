@@ -68,6 +68,17 @@ MAX_INFLATED = 64 * 1024 * 1024
 
 LFS_HEADER = b"version https://git-lfs.github.com/spec/v1"
 
+# The head each allowed image suffix must start with: alternatives of (offset, bytes) pairs, from
+# the format specifications (PNG, JPEG SOI marker, GIF87a/GIF89a, RIFF....WEBP, ICO).
+IMAGE_SIGNATURES: dict[str, tuple[tuple[tuple[int, bytes], ...], ...]] = {
+    ".png": (((0, PNG_SIGNATURE),),),
+    ".jpg": (((0, b"\xff\xd8\xff"),),),
+    ".jpeg": (((0, b"\xff\xd8\xff"),),),
+    ".gif": (((0, b"GIF87a"),), ((0, b"GIF89a"),)),
+    ".webp": (((0, b"RIFF"), (8, b"WEBP")),),
+    ".ico": (((0, b"\x00\x00\x01\x00"),),),
+}
+
 WHY_GENERATION = (
     "image carries generation metadata (prompt, workflow or parameters); "
     "strip it or keep the image out of the repository"
@@ -82,6 +93,10 @@ WHY_BAD_ENCODING = (
 )
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
+WHY_IMAGE_HEADER = (
+    "file does not start with the header of the image format its suffix names (or the suffix "
+    "has no known header), so it is not read as that image"
+)
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
 WHY_SUBMODULE = (
     "git submodule (gitlink 160000) points to external commits whose content was not scanned"
@@ -560,17 +575,32 @@ def read_png(data: bytes) -> tuple[list[str], bool]:
     return values + views, generated or any(map(has_class_type, views))
 
 
+def has_image_header(suffix: str, data: bytes) -> bool:
+    """True when ``data`` starts with the header of the format ``suffix`` names."""
+    return any(
+        all(data[offset : offset + len(magic)] == magic for offset, magic in alternative)
+        for alternative in IMAGE_SIGNATURES.get(suffix, ())
+    )
+
+
 def scan_image(data: bytes, rules: RuleSet, suffix: str) -> list[Hit]:
-    """Scan an image with an allowed suffix; PNG text is decoded, other formats are read raw."""
+    """Scan an image with an allowed suffix.
+
+    The head must match the suffix's format. PNG text chunks are decoded and its other chunks
+    read raw, pixel chunks excepted: compressed pixels match a short rule by chance (seven of
+    the twelve PNGs in this repository did). A PNG that does not parse is read raw whole, as
+    other formats are."""
+    hits = [] if has_image_header(suffix, data) else [Hit(1, "image_header", WHY_IMAGE_HEADER)]
+    values = raw_views(data)
     if data.startswith(PNG_SIGNATURE):
         try:
             values, generated = read_png(data)
         except (ValueError, struct.error, zlib.error):
-            return [Hit(1, "undecodable", WHY_BAD_IMAGE)]
+            generated = False
+            hits.append(Hit(1, "undecodable", WHY_BAD_IMAGE))
     else:
-        values = raw_views(data)
         generated = any(map(looks_generated, values))
-    hits = scan_values(values, rules, suffix)
+    hits += scan_values(values, rules, suffix)
     if generated:
         hits.append(Hit(1, "generation_metadata", WHY_GENERATION))
     return hits
@@ -587,8 +617,12 @@ def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        return binary + [Hit(1, "undecodable", WHY_NOT_UTF8)]
-    return binary or scan_text(text, rules, suffix)
+        binary.append(Hit(1, "undecodable", WHY_NOT_UTF8))
+    else:
+        if not binary:
+            return scan_text(text, rules, suffix)
+    # Refused already; the rules still read the raw bytes, so the report names what is inside.
+    return binary + scan_values(raw_views(data), rules, suffix)
 
 
 # --- git ---------------------------------------------------------------------------

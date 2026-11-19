@@ -241,37 +241,56 @@ peel() {
   done
 }
 
-# scan_binary staged|unstaged: Betterleaks' git mode prints "Binary files differ" for a path git
-# treats as binary, by content (a NUL byte) or by a committed .gitattributes (-diff, binary), and
-# so reads none of it; its own git run ignores GIT_ATTR_SOURCE, --text in --log-opts and the
-# clone's info/attributes. Every such path of the diff is read again here, through stdin: a dir
-# scan would skip a file by name (images, vendored folders) or by a head that looks like an
-# executable, a document or an archive, with or without NUL bytes (checked with 1.10.1). Stdin
-# sniffs only the head of the stream (checked up to 10 MiB in), so the stream starts with an
-# empty line. Findings here carry no path; a false positive is allowed inline or by its
-# ":rule:line" fingerprint, the line counted in this stream.
+# scan_binary staged | unstaged | log REV-ARGS... | file PATH: read again, through stdin, what
+# Betterleaks' own scan skips. Its git mode prints "Binary files differ" for content git treats as
+# binary (a NUL byte in the first 8000 bytes, or -diff or binary in a committed .gitattributes,
+# which its own git run reads whatever GIT_ATTR_SOURCE, --text in --log-opts or the clone's
+# info/attributes say), and its default path allowlist skips files named like images in the git and
+# dir modes alike (checked with 1.10.1). So the selection is: binary by git's rule, or a suffix in
+# allowed_binary_suffixes of the public privacy rules (the only binary content the privacy scan
+# admits). A dir scan is no way round: it also skips a file by a head that looks like an executable,
+# a document or an archive. Stdin sniffs only the head of the stream (checked up to 10 MiB in), so
+# the stream starts with an empty line. Findings here carry no path; a false positive is allowed
+# inline or by its ":rule:line" fingerprint, the line counted in this stream. The log form takes
+# every blob the walked commits add or change (merges against their first parent), once each.
 scan_binary() {
   python3 -I -B -c '
-import os, subprocess, sys
+import json, os, subprocess, sys
 
-mode, stream = sys.argv[1:3]
+stream, rules, mode, *rest = sys.argv[1:]
+with open(rules, "rb") as handle:
+    images = tuple(s.lower() for s in json.load(handle)["allowed_binary_suffixes"])
 git = ["git", "--no-replace-objects"]
-cmd = git + ["diff", "--numstat", "-z", "--no-renames", "--no-textconv", "--no-ext-diff",
-             "--ignore-submodules=all", "--diff-filter=ACMT"]
-if mode == "staged":
-    cmd.append("--cached")
-listing = subprocess.run(cmd, check=True, stdout=subprocess.PIPE).stdout
-with open(stream, "wb") as out:
-    out.write(b"\n")
-    for record in listing.split(b"\0"):
+
+def wanted(path, data):
+    return b"\0" in data[:8000] or os.path.splitext(os.fsdecode(path))[1].lower() in images
+
+def run(args, data=None):
+    return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
+
+def batch(oids):
+    out = run(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
+    pos = 0
+    for _ in oids:
+        header, _, out_rest = out[pos:].partition(b"\n")
+        size = int(header.split()[2])
+        start = pos + len(header) + 1
+        yield out[start : start + size]
+        pos = start + size + 1
+
+found = []
+if mode in ("staged", "unstaged"):
+    cmd = ["diff", "--numstat", "-z", "--no-renames", "--no-textconv", "--no-ext-diff",
+           "--ignore-submodules=all", "--diff-filter=ACMT"]
+    if mode == "staged":
+        cmd.append("--cached")
+    for record in run(cmd).split(b"\0"):
         if not record:
             continue
         added, deleted, path = record.split(b"\t", 2)
-        if added != b"-" or deleted != b"-":
-            continue
+        marked = added == b"-" and deleted == b"-"
         if mode == "staged":
-            data = subprocess.run(git + ["cat-file", "blob", b":0:" + path], check=True,
-                                  stdout=subprocess.PIPE).stdout
+            data = run(["cat-file", "blob", b":0:" + path])
         else:
             local = os.fsdecode(path)
             if os.path.islink(local):
@@ -282,10 +301,33 @@ with open(stream, "wb") as out:
                     data = handle.read()
             else:
                 continue
+        if marked or wanted(path, data):
+            found.append(data)
+elif mode == "log":
+    raw = run(["log", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-merges=first-parent",
+               "--format=", *rest])
+    seen, paths = {}, iter(raw.split(b"\0"))
+    for token in paths:
+        if not token.startswith(b":"):
+            continue
+        path = next(paths)
+        _, new_mode, _, oid, status = token[1:].split(b" ")
+        if new_mode.startswith(b"100") and status[:1] in b"AMT" and oid not in seen:
+            seen[oid] = path
+    oids = list(seen)
+    found = [data for oid, data in zip(oids, batch(oids)) if wanted(seen[oid], data)]
+else:
+    with open(rest[0], "rb") as handle:
+        data = handle.read()
+    if wanted(rest[0].encode(), data):
+        found.append(data)
+with open(stream, "wb") as out:
+    out.write(b"\n")
+    for data in found:
         out.write(data + b"\n")
-' "$1" "$work/binary-stream"
+' "$work/binary-stream" "$here/privacy_rules.json" "$@"
   if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
-    scan "$1 content git treats as binary" stdin <"$work/binary-stream"
+    scan "content Betterleaks skips as binary or by an image name" stdin <"$work/binary-stream"
   fi
 }
 
@@ -348,6 +390,7 @@ case "$mode" in
     ;;
   history)
     scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" "$src"
+    scan_binary log --full-history --all
     g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
     if [ -s "$work/refs" ]; then
       # Refs to commits are covered by the diff walk above; every other ref is peeled.
@@ -369,6 +412,7 @@ case "$mode" in
     if [ -s "$commits" ]; then
       commit=$(cat "$commits")
       scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" "$src"
+      scan_binary log "$commit"
       g rev-list "$commit" >"$work/revs"
       g cat-file --batch <"$work/revs" >>"$content"
     fi
@@ -381,6 +425,7 @@ case "$mode" in
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
       scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" "$src"
+      scan_binary log "$spec"
       g rev-list "$spec" >"$work/revs"
       g cat-file --batch <"$work/revs" >"$content"
       scan "branch commit messages" stdin <"$content"
@@ -395,6 +440,7 @@ case "$mode" in
         printf '%s\n' "$link_text" | scan "symlink target" stdin || rc_all=1
       elif [ -f "$target" ]; then
         scan "working-tree file" dir "$target" || rc_all=1
+        scan_binary file "$target" || rc_all=1
       else
         echo "secret_scan: unreadable or missing file: $target" >&2
         exit 2

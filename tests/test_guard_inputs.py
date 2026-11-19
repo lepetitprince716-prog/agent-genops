@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import json
 import os
+import struct
 import sys
 import unittest
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -440,6 +442,151 @@ class MessageEncodingTests(unittest.TestCase):
         for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
             with self.subTest(args=args):
                 refused_by_secret_scan(self, self.repo.secret(*args), token)
+
+
+def png_chunk(kind: bytes, payload: bytes) -> bytes:
+    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
+
+
+def png_image(pixels: bytes | None = None) -> bytes:
+    """A 1x1 grey PNG; ``pixels`` replaces the IDAT payload (it is never inflated by the scan)."""
+    idat = pixels if pixels is not None else zlib.compress(b"\x00\x80")
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+        + png_chunk(b"IDAT", idat)
+        + png_chunk(b"IEND", b"")
+    )
+
+
+# The head of each allowed image format, written from the format specifications (PNG, JFIF,
+# GIF89a, RIFF/WEBP, ICO), followed by a few bytes of body. Built here, not recorded from files.
+IMAGE_HEADS = {
+    ".png": png_image(),
+    ".jpg": b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9",
+    ".jpeg": b"\xff\xd8\xff\xdb\x00\x43\x00\xff\xd9",
+    ".gif": b"GIF89a\x01\x00\x01\x00\x00\x00\x00;",
+    ".webp": b"RIFF\x1a\x00\x00\x00WEBPVP8L\x0d\x00\x00\x00\x2f\x00\x00\x00\x10",
+    ".ico": b"\x00\x00\x01\x00\x01\x00\x01\x01\x00\x00\x01\x00\x20\x00",
+}
+
+
+def lines_naming(output: str, name: str, rule: str) -> list[str]:
+    return [line for line in output.splitlines() if name in line and rule in line]
+
+
+class ImageAndBinaryTests(unittest.TestCase):
+    """Bytes behind an image suffix or a NUL byte are read by both scanners.
+
+    Betterleaks skips a file git treats as binary (a NUL byte) and, by its default path
+    allowlist, any file named like an image, in its git and dir modes alike. The privacy
+    scanner admits binary content only under an image suffix and read PNG pixel chunks not at
+    all. So an image suffix has to match the format's header, and both scanners read the raw
+    bytes of what they cannot parse as text.
+    """
+
+    def setUp(self) -> None:
+        self.repo = Repo(self)
+        public = json.loads((Path(__file__).resolve().parent.parent / "tools" / "privacy_rules.json").read_text())
+        self.suffixes = public["allowed_binary_suffixes"]
+        self.assertEqual(sorted(self.suffixes), sorted(IMAGE_HEADS))
+
+    def add_bytes(self, name: str, data: bytes) -> None:
+        (self.repo.path / name).write_bytes(data)
+        self.repo.git("add", name)
+
+    def test_an_image_suffix_needs_the_header_of_its_format(self) -> None:
+        for suffix in self.suffixes:
+            with self.subTest(suffix=suffix):
+                name = f"right{suffix}"
+                self.add_bytes(name, IMAGE_HEADS[suffix])
+                scanned = self.repo.privacy("--staged")
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
+                for label, data in (("text", b"plain text\n"), ("other", IMAGE_HEADS[".gif" if suffix != ".gif" else ".png"])):
+                    wrong = f"wrong-{label}{suffix}"
+                    self.add_bytes(wrong, data)
+                    scanned = self.repo.privacy("--staged")
+                    self.assertEqual(scanned.returncode, 1, combined(scanned))
+                    self.assertTrue(lines_naming(combined(scanned), wrong, "image_header"), combined(scanned))
+                    self.repo.git("rm", "-q", "--cached", wrong)
+        before = self.repo.git("rev-parse", "HEAD")
+        self.add_bytes("fake.jpg", b"not a picture\n")
+        committed = self.repo.run("git", "commit", "-q", "-m", "picture")
+        self.assertNotEqual(committed.returncode, 0, combined(committed))
+        self.assertIn("image_header", combined(committed))
+        self.assertEqual(self.repo.git("rev-parse", "HEAD"), before)
+
+    def test_private_rules_read_the_raw_bytes_in_every_mode(self) -> None:
+        samples = {
+            "data.bin": b"\x00\x01 " + MARKER.encode() + b" \x00",
+            "broken.png": b"\x89PNG\r\n\x1a\n\x00\x00\x00\x05IDAT " + MARKER.encode(),
+            "notes.txt": b"caf\xe9 " + MARKER.encode() + b"\n",
+        }
+        for name, data in samples.items():
+            self.add_bytes(name, data)
+        def check(*args: str) -> None:
+            scanned = self.repo.privacy(*args)
+            self.assertEqual(scanned.returncode, 1, combined(scanned))
+            for name in samples:
+                self.assertTrue(
+                    lines_naming(combined(scanned), name, "synthetic_private_marker"), (name, combined(scanned))
+                )
+        check("--staged")
+        check(*samples)
+        self.repo.unchecked_commit("samples")
+        for args in (("--rev", "HEAD"), ("--range", "HEAD~1..HEAD"), ("--history",), ("--tracked",)):
+            with self.subTest(args=args):
+                check(*args)
+        for name, data in samples.items():
+            (self.repo.path / name).write_bytes(data + b"\x00")
+        check("--unstaged")
+        pushed = self.repo.push("main")
+        self.assertNotEqual(pushed.returncode, 0, combined(pushed))
+
+    def secret_refused_everywhere(self, name: str, data: bytes, token: str) -> None:
+        self.add_bytes(name, data)
+        refused_by_secret_scan(self, self.repo.secret("staged"), token)
+        refused_by_secret_scan(self, self.repo.secret("files", name), token)
+        before = self.repo.git("rev-parse", "HEAD")
+        committed = self.repo.run("git", "commit", "-q", "-m", "picture")
+        self.assertNotEqual(committed.returncode, 0, combined(committed))
+        self.assertEqual(self.repo.git("rev-parse", "HEAD"), before)
+        self.repo.unchecked_commit("picture")
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                refused_by_secret_scan(self, self.repo.secret(*args), token)
+        (self.repo.path / name).write_bytes(data.replace(token.encode(), registry_token().encode()))
+        refused_by_secret_scan(self, self.repo.secret("unstaged"), token)
+        pushed = self.repo.push("main")
+        refused_by_secret_scan(self, pushed, token)
+        self.assertEqual(
+            before, self.repo.git("--git-dir", str(self.repo.remote), "rev-parse", "main")
+        )
+
+    def test_a_token_in_an_image_with_a_nul_byte_is_found_in_every_mode(self) -> None:
+        token = registry_token()
+        data = IMAGE_HEADS[".jpg"][:4] + b"\x00\nkey = " + token.encode() + b"\n"
+        self.secret_refused_everywhere("pic.jpg", data, token)
+
+    def test_a_token_in_an_image_without_a_nul_byte_is_found_in_every_mode(self) -> None:
+        token = registry_token()
+        data = b"GIF89a\nkey = " + token.encode() + b"\n"
+        self.secret_refused_everywhere("pic.gif", data, token)
+
+    def test_real_images_stay_clean(self) -> None:
+        for suffix in self.suffixes:
+            self.add_bytes(f"img{suffix}", IMAGE_HEADS[suffix])
+        self.repo.unchecked_commit("images")
+        for args in (("--staged",), ("--rev", "HEAD"), ("--history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.privacy(*args)
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
+        for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
+            with self.subTest(args=args):
+                scanned = self.repo.secret(*args)
+                self.assertEqual(scanned.returncode, 0, combined(scanned))
+        pushed = self.repo.push("main")
+        self.assertEqual(pushed.returncode, 0, combined(pushed))
 
 
 if __name__ == "__main__":

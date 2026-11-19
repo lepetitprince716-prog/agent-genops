@@ -66,7 +66,8 @@ Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations loo
 | `tunnel_host` | hosts under ts.net, trycloudflare.com, cfargotunnel.com and ngrok |
 | `lan_hostname` | `<name>.local`, `.lan`, `.internal`, `.home.arpa` |
 | `generation_metadata` | PNG text chunks `prompt`, `workflow`, `parameters`, `Comment`, `Description`, or a ComfyUI graph; raw-byte check for JPEG, WEBP, GIF |
-| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes` |
+| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes`; the rules still read its raw bytes, as they do for a file that is not valid UTF-8 |
+| `image_header` | a file with an image suffix that does not start with that format's header (PNG signature, JPEG `FF D8 FF`, `GIF87a`/`GIF89a`, `RIFF`…`WEBP`, ICO `00 00 01 00`) |
 | `undecodable` | a file that is not valid UTF-8, a commit message not valid in its encoding (the commit's `encoding` header, `i18n.commitEncoding` for the commit-msg hook, else UTF-8), or a file, PNG chunk or git object that cannot be read or parsed |
 
 Author, committer and tagger emails (`--identity`, `--history`) face a stricter test than `email`: only `allowed_emails` patterns pass.
@@ -102,7 +103,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 
 | Mode | Scans |
 | --- | --- |
-| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`), which Betterleaks' diff walk skips, is read again through stdin, so its findings carry no path and its fingerprint is `:rule:line` |
+| `staged` | the index; content git treats as binary (a NUL byte, or `-diff` or `binary` in `.gitattributes`) and files with a suffix in `allowed_binary_suffixes`, which Betterleaks skips (the second by its default path allowlist), are read again through stdin, so their findings carry no path and the fingerprint is `:rule:line`; `rev`, `range`, `history` and `files` do the same for the blobs and files they cover |
 | `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
 | `message FILE` | one commit message file |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
@@ -232,7 +233,8 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | `tunnel_host` | ts.net、trycloudflare.com、cfargotunnel.com、ngrok 下的主机名 |
 | `lan_hostname` | `<name>.local`、`.lan`、`.internal`、`.home.arpa` |
 | `generation_metadata` | PNG 文本块 `prompt`、`workflow`、`parameters`、`Comment`、`Description`，或 ComfyUI 节点图；JPEG、WEBP、GIF 查原始字节 |
-| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件 |
+| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件；规则仍按原始字节读它，不是合法 UTF-8 的文件也一样 |
+| `image_header` | 带图片后缀、开头却不是该格式文件头的文件（PNG 签名、JPEG `FF D8 FF`、`GIF87a`/`GIF89a`、`RIFF`…`WEBP`、ICO `00 00 01 00`） |
 | `undecodable` | 不是合法 UTF-8 的文件，按自己的编码（提交的 `encoding` 头；commit-msg 钩子看 `i18n.commitEncoding`；都没有就是 UTF-8）解不开的提交说明，或读不了、解析不了的文件、PNG 数据块、git 对象 |
 
 作者、提交者和标签者的邮箱（`--identity`、`--history`）要过更严的一关：只有匹配 `allowed_emails` 的才放行。
@@ -257,7 +259,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 
 | 模式 | 扫描对象 |
 | --- | --- |
-| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）Betterleaks 的 diff 扫描会跳过，这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号` |
+| `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节，或 `.gitattributes` 里标了 `-diff`、`binary`）和后缀在 `allowed_binary_suffixes` 里的文件 Betterleaks 会跳过（后者按它默认的路径白名单），这部分另经 stdin 再读一遍，所以命中不带路径，指纹是 `:规则:行号`；`rev`、`range`、`history`、`files` 对各自覆盖的 blob 和文件同样处理 |
 | `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
 | `message FILE` | 一个提交说明文件 |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
