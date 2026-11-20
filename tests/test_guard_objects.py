@@ -414,20 +414,23 @@ class BinaryLogFormTests(unittest.TestCase):
         # The working tree is left as it is: this file system may refuse a name not in UTF-8.
         repo.git("update-ref", "refs/heads/main", merge.decode())
 
-    def test_awkward_names_in_a_merge_are_read_once(self) -> None:
+    def test_awkward_names_in_a_merge_are_reported_with_stable_paths(self) -> None:
         repo = Repo(self)
         token = registry_token()
         self.merge_adding(repo, b"\x00\x01\nkey = " + token.encode() + b"\n")
+        head = repo.git("rev-parse", "HEAD")
         for args in (("rev", "HEAD"), ("range", "HEAD~1..HEAD"), ("history",)):
             with self.subTest(args=args):
                 result = repo.secret(*args)
                 self.assertNotEqual(result.returncode, 0, combined(result))
                 self.assertNotEqual(result.returncode, 2, combined(result))
                 self.assertNotIn(token, combined(result))
-                # One blob under four names: one finding, from the pass over binary content.
-                pathless = [line for line in combined(result).splitlines()
-                            if line.startswith("  ") and " :" in line]
-                self.assertEqual(len(pathless), 1, combined(result))
+                # One blob under four awkward names: four per-path findings carrying the merge
+                # commit and local line 2, and no pathless " :line" findings.
+                findings = [line for line in combined(result).splitlines() if line.startswith("  ")]
+                self.assertEqual(len(findings), len(self.NAMES), combined(result))
+                self.assertFalse(any(" :" in line for line in findings), combined(result))
+                self.assertTrue(all(f":2 {head}" in line for line in findings), combined(result))
 
     def test_awkward_names_in_a_clean_merge_pass(self) -> None:
         repo = Repo(self)
@@ -484,20 +487,21 @@ class ExplicitIgnoreFileTests(unittest.TestCase):
         message = self.repo.base / "msg.txt"
         message.write_text(f"token {registry_token()}\n")
         self.repo.git("tag", "-a", "v9", "-F", str(message), "HEAD~1")
+        tag_oid = self.repo.git("rev-parse", "v9")
         report = self.repo.base / "stdin.json"
         self.repo.run(
             "betterleaks", "stdin", "--redact", "--no-banner", "--log-level", "error",
             "-f", "json", "-r", str(report), stdin=message.read_text(),
         )
-        # A stdin finding's fingerprint is ":<rule>:<line>"; cover every line the message stream
-        # the wrapper builds could put the token on.
         rules = {item["RuleID"] for item in json.loads(report.read_text())}
         self.assertTrue(rules)
-        stdin_prints = [f":{rule}:{line}" for rule in rules for line in range(1, 400)]
+        tag_prints = [f"{tag_oid}:.git/tag:{rule}:{line}" for rule in rules for line in range(1, 20)]
         (self.repo.path / ".betterleaksignore").write_text(
-            "\n".join(self.prints + stdin_prints) + "\n"
+            "\n".join(self.prints + tag_prints) + "\n"
         )
         self.repo.git("checkout", "-q", "HEAD~1")  # the token file is gone from disk
+        # Sanity check: without SECRET_SCAN_IGNORE_PATH, the tag-scoped entry covers v9.
+        self.assertEqual(self.repo.secret("rev", "v9").returncode, 0)
         for args in (("rev", "v9"), ("history",)):
             with self.subTest(args=args):
                 self.assert_refused(self.repo.secret(*args, extra_env=self.explicit(self.empty)))
@@ -517,24 +521,32 @@ class ExplicitIgnoreFileTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, combined(result))
 
     def test_working_tree_ignore_file_does_not_apply_to_message_or_files(self) -> None:
-        # A commit message and a symlink's target text go through stdin, where Betterleaks
-        # applies the ignore file of its current directory next to -i; cover every line a stdin
-        # finding could sit on, and check first that it does hide them without a named file.
+        # Symlink target findings use the stable path fingerprint "link.txt:<rule>:1"; bare
+        # ":<rule>:<line>" entries never apply, and uncommitted message mode never applies
+        # .betterleaksignore at all. With SECRET_SCAN_IGNORE_PATH pointing to an empty file,
+        # the working-tree .betterleaksignore does not cover link.txt either.
         token = registry_token()
         rules = {fp.split(":")[-2] for fp in self.prints}
-        (self.repo.path / ".betterleaksignore").write_text(
-            "\n".join(f":{rule}:{line}" for rule in rules for line in range(1, 50)) + "\n"
-        )
+        bare_and_link = [f":{rule}:{line}" for rule in rules for line in range(1, 10)]
+        bare_and_link += [f"link.txt:{rule}:1" for rule in rules]
+        (self.repo.path / ".betterleaksignore").write_text("\n".join(bare_and_link) + "\n")
         message = self.repo.base / "msg.txt"
         message.write_text(f"subject\n\ntoken {token}\n")
         (self.repo.path / "link.txt").symlink_to(f"key-{token}")
-        for args in (("message", str(message)), ("files", "link.txt")):
-            with self.subTest(args=args):
-                without = self.repo.secret(*args)
-                self.assertEqual(without.returncode, 0, combined(without))
-                result = self.repo.secret(*args, extra_env=self.explicit(self.empty))
-                self.assert_refused(result)
-                self.assertNotIn(token, combined(result))
+
+        # Symlink target: exempted by link.txt:<rule>:1 without explicit ignore, refused with empty.
+        without_link = self.repo.secret("files", "link.txt")
+        self.assertEqual(without_link.returncode, 0, combined(without_link))
+        with_empty_link = self.repo.secret("files", "link.txt", extra_env=self.explicit(self.empty))
+        self.assert_refused(with_empty_link)
+        self.assertNotIn(token, combined(with_empty_link))
+
+        # Uncommitted message: never exempted by .betterleaksignore with or without explicit ignore.
+        for extra in ({}, self.explicit(self.empty)):
+            with self.subTest(extra=bool(extra)):
+                res = self.repo.secret("message", str(message), extra_env=extra)
+                self.assert_refused(res)
+                self.assertNotIn(token, combined(res))
 
     def test_unstaged_mode_refuses_a_named_ignore_file(self) -> None:
         result = self.repo.secret("unstaged", extra_env=self.explicit(self.empty))
