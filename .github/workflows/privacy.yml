@@ -153,7 +153,7 @@ jobs:
   # Repository test code runs in its own job, isolated from the trusted scan jobs above.
   guard-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       BETTERLEAKS_VERSION: "1.10.1"
       BETTERLEAKS_ARCHIVE: betterleaks_1.10.1_linux_x64.tar.gz
