@@ -14,9 +14,9 @@
 #                                            ends in, a tree or a blob
 #   sh tools/secret_scan.sh range BASE..HEAD commits in a range (merges against their first
 #                                            parent), plus their messages
-#   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed)
-#                                            (a file Betterleaks' dir mode skips by its head is
-#                                            read again from a copy with an empty first line)
+#   sh tools/secret_scan.sh files FILE...    specific working-tree files (symlinks not followed);
+#                                            files Betterleaks' dir mode skips by head or as binary
+#                                            go through the secondary pass with exact line numbers
 #   sh tools/secret_scan.sh ignore-check --index | OBJECT
 #                                            exit 1 unless the working tree's .betterleaksignore
 #                                            and .gitleaksignore are byte for byte the versions in
@@ -25,13 +25,16 @@
 #
 # Betterleaks itself scans diffs only and shows a merge commit no diff, so content that only a
 # merge adds would pass unseen; every diff walk here asks git for merges against their first
-# parent. Tag objects, whole commit objects (every header and the message) and directly
-# referenced trees and blobs go through stdin.
+# parent. Content Betterleaks skips as binary (plus printable-string extraction and PNG text
+# chunks), tag objects, whole commit objects (every header and the message), symlink targets, and
+# directly referenced trees and blobs go through a secondary stdin pass that maps every finding
+# back to a stable per-file or per-object fingerprint and matches the active ignore file itself.
+# Bare pathless ":rule:line" fingerprints are never honoured.
 #
 # Without SECRET_SCAN_IGNORE_PATH, Betterleaks applies the ignore files it finds on disk at the root
-# of its source (and, for stdin, in the current directory), whatever the scanned commit holds. A
-# hook that scanned with a working-tree copy the commit does not carry would pass content under an
-# exemption no reviewer sees; ignore-check is how the hooks refuse that.
+# of its source, whatever the scanned commit holds. A hook that scanned with a working-tree copy the
+# commit does not carry would pass content under an exemption no reviewer sees; ignore-check is how
+# the hooks refuse that.
 #
 # Optional environment controls:
 #   SECRET_SCAN_IGNORE_PATH   explicit .betterleaksignore/.gitleaksignore file or directory. When
@@ -134,10 +137,6 @@ if [ -n "$ignore_path" ]; then
       printf 'gitdir: %s\n' "$gitdir" >"$iso/.git"
       src=$iso
       ;;
-    message | files)
-      iso="$work/src"
-      mkdir "$iso"
-      ;;
   esac
 fi
 
@@ -199,127 +198,326 @@ scan() {
   fi
 }
 
-content="$work/content"
-commits="$work/commits"
-: >"$content"
-: >"$commits"
-
-# peel OID: append every tag object above OID to $content, then sort out what the chain ends in:
-# a commit id goes to $commits, a tree's blobs and a blob's bytes go to $content. Nothing is
-# passed as clean without being read; an unreadable object is a usage error (exit 2).
-peel() {
-  oid=$1
-  depth=0
-  while :; do
-    type=$(g cat-file -t "$oid" 2>/dev/null) || {
-      echo "secret_scan: cannot read object $oid" >&2
-      exit 2
-    }
-    case "$type" in
-      tag)
-        g cat-file tag "$oid" >"$work/tag"
-        cat "$work/tag" >>"$content"
-        printf '\n' >>"$content"
-        oid=$(sed -n '1s/^object //p' "$work/tag")
-        depth=$((depth + 1))
-        if [ -z "$oid" ] || [ "$depth" -gt 64 ]; then
-          echo "secret_scan: malformed or too deeply nested tag object" >&2
-          exit 2
-        fi
-        ;;
-      commit)
-        printf '%s\n' "$oid" >>"$commits"
-        return 0
-        ;;
-      tree)
-        g ls-tree -r "$oid" >"$work/tree"
-        awk '$2 == "blob" { print $3 }' "$work/tree" >"$work/blobs"
-        if [ -s "$work/blobs" ]; then
-          g cat-file --batch <"$work/blobs" >>"$content"
-        fi
-        return 0
-        ;;
-      blob)
-        g cat-file blob "$oid" >>"$content"
-        printf '\n' >>"$content"
-        return 0
-        ;;
-      *)
-        echo "secret_scan: unsupported object type '$type' for $oid" >&2
-        exit 2
-        ;;
-    esac
-  done
-}
-
-# scan_binary staged | unstaged | log REV-ARGS... | file PATH: read again, through stdin, what
-# Betterleaks' own scan skips. Its git mode prints "Binary files differ" for content git treats as
-# binary: a NUL byte in the first 8000 bytes, or binary or -diff in an attributes file. Its git
-# run works in a scratch clone of its own, so which attributes files it reads is not the clone's
-# set (with 1.10.1 it reads $HOME/.config/git/attributes but not info/attributes or a committed
-# .gitattributes). So every form selects what git itself, run here, calls binary (a "-" in
-# --numstat, whichever attributes file says so), plus any content with a NUL byte in its first
-# 8000 bytes. A dir scan is no way round: it also skips a file by a head that looks like an
-# executable, a document or an archive. Stdin sniffs only the head of the stream (checked up to
-# 10 MiB in), so the stream starts with an empty line. Findings here carry no path, and their line
-# is counted in a stream of whatever other content the mode covers: a ":rule:line" fingerprint
-# accepted for one file would cover a token in another, and goes stale when an unrelated file
-# joins the stream. So no ignore file and no inline allow comment applies to this pass; a false
-# positive in binary content is fixed in the file. The log form takes every blob the walked
-# commits add or change (merges against their first parent), once each. A git command that
-# fails, or output that does not parse, fails the scan.
-scan_binary() {
+# scan_secondary LABEL KIND [ARGS...]: run Betterleaks stdin with stable per-file / per-object
+# fingerprints, printable-byte isolation and PNG text-chunk decoding (tEXt/zTXt/iTXt), and
+# wrapper-side ignore-file matching. Betterleaks itself runs from an empty directory with an
+# empty ignore file so bare ":rule:line" fingerprints can never apply.
+#
+# KINDS:
+#   binary staged | unstaged | log REV-ARGS... | file PATH
+#   objects history | rev OBJECT | range SPEC
+#   symlink PATH
+#   message PATH
+scan_secondary() {
+  label=$1
+  shift
+  mkdir -p "$work/sec-empty"
+  : >"$work/sec-empty.ignore"
+  out_file="$work/sec-findings"
+  : >"$out_file"
+  rc=0
   python3 -I -B -c '
-import os, subprocess, sys
+import bisect, json, os, struct, subprocess, sys, zlib
 
-stream, mode, *rest = sys.argv[1:]
-git = ["git", "--no-replace-objects"]
+config_path, empty_dir, empty_ignore, ignore_path, ignore_allow_flag, out_file, kind, *args = sys.argv[1:]
+ignore_allow = ignore_allow_flag == "1"
+git_cmd = ["git", "--no-replace-objects"]
 diff_opts = ["--no-renames", "--no-relative", "--no-textconv", "--no-ext-diff"]
+PNG_SIG = b"\x89PNG\r\n\x1a\n"
+MAX_INFLATED = 64 * 1024 * 1024
+MAX_BATCH_BYTES = 32 * 1024 * 1024
+PRINTABLE_TRANS = bytes(b if (b in (9, 10) or 32 <= b <= 126) else 32 for b in range(256))
+SYNTHETIC_PREFIXES = (".git/commit:", ".git/tag:", ".git/blob:", ".git/blob#")
 
-def fail(why):
-    sys.stderr.write(f"secret_scan: binary content: {why}; nothing was passed as clean\n")
-    sys.exit(1)
+def fail(why, code=1):
+    prefix = "binary content" if kind == "binary" else kind
+    sys.stderr.write(f"secret_scan: {prefix}: {why}; nothing was passed as clean\n")
+    sys.exit(code)
 
-def wanted(data):
-    return b"\0" in data[:8000]
+def run_git(gargs, data=None, allow_fail=False):
+    proc = subprocess.run(git_cmd + gargs, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0 and not allow_fail:
+        fail(f"git {gargs[0]} exited {proc.returncode}")
+    return proc
+
+def git_top(required=True):
+    proc = run_git(["rev-parse", "--show-toplevel"], allow_fail=not required)
+    if proc.returncode != 0:
+        return None
+    top = proc.stdout.removesuffix(b"\n")
+    if not top:
+        if required:
+            fail("git rev-parse --show-toplevel printed nothing")
+        return None
+    return os.fsdecode(top)
+
+def sanitize_printable(data):
+    return data.translate(PRINTABLE_TRANS)
+
+def is_valid_utf8(data):
+    try:
+        data.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+def needs_binary_pass(data):
+    return b"\0" in data or data.startswith(PNG_SIG) or not is_valid_utf8(data)
+
+def inflate_limited(raw, limit):
+    if limit <= 0:
+        fail("PNG compressed text chunk exceeds size limit")
+    inflater = zlib.decompressobj()
+    try:
+        out = inflater.decompress(raw, limit + 1)
+    except zlib.error:
+        fail("cannot decompress PNG text chunk")
+    if len(out) > limit or not inflater.eof:
+        fail("PNG compressed text chunk is truncated or exceeds size limit")
+    return out
+
+def extract_png_text(data):
+    if not data.startswith(PNG_SIG):
+        return None
+    pos = len(PNG_SIG)
+    total_inflated = 0
+    parts = []
+    while pos < len(data):
+        if pos + 8 > len(data):
+            break
+        length, chunk_kind = struct.unpack_from(">I4s", data, pos)
+        start = pos + 8
+        end = start + length + 4
+        if end > len(data):
+            if chunk_kind in (b"tEXt", b"zTXt", b"iTXt"):
+                fail("truncated PNG text chunk")
+            break
+        payload = data[start : start + length]
+        if chunk_kind == b"tEXt":
+            key, sep, text = payload.partition(b"\0")
+            if not sep:
+                fail("malformed PNG tEXt chunk")
+            parts.extend([key, text])
+        elif chunk_kind == b"zTXt":
+            key, sep, rest = payload.partition(b"\0")
+            if not sep or rest[:1] != b"\0":
+                fail("malformed PNG zTXt chunk")
+            inflated = inflate_limited(rest[1:], MAX_INFLATED - total_inflated)
+            total_inflated += len(inflated)
+            parts.extend([key, inflated])
+        elif chunk_kind == b"iTXt":
+            key, sep, rest = payload.partition(b"\0")
+            if not sep or len(rest) < 2:
+                fail("malformed PNG iTXt chunk")
+            comp_flag, comp_method = rest[0], rest[1]
+            lang, sep_a, rest2 = rest[2:].partition(b"\0")
+            trans, sep_b, text = rest2.partition(b"\0")
+            if not (sep_a and sep_b) or comp_flag not in (0, 1) or (comp_flag == 1 and comp_method != 0):
+                fail("malformed PNG iTXt chunk")
+            if comp_flag == 1:
+                text = inflate_limited(text, MAX_INFLATED - total_inflated)
+                total_inflated += len(text)
+            parts.extend([key, lang, trans, text])
+        pos = end
+        if chunk_kind == b"IEND":
+            break
+    if not parts:
+        return None
+    return b"\n".join(parts) + b"\n"
+
+def decode_path(raw):
+    return raw.decode("utf-8", "replace")
+
+def escape_display_path(text):
+    return text.replace("\r", "\\r").replace("\n", "\\n")
+
+def normalize_fs_path(target, top):
+    # Preserve the symlink own path (never follow the final component).
+    parent = os.path.realpath(os.path.dirname(os.path.abspath(target)))
+    base = os.path.basename(os.path.abspath(target))
+    full = os.path.join(parent, base)
+    if top is not None:
+        real_top = os.path.realpath(top)
+        try:
+            rel = os.path.relpath(full, real_top)
+        except ValueError:
+            rel = None
+        if rel and rel != "." and not rel.startswith(".." + os.sep) and rel != "..":
+            return rel.replace(os.sep, "/")
+    cleaned = target
+    while cleaned.startswith("./"):
+        cleaned = cleaned[2:]
+    return cleaned.replace(os.sep, "/")
+
+def load_ignores():
+    paths = []
+    if ignore_path:
+        if os.path.isdir(ignore_path):
+            for name in (".betterleaksignore", ".gitleaksignore"):
+                cand = os.path.join(ignore_path, name)
+                if os.path.exists(cand):
+                    paths.append(cand)
+        else:
+            paths.append(ignore_path)
+    else:
+        base = git_top(required=False) or os.getcwd()
+        for name in (".betterleaksignore", ".gitleaksignore"):
+            cand = os.path.join(base, name)
+            if os.path.exists(cand) or os.path.islink(cand):
+                paths.append(cand)
+    entries = set()
+    for p in paths:
+        try:
+            with open(p, "r", encoding="utf-8", errors="surrogateescape") as fh:
+                for raw_line in fh:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    # Bare pathless ":rule:line" and unscoped synthetic git-object entries never match.
+                    if line.startswith(":") or line.startswith(SYNTHETIC_PREFIXES):
+                        continue
+                    entries.add(line)
+        except OSError as exc:
+            fail(f"cannot read ignore file ({exc.strerror})")
+    return entries
+
+def is_ignored(ignores, commit, path, rule, line, oid_only, allow_ignore):
+    if not allow_ignore or not ignores:
+        return False
+    if "\n" in path or "\r" in path:
+        return False
+    if commit and f"{commit}:{path}:{rule}:{line}" in ignores:
+        return True
+    if not oid_only and f"{path}:{rule}:{line}" in ignores:
+        return True
+    return False
+
+def run_bl_batch(chunks, allow_inline):
+    """Run betterleaks stdin once on packed chunks.
+
+    ``chunks`` is a list of ``(key, data_bytes)``. Returns ``(mapped, unmapped)`` where
+    ``mapped`` is a set of ``(key, rule_id, local_line)`` and ``unmapped`` is a list of
+    ``(rule_id, stream_line)`` if a finding ever landed outside an item boundary.
+    """
+    mapped = set()
+    unmapped = []
+    idx = 0
+    while idx < len(chunks):
+        buf = bytearray(b"\n")  # line 1 empty so stdin never sniffs binary
+        cur_line = 2
+        starts = []
+        meta = []
+        while idx < len(chunks):
+            key, data = chunks[idx]
+            if not data:
+                idx += 1
+                continue
+            payload = data if data.endswith(b"\n") else data + b"\n"
+            if meta and len(buf) + len(payload) + 1 > MAX_BATCH_BYTES:
+                break
+            n_lines = payload.count(b"\n")
+            start_line = cur_line
+            end_line = cur_line + n_lines - 1
+            starts.append(start_line)
+            meta.append((start_line, end_line, key))
+            buf.extend(payload)
+            buf.append(10)  # blank separator line between items
+            cur_line = end_line + 2
+            idx += 1
+        if not meta:
+            continue
+        cmd = [
+            "betterleaks", "stdin",
+            "-i", empty_ignore,
+            "--config", config_path,
+            "--redact", "--no-banner", "--no-color", "--log-level", "error",
+            "--report-format", "json", "--report-path", "-",
+        ]
+        if not allow_inline:
+            cmd.append("--ignore-gitleaks-allow")
+        env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE")}
+        proc = subprocess.run(cmd, input=bytes(buf), cwd=empty_dir, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode not in (0, 1):
+            fail(f"betterleaks stdin exited {proc.returncode}")
+        if proc.returncode == 0:
+            continue
+        try:
+            findings = json.loads(proc.stdout.decode("utf-8") or "[]")
+        except (UnicodeDecodeError, ValueError):
+            fail("betterleaks stdin returned unreadable JSON")
+        if not isinstance(findings, list) or not findings:
+            fail("betterleaks stdin exited 1 without findings")
+        for item in findings:
+            rule = str(item.get("RuleID") or "unknown")
+            s_line = int(item.get("StartLine") or 0)
+            e_line = int(item.get("EndLine") or s_line)
+            pos = bisect.bisect_right(starts, s_line) - 1
+            if 0 <= pos < len(meta):
+                m_start, m_end, key = meta[pos]
+                if m_start <= s_line <= m_end and e_line <= m_end:
+                    mapped.add((key, rule, s_line - m_start + 1))
+                    continue
+            unmapped.append((rule, s_line))
+    return mapped, unmapped
+
+def batch_cat_file(oids, expect_type=None):
+    if not oids:
+        return []
+    out = run_git(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids)).stdout
+    pos = 0
+    results = []
+    for oid in oids:
+        header = out[pos:].partition(b"\n")[0]
+        fields = header.split()
+        if len(fields) != 3 or fields[0] != oid or (expect_type is not None and fields[1] != expect_type):
+            oid_text = oid.decode("ascii", "replace")
+            fail(f"git cat-file did not return expected object {oid_text}")
+        size = int(fields[2])
+        start = pos + len(header) + 1
+        results.append((fields[1], out[start : start + size]))
+        pos = start + size + 1
+    return results
+
+def expand_binary_views(key_base, data):
+    """Build (subkey, bytes) views for binary content: raw, printable-sanitized, and PNG text."""
+    views = []
+    if data:
+        views.append(((key_base, "content"), data))
+        san = sanitize_printable(data)
+        if san != data:
+            views.append(((key_base, "content"), san))
+    png_text = extract_png_text(data)
+    if png_text:
+        views.append(((key_base, "png_text"), png_text))
+        san_png = sanitize_printable(png_text)
+        if san_png != png_text:
+            views.append(((key_base, "png_text"), san_png))
+    return views
 
 def marked(numstat):
     added, deleted, path = numstat.split(b"\t", 2)
     return path, added == b"-" and deleted == b"-"
 
-def run(args, data=None):
-    try:
-        return subprocess.run(git + args, check=True, input=data, stdout=subprocess.PIPE).stdout
-    except subprocess.CalledProcessError as error:
-        fail(f"git {args[0]} exited {error.returncode}")
-
-def batch(oids):
-    out = run(["cat-file", "--batch"], b"".join(o + b"\n" for o in oids))
-    pos = 0
-    for oid in oids:
-        header = out[pos:].partition(b"\n")[0]
-        fields = header.split()
-        if len(fields) != 3 or fields[0] != oid or fields[1] != b"blob":
-            fail("git cat-file did not return a listed blob")
-        size = int(fields[2])
-        start = pos + len(header) + 1
-        yield out[start : start + size]
-        pos = start + size + 1
-
-def changed_blobs(log):
-    """{blob id: git calls it binary in at least one commit} from log -z --raw --numstat."""
-    blobs = {}
-    def close(entries, binary):
+def changed_entries(log):
+    """Return list of (commit_sha, path_bytes, oid_bytes, is_binary) from log -z --raw --numstat."""
+    records = []
+    def close(commit_sha, entries, binary):
+        if not entries:
+            return
+        if not commit_sha:
+            fail("git log printed changes without a commit header")
         for path, oid in entries:
             if path not in binary:
                 fail("git log printed no --numstat line for a changed file")
-            blobs[oid] = blobs.get(oid, False) or binary[path]
+            records.append((commit_sha, path, oid, binary[path]))
+    commit_sha = ""
     entries, binary = [], {}
     fields = iter(log.split(b"\0"))
     for token in fields:
         token = token.lstrip(b"\n")
-        if token == b"\x01":  # the --format line that opens each commit
-            close(entries, binary)
+        if token.startswith(b"\x01"):
+            close(commit_sha, entries, binary)
+            commit_sha = token[1:].decode("ascii", "strict")
             entries, binary = [], {}
         elif token.startswith(b":"):
             path = next(fields, None)
@@ -327,74 +525,323 @@ def changed_blobs(log):
             if path is None or len(parts) != 5:
                 fail("git log --raw output did not parse")
             _, new_mode, _, oid, status = parts
-            if new_mode.startswith(b"100") and status[:1] in b"AMT":
+            if (new_mode.startswith(b"100") or new_mode == b"120000") and status[:1] in b"AMT":
                 entries.append((path, oid))
         elif token:
             if token.count(b"\t") < 2:
                 fail("git log --numstat output did not parse")
             path, is_binary = marked(token)
             binary[path] = binary.get(path, False) or is_binary
-    close(entries, binary)
-    return blobs
+    close(commit_sha, entries, binary)
+    return records
 
-found = []
-if mode in ("staged", "unstaged"):
-    cmd = ["diff", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
-    if mode == "staged":
-        cmd.append("--cached")
-    else:
-        top = run(["rev-parse", "--show-toplevel"]).removesuffix(b"\n")
-        if not top:
-            fail("git rev-parse --show-toplevel printed nothing")
-        top = os.fsdecode(top)
-    for record in run(cmd).split(b"\0"):
-        if not record:
-            continue
-        path, is_binary = marked(record)
-        if mode == "staged":
-            data = run(["cat-file", "blob", b":0:" + path])
+def peel_object(start_oid):
+    """Peel tags from start_oid; return (tags_list, final_type, final_oid)."""
+    oid = start_oid
+    tags = []
+    depth = 0
+    while True:
+        proc = run_git(["cat-file", "-t", oid], allow_fail=True)
+        if proc.returncode != 0:
+            sys.stderr.write(f"secret_scan: cannot read object {oid}\n")
+            sys.exit(2)
+        obj_type = proc.stdout.decode("ascii", "replace").strip()
+        if obj_type == "tag":
+            tag_data = run_git(["cat-file", "tag", oid]).stdout
+            tags.append((oid, tag_data))
+            first = tag_data.partition(b"\n")[0].decode("ascii", "replace")
+            if not first.startswith("object "):
+                sys.stderr.write("secret_scan: malformed or too deeply nested tag object\n")
+                sys.exit(2)
+            oid = first[len("object "):].strip()
+            depth += 1
+            if not oid or depth > 64:
+                sys.stderr.write("secret_scan: malformed or too deeply nested tag object\n")
+                sys.exit(2)
+        elif obj_type in ("commit", "tree", "blob"):
+            return tags, obj_type, oid
         else:
-            # git names a changed path from the top of the repository, whatever the current
-            # directory is; --diff-filter has left out the deleted ones, so a listed path that
-            # cannot be read is a failure, not something to skip.
-            local = os.path.join(top, os.fsdecode(path))
-            try:
-                if os.path.islink(local):
-                    # What git would store for a symlink: its target text.
-                    data = os.fsencode(os.readlink(local))
-                else:
-                    with open(local, "rb") as handle:
-                        data = handle.read()
-            except OSError as error:
-                fail(f"a changed file that git lists cannot be read ({error.strerror})")
-        if is_binary or wanted(data):
-            found.append(data)
-elif mode == "log":
-    blobs = changed_blobs(run(["log", "-z", "--raw", "--numstat", "--no-abbrev", *diff_opts,
-                               "--diff-merges=first-parent", "--format=%x01", *rest]))
-    oids = list(blobs)
-    found = [data for oid, data in zip(oids, batch(oids)) if blobs[oid] or wanted(data)]
+            sys.stderr.write(f"secret_scan: unsupported object type \x27{obj_type}\x27 for {oid}\n")
+            sys.exit(2)
+
+# Findings collected as tuples: (commit, path, rule, line, oid_only, allow_ignore)
+raw_findings = []
+unmapped_findings = []
+
+if kind == "binary":
+    sub, *rest = args
+    if sub in ("staged", "unstaged"):
+        cmd = ["diff", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
+        if sub == "staged":
+            cmd.append("--cached")
+            top = None
+        else:
+            top = git_top(required=True)
+        chunks = []
+        path_map = {}
+        idx = 0
+        for record in run_git(cmd).stdout.split(b"\0"):
+            if not record:
+                continue
+            path_bytes, is_binary = marked(record)
+            if sub == "staged":
+                data = run_git(["cat-file", "blob", b":0:" + path_bytes]).stdout
+            else:
+                local = os.path.join(top, os.fsdecode(path_bytes))
+                try:
+                    if os.path.islink(local):
+                        data = os.fsencode(os.readlink(local))
+                    else:
+                        with open(local, "rb") as handle:
+                            data = handle.read()
+                except OSError as error:
+                    fail(f"a changed file that git lists cannot be read ({error.strerror})")
+            if is_binary or needs_binary_pass(data):
+                idx += 1
+                path_map[idx] = decode_path(path_bytes)
+                chunks.extend(expand_binary_views(idx, data))
+        mapped, unmapped = run_bl_batch(chunks, allow_inline=False)
+        unmapped_findings.extend(unmapped)
+        for (item_id, view), rule, line in mapped:
+            p = path_map[item_id]
+            loc = f"{p}#png-text" if view == "png_text" else p
+            raw_findings.append(("", loc, rule, line, False, True))
+    elif sub == "log":
+        log_out = run_git([
+            "log", "-z", "--raw", "--numstat", "--no-abbrev", *diff_opts,
+            "--diff-merges=first-parent", "--format=%x01%H", *rest,
+        ]).stdout
+        records = changed_entries(log_out)
+        # Fetch each unique blob once, then scan only blobs that are binary or PNG or invalid UTF-8.
+        unique_oids = list(dict.fromkeys(oid for _, _, oid, _ in records))
+        oid_binary_flag = {}
+        for _, _, oid, is_bin in records:
+            if is_bin:
+                oid_binary_flag[oid] = True
+        blob_data = {}
+        for oid, (_t, data) in zip(unique_oids, batch_cat_file(unique_oids, expect_type=b"blob")):
+            if oid_binary_flag.get(oid) or needs_binary_pass(data):
+                blob_data[oid] = data
+        chunks = []
+        for oid, data in blob_data.items():
+            chunks.extend(expand_binary_views(oid, data))
+        mapped, unmapped = run_bl_batch(chunks, allow_inline=False)
+        unmapped_findings.extend(unmapped)
+        hits_by_oid = {}
+        for (oid, view), rule, line in mapped:
+            hits_by_oid.setdefault(oid, set()).add((view, rule, line))
+        for commit_sha, path_bytes, oid, is_bin in records:
+            if oid not in hits_by_oid:
+                continue
+            p = decode_path(path_bytes)
+            for view, rule, line in hits_by_oid[oid]:
+                loc = f"{p}#png-text" if view == "png_text" else p
+                raw_findings.append((commit_sha, loc, rule, line, False, True))
+    elif sub == "file":
+        target = rest[0]
+        try:
+            with open(target, "rb") as handle:
+                data = handle.read()
+        except OSError as error:
+            fail(f"cannot read file ({error.strerror})")
+        p = normalize_fs_path(target, git_top(required=False))
+        if needs_binary_pass(data):
+            chunks = expand_binary_views(0, data)
+            mapped, unmapped = run_bl_batch(chunks, allow_inline=False)
+            unmapped_findings.extend(unmapped)
+            for (_id, view), rule, line in mapped:
+                loc = f"{p}#png-text" if view == "png_text" else p
+                raw_findings.append(("", loc, rule, line, False, True))
+        elif data:
+            # Also catch text files whose head Betterleaks dir mode sniffs and skips (PDF, ELF, ZIP, MZ, 7z, gzip).
+            mapped, unmapped = run_bl_batch([(0, data)], allow_inline=not ignore_allow)
+            unmapped_findings.extend(unmapped)
+            for _id, rule, line in mapped:
+                raw_findings.append(("", p, rule, line, False, True))
+    else:
+        fail(f"unknown binary submode {sub}", code=2)
+
+elif kind == "objects":
+    sub, *rest = args
+    tags = {}       # tag_oid -> bytes
+    commits = []    # list of commit_sha (deduped)
+    trees = set()   # tree_oid
+    blobs = set()   # blob_oid
+
+    if sub == "history":
+        refs_out = run_git(["for-each-ref", "--format=%(objecttype) %(objectname)"]).stdout.decode("ascii", "replace")
+        ref_lines = [ln for ln in refs_out.splitlines() if ln.strip()]
+        if ref_lines:
+            for ln in ref_lines:
+                otype, oid = ln.split(" ", 1)
+                if otype != "commit":
+                    peeled_tags, final_type, final_oid = peel_object(oid)
+                    for t_oid, t_data in peeled_tags:
+                        tags[t_oid] = t_data
+                    if final_type == "tree":
+                        trees.add(final_oid)
+                    elif final_type == "blob":
+                        blobs.add(final_oid)
+            revs = run_git(["rev-list", "--all"]).stdout.decode("ascii", "strict").splitlines()
+            commits = list(dict.fromkeys(r for r in revs if r))
+    elif sub == "rev":
+        obj_spec = rest[0]
+        verify = run_git(["rev-parse", "--verify", "--quiet", "--end-of-options", f"{obj_spec}^{{object}}"], allow_fail=True)
+        if verify.returncode != 0:
+            sys.stderr.write(f"secret_scan: not a git object: {obj_spec}\n")
+            sys.exit(2)
+        obj_oid = verify.stdout.decode("ascii", "strict").strip()
+        peeled_tags, final_type, final_oid = peel_object(obj_oid)
+        for t_oid, t_data in peeled_tags:
+            tags[t_oid] = t_data
+        if final_type == "commit":
+            revs = run_git(["rev-list", final_oid]).stdout.decode("ascii", "strict").splitlines()
+            commits = list(dict.fromkeys(r for r in revs if r))
+        elif final_type == "tree":
+            trees.add(final_oid)
+        elif final_type == "blob":
+            blobs.add(final_oid)
+    elif sub == "range":
+        spec = rest[0]
+        revs = run_git(["rev-list", spec]).stdout.decode("ascii", "strict").splitlines()
+        commits = list(dict.fromkeys(r for r in revs if r))
+    else:
+        fail(f"unknown objects submode {sub}", code=2)
+
+    inline_chunks = []   # scanned with allow_inline=(not ignore_allow)
+    strict_chunks = []   # binary direct tree/blob views scanned with allow_inline=False
+
+    for t_oid, t_data in tags.items():
+        inline_chunks.append((("tag", t_oid), t_data))
+
+    if commits:
+        commit_oids = [c.encode("ascii") for c in commits]
+        for cid, (_t, cdata) in zip(commits, batch_cat_file(commit_oids, expect_type=b"commit")):
+            inline_chunks.append((("commit", cid), cdata))
+
+    if blobs:
+        blob_list = sorted(blobs)
+        for boid, (_t, bdata) in zip(blob_list, batch_cat_file([b.encode("ascii") for b in blob_list], expect_type=b"blob")):
+            if needs_binary_pass(bdata):
+                strict_chunks.extend(expand_binary_views(("blob", boid), bdata))
+            else:
+                inline_chunks.append((("blob_text", boid), bdata))
+
+    tree_entries = []  # (tree_oid, path_str, blob_oid_bytes)
+    for toid in sorted(trees):
+        ls = run_git(["ls-tree", "-r", "-z", toid]).stdout
+        for entry in ls.split(b"\0"):
+            if not entry:
+                continue
+            head, sep, path_bytes = entry.partition(b"\t")
+            if not sep:
+                fail("git ls-tree output did not parse")
+            parts = head.split(b" ")
+            if len(parts) != 3:
+                fail("git ls-tree header did not parse")
+            _mode, etype, eoid = parts
+            if etype == b"blob":
+                tree_entries.append((toid, decode_path(path_bytes), eoid))
+    if tree_entries:
+        u_oids = list(dict.fromkeys(eoid for _, _, eoid in tree_entries))
+        fetched = {oid: data for oid, (_t, data) in zip(u_oids, batch_cat_file(u_oids, expect_type=b"blob"))}
+        for eoid, bdata in fetched.items():
+            if needs_binary_pass(bdata):
+                strict_chunks.extend(expand_binary_views(("tree_bin", eoid), bdata))
+            else:
+                inline_chunks.append((("tree_text", eoid), bdata))
+
+    if inline_chunks:
+        mapped, unmapped = run_bl_batch(inline_chunks, allow_inline=not ignore_allow)
+        unmapped_findings.extend(unmapped)
+        tree_hits = {}
+        for key, rule, line in mapped:
+            ktype, koid = key
+            if ktype == "commit":
+                raw_findings.append((koid, ".git/commit", rule, line, True, True))
+            elif ktype == "tag":
+                raw_findings.append((koid, ".git/tag", rule, line, True, True))
+            elif ktype == "blob_text":
+                raw_findings.append((koid, ".git/blob", rule, line, True, True))
+            elif ktype == "tree_text":
+                tree_hits.setdefault(koid, set()).add(("content", rule, line))
+        for toid, pstr, eoid in tree_entries:
+            for _view, rule, line in tree_hits.get(eoid, ()):
+                raw_findings.append((toid, pstr, rule, line, False, True))
+
+    if strict_chunks:
+        mapped, unmapped = run_bl_batch(strict_chunks, allow_inline=False)
+        unmapped_findings.extend(unmapped)
+        tree_hits = {}
+        for (inner_key, view), rule, line in mapped:
+            ktype, koid = inner_key
+            if ktype == "blob":
+                loc = ".git/blob#png-text" if view == "png_text" else ".git/blob"
+                raw_findings.append((koid, loc, rule, line, True, True))
+            elif ktype == "tree_bin":
+                tree_hits.setdefault(koid, set()).add((view, rule, line))
+        for toid, pstr, eoid in tree_entries:
+            for view, rule, line in tree_hits.get(eoid, ()):
+                loc = f"{pstr}#png-text" if view == "png_text" else pstr
+                raw_findings.append((toid, loc, rule, line, False, True))
+
+elif kind == "symlink":
+    target = args[0]
+    try:
+        link_bytes = os.fsencode(os.readlink(target))
+    except OSError as error:
+        fail(f"cannot read symlink ({error.strerror})")
+    p = normalize_fs_path(target, git_top(required=False))
+    mapped, unmapped = run_bl_batch([(0, link_bytes)], allow_inline=not ignore_allow)
+    unmapped_findings.extend(unmapped)
+    for _id, rule, line in mapped:
+        raw_findings.append(("", p, rule, line, False, True))
+
+elif kind == "message":
+    target = args[0]
+    try:
+        with open(target, "rb") as handle:
+            data = handle.read()
+    except OSError as error:
+        fail(f"cannot read message file ({error.strerror})", code=2)
+    mapped, unmapped = run_bl_batch([(0, data)], allow_inline=not ignore_allow)
+    unmapped_findings.extend(unmapped)
+    for _id, rule, line in mapped:
+        raw_findings.append(("", "<commit-message>", rule, line, False, False))
+
 else:
-    with open(rest[0], "rb") as handle:
-        data = handle.read()
-    if wanted(data):
-        found.append(data)
-with open(stream, "wb") as out:
-    out.write(b"\n")
-    for data in found:
-        out.write(data + b"\n")
-' "$work/binary-stream" "$@" || return 1
-  if [ "$(wc -c <"$work/binary-stream")" -gt 1 ]; then
-    # No exemption applies here: an empty ignore list, read from an empty directory so no
-    # ignore file beside it counts either, and inline allow comments off.
-    mkdir -p "$work/binary-src"
-    : >"$work/binary-none.ignore"
-    (
-      ignore_path="$work/binary-none.ignore"
-      iso="$work/binary-src"
-      SECRET_SCAN_IGNORE_ALLOW=1
-      scan "content Betterleaks skips as binary (no exemption applies to it)" stdin <"$work/binary-stream"
-    )
+    fail(f"unknown secondary scan kind {kind}", code=2)
+
+ignores = load_ignores()
+kept_lines = []
+seen = set()
+for commit, path, rule, line, oid_only, allow_ignore in sorted(raw_findings):
+    if is_ignored(ignores, commit, path, rule, line, oid_only, allow_ignore):
+        continue
+    key = (commit, path, rule, line)
+    if key in seen:
+        continue
+    seen.add(key)
+    disp = escape_display_path(path)
+    if commit:
+        kept_lines.append(f"{rule} {disp}:{line} {commit}")
+    else:
+        kept_lines.append(f"{rule} {disp}:{line} ")
+for rule, s_line in sorted(set(unmapped_findings)):
+    kept_lines.append(f"{rule} <unmapped>:{s_line} ")
+
+if kept_lines:
+    with open(out_file, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(kept_lines) + "\n")
+    sys.exit(1)
+' "$config" "$work/sec-empty" "$work/sec-empty.ignore" "$ignore_path" "${SECRET_SCAN_IGNORE_ALLOW:-0}" "$out_file" "$@" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if [ -s "$out_file" ]; then
+      echo "secret_scan: $label: betterleaks exited $rc" >&2
+      redact_output <"$out_file" | sed 's/^/  /' >&2
+      echo "secret_scan: values are redacted. For a false positive see 'Second scan: Betterleaks' in PRIVACY.md." >&2
+    fi
+    return "$rc"
   fi
 }
 
@@ -446,81 +893,93 @@ case "$mode" in
     ;;
   staged)
     scan "staged changes" git --pre-commit --staged "$src"
-    scan_binary staged
+    scan_secondary "content Betterleaks skips as binary" binary staged
     ;;
   unstaged)
     scan "unstaged changes" git --pre-commit .
-    scan_binary unstaged
+    scan_secondary "content Betterleaks skips as binary" binary unstaged
     ;;
   message)
-    scan "commit message" stdin <"$2"
+    scan_secondary "commit message" message "$2"
     ;;
   history)
     scan "history" git --log-opts="--full-history --all --diff-merges=first-parent" "$src"
-    scan_binary log --full-history --all
-    g for-each-ref --format='%(objecttype) %(objectname)' >"$work/refs"
-    if [ -s "$work/refs" ]; then
-      # Refs to commits are covered by the diff walk above; every other ref is peeled.
-      awk '$1 != "commit" { print $2 }' "$work/refs" >"$work/others"
-      while read -r oid; do
-        peel "$oid" </dev/null
-      done <"$work/others"
-      g rev-list --all >"$work/revs"
-      g cat-file --batch <"$work/revs" >>"$content"
-      scan "commit messages, tag objects, and trees or blobs refs point at" stdin <"$content"
-    fi
+    scan_secondary "content Betterleaks skips as binary" binary log --full-history --all
+    scan_secondary "commit messages, tag objects, and trees or blobs refs point at" objects history
     ;;
   rev)
     obj=$(g rev-parse --verify --quiet --end-of-options "$2^{object}") || {
       echo "secret_scan: not a git object: $2" >&2
       exit 2
     }
-    peel "$obj"
-    if [ -s "$commits" ]; then
-      commit=$(cat "$commits")
-      scan "candidate history" git --log-opts="--diff-merges=first-parent $commit" "$src"
-      scan_binary log "$commit"
-      g rev-list "$commit" >"$work/revs"
-      g cat-file --batch <"$work/revs" >>"$content"
+    peeled_type=$(g cat-file -t "$obj")
+    peel_cur=$obj
+    peel_depth=0
+    while [ "$peeled_type" = tag ]; do
+      peel_cur=$(g cat-file tag "$peel_cur" | sed -n '1s/^object //p')
+      peel_depth=$((peel_depth + 1))
+      if [ -z "$peel_cur" ] || [ "$peel_depth" -gt 64 ]; then
+        echo "secret_scan: malformed or too deeply nested tag object" >&2
+        exit 2
+      fi
+      peeled_type=$(g cat-file -t "$peel_cur" 2>/dev/null) || {
+        echo "secret_scan: cannot read object $peel_cur" >&2
+        exit 2
+      }
+    done
+    if [ "$peeled_type" = commit ]; then
+      scan "candidate history" git --log-opts="--diff-merges=first-parent $peel_cur" "$src"
+      scan_secondary "content Betterleaks skips as binary" binary log "$peel_cur"
     fi
-    if [ -s "$content" ]; then
-      scan "candidate messages, tag objects, and tree or blob content" stdin <"$content"
-    fi
+    scan_secondary "candidate messages, tag objects, and tree or blob content" objects rev "$obj"
     ;;
   range)
     spec=$2
     count=$(g rev-list --count "$spec")
     if [ "$count" -gt 0 ]; then
       scan "branch commit range" git --log-opts="--diff-merges=first-parent $spec" "$src"
-      scan_binary log "$spec"
-      g rev-list "$spec" >"$work/revs"
-      g cat-file --batch <"$work/revs" >"$content"
-      scan "branch commit messages" stdin <"$content"
+      scan_secondary "content Betterleaks skips as binary" binary log "$spec"
+      scan_secondary "branch commit messages" objects range "$spec"
     fi
     ;;
   files)
     shift
     rc_all=0
-    sniffed=0
+    top=$(g rev-parse --show-toplevel 2>/dev/null || true)
     for target in "$@"; do
       if [ -L "$target" ]; then
-        link_text=$(readlink "$target")
-        printf '%s\n' "$link_text" | scan "symlink target" stdin || rc_all=1
+        scan_secondary "symlink target" symlink "$target" || rc_all=1
       elif [ -f "$target" ]; then
-        # The dir mode also skips a file by a head that sniffs as an executable, an archive or a
-        # document (%PDF-, an ELF header, PK, MZ and others; checked with 1.10.1), text or not.
-        # So when it finds nothing, a copy with an empty first line (its head then sniffs as
-        # nothing) is read under the file's own name; its line numbers count that line. Content
-        # git calls binary then goes through stdin as well. The reads run in turn and the first
-        # to report ends the file, so one finding is not printed twice.
-        sniffed=$((sniffed + 1))
-        copy="$work/sniff$sniffed"
-        mkdir "$copy"
-        base=${target##*/}
-        { printf '\n'; cat "$target"; } >"$copy/$base"
-        if scan "working-tree file" dir "$target" &&
-          (cd "$copy" && scan "working-tree file past its head (line numbers count an added empty first line)" dir "./$base") &&
-          scan_binary file "$target"; then
+        # Run dir mode first from the repository top with the normalized relative path so path-scoped
+        # Betterleaks rules and .betterleaksignore paths align regardless of cwd or leading "./".
+        # If dir mode passes (clean, or skipped because of a binary/sniffed head such as PDF/ELF/ZIP/PNG),
+        # the secondary pass reads the file through stdin with exact line numbers, printable-byte
+        # isolation, PNG text-chunk decoding, and stable per-file fingerprints.
+        dir_cwd=.
+        dir_target=$target
+        if [ -n "$top" ]; then
+          rel=$(python3 -I -B -c '
+import os, sys
+top = os.path.realpath(sys.argv[1])
+target = sys.argv[2]
+full = os.path.join(os.path.realpath(os.path.dirname(os.path.abspath(target))), os.path.basename(os.path.abspath(target)))
+try:
+    rel = os.path.relpath(full, top)
+except ValueError:
+    rel = ""
+if rel and rel != "." and not rel.startswith(".." + os.sep) and rel != "..":
+    sys.stdout.write(rel.replace(os.sep, "/"))
+' "$top" "$target")
+          if [ -n "$rel" ]; then
+            dir_cwd=$top
+            dir_target=$rel
+          fi
+        fi
+        case "$dir_target" in
+          -*) dir_target="./$dir_target" ;;
+        esac
+        if (cd "$dir_cwd" && scan "working-tree file" dir "$dir_target") &&
+          scan_secondary "working-tree file" binary file "$target"; then
           :
         else
           rc_all=1

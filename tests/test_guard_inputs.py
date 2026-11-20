@@ -142,9 +142,8 @@ class AttributeTests(unittest.TestCase):
                 self.repo.unchecked_commit(f"{label} with a token")
 
     def test_no_exemption_applies_to_content_marked_binary(self) -> None:
-        # Read again through stdin, a finding has no path and its line is counted in a stream of
-        # whatever other binary content the mode covers, so an exemption there could cover
-        # another file's token. Neither a ":rule:line" fingerprint nor an inline comment applies.
+        # Neither a bare ":rule:line" fingerprint nor an inline comment applies to content marked
+        # binary (only a stable per-file fingerprint in .betterleaksignore does).
         self.repo.add_file("app.cfg", f"key = {self.token}\n")
         report = self.repo.base / "stdin.json"
         self.repo.run(
@@ -153,7 +152,7 @@ class AttributeTests(unittest.TestCase):
         )
         rules = {item["RuleID"] for item in json.loads(report.read_text())}
         self.assertTrue(rules)
-        # Read through stdin, a finding's fingerprint is ":<rule>:<line>"; cover any line.
+        # Bare ":<rule>:<line>" fingerprints are never honoured on any line.
         prints = [f":{rule}:{line}" for rule in rules for line in range(1, 50)]
         self.repo.add_file(".betterleaksignore", "\n".join(prints) + "\n")
         refused_by_secret_scan(self, self.repo.secret("staged"), self.token)

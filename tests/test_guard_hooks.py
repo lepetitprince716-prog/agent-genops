@@ -478,17 +478,22 @@ class IgnoreFileTests(TemplateCase):
     def test_commit_msg_refuses_an_ignore_file_the_index_does_not_have(self) -> None:
         repo = self.repo()
         token = registry_token()
-        message = repo.base / "msg.txt"
-        message.write_text(f"note the token {token}\n")
-        prints = repo.fingerprints("stdin", stdin=message.read_text())
+        dirty_msg = repo.base / "dirty-msg.txt"
+        dirty_msg.write_text(f"note the token {token}\n")
+        clean_msg = repo.base / "clean-msg.txt"
+        clean_msg.write_text("clean subject\n")
+        prints = repo.fingerprints("stdin", stdin=dirty_msg.read_text())
         self.assertEqual(len(prints), 1, prints)
         hook = str(repo.path / ".githooks" / "commit-msg")
-        self.assert_refused(repo.run(hook, str(message)), "secret_scan:")
+        self.assert_refused(repo.run(hook, str(dirty_msg)), "secret_scan:")
+        # An unstaged .betterleaksignore is refused by ignore-check --index even on a clean message.
         repo.write(".betterleaksignore", prints[0] + "\n")
-        self.assert_refused(repo.run(hook, str(message)), ".betterleaksignore")
+        self.assert_refused(repo.run(hook, str(clean_msg)), ".betterleaksignore")
         repo.git("add", ".betterleaksignore")
-        allowed = repo.run(hook, str(message))
+        allowed = repo.run(hook, str(clean_msg))
         self.assertEqual(allowed.returncode, 0, combined(allowed))
+        # A bare ":rule:line" entry in a staged ignore file still never exempts a commit message.
+        self.assert_refused(repo.run(hook, str(dirty_msg)), "secret_scan:")
 
     def test_pre_push_refuses_an_ignore_file_the_candidate_does_not_have(self) -> None:
         repo = self.repo()
