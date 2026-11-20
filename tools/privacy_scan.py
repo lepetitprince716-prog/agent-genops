@@ -39,6 +39,7 @@ PRIVATE_RULES_ENV = "AGENT_GENOPS_PRIVATE_RULES"
 REQUIRE_PRIVATE_ENV = "AGENT_GENOPS_REQUIRE_PRIVATE"
 MAINTAINER_MODE_CONFIG_KEY = "genops.mode"
 MAINTAINER_MODE_VALUE = "maintainer"
+CONTRIBUTOR_MODE_VALUE = "contributor"
 
 DOCUMENT_LISTS = (
     "rules",
@@ -67,6 +68,17 @@ MAX_INFLATED = 64 * 1024 * 1024
 
 LFS_HEADER = b"version https://git-lfs.github.com/spec/v1"
 
+# The head each allowed image suffix must start with: alternatives of (offset, bytes) pairs, from
+# the format specifications (PNG, JPEG SOI marker, GIF87a/GIF89a, RIFF....WEBP, ICO).
+IMAGE_SIGNATURES: dict[str, tuple[tuple[tuple[int, bytes], ...], ...]] = {
+    ".png": (((0, PNG_SIGNATURE),),),
+    ".jpg": (((0, b"\xff\xd8\xff"),),),
+    ".jpeg": (((0, b"\xff\xd8\xff"),),),
+    ".gif": (((0, b"GIF87a"),), ((0, b"GIF89a"),)),
+    ".webp": (((0, b"RIFF"), (8, b"WEBP")),),
+    ".ico": (((0, b"\x00\x00\x01\x00"),),),
+}
+
 WHY_GENERATION = (
     "image carries generation metadata (prompt, workflow or parameters); "
     "strip it or keep the image out of the repository"
@@ -75,8 +87,16 @@ WHY_BINARY = (
     "binary file cannot be scanned; only image suffixes in allowed_binary_suffixes may be binary"
 )
 WHY_NOT_UTF8 = "file is not valid UTF-8, so it cannot be scanned"
+WHY_BAD_ENCODING = (
+    "commit message is not valid in its encoding (the commit's encoding header, "
+    "i18n.commitEncoding for a message file, else UTF-8), so it cannot be scanned"
+)
 WHY_UNREADABLE = "file could not be read, so it cannot be scanned"
 WHY_BAD_IMAGE = "PNG chunks could not be parsed or decoded, so its metadata cannot be checked"
+WHY_IMAGE_HEADER = (
+    "file does not start with the header of the image format its suffix names (or the suffix "
+    "has no known header), so it is not read as that image"
+)
 WHY_MISSING = "object is missing from the repository, so it cannot be scanned"
 WHY_SUBMODULE = (
     "git submodule (gitlink 160000) points to external commits whose content was not scanned"
@@ -249,7 +269,15 @@ def private_rules_path() -> Path:
 
 
 def read_clone_mode(cwd: Path | None = None) -> str | None:
-    """Read clone-level ``genops.mode`` without modifying git config; None if unset or not in git."""
+    """Read clone-level ``genops.mode`` without modifying git config.
+
+    None means the key is not set (``git config --get`` exits 1), which is the contributor
+    mode. Any other failure (git cannot run, an unreadable configuration) raises ScanError:
+    a read that failed is not an answer, and treating it as "not set" would let a maintainer
+    clone drop to the contributor mode. The value is ``maintainer`` or ``contributor`` in any
+    letter case; anything else (a typo such as ``maintaner``, ``true``, an empty value) raises
+    ScanError too, since reading it as the default would switch the maintainer checks off.
+    """
     target = cwd or Path.cwd()
     try:
         done = subprocess.run(
@@ -258,18 +286,32 @@ def read_clone_mode(cwd: Path | None = None) -> str | None:
             capture_output=True,
             check=False,
         )
-    except OSError:
+    except OSError as exc:
+        raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: cannot run git: {exc}") from exc
+    if done.returncode == 1:
         return None
     if done.returncode != 0:
-        return None
-    return done.stdout.decode("utf-8", "replace").strip().lower() or None
+        detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
+        raise ScanError(f"cannot read {MAINTAINER_MODE_CONFIG_KEY}: git config failed: {detail}")
+    value = done.stdout.decode("utf-8", "replace").strip().lower()
+    if value not in (MAINTAINER_MODE_VALUE, CONTRIBUTOR_MODE_VALUE):
+        raise ScanError(
+            f"{MAINTAINER_MODE_CONFIG_KEY} is set to a value this scanner does not know; "
+            f"set it to '{MAINTAINER_MODE_VALUE}' or '{CONTRIBUTOR_MODE_VALUE}' (any letter case), "
+            f"or unset it for the contributor mode"
+        )
+    return value
 
 
 def is_maintainer_required(cwd: Path | None = None) -> bool:
-    """True when strict maintainer private-rule enforcement is active."""
+    """True when strict maintainer private-rule enforcement is active.
+
+    The configuration is read even when the environment switch is on, so a value the scanner
+    does not know is refused in every case."""
+    mode = read_clone_mode(cwd)
     if os.environ.get(REQUIRE_PRIVATE_ENV) == "1":
         return True
-    return read_clone_mode(cwd) == MAINTAINER_MODE_VALUE
+    return mode == MAINTAINER_MODE_VALUE
 
 
 def load_rules_detailed(
@@ -533,17 +575,32 @@ def read_png(data: bytes) -> tuple[list[str], bool]:
     return values + views, generated or any(map(has_class_type, views))
 
 
+def has_image_header(suffix: str, data: bytes) -> bool:
+    """True when ``data`` starts with the header of the format ``suffix`` names."""
+    return any(
+        all(data[offset : offset + len(magic)] == magic for offset, magic in alternative)
+        for alternative in IMAGE_SIGNATURES.get(suffix, ())
+    )
+
+
 def scan_image(data: bytes, rules: RuleSet, suffix: str) -> list[Hit]:
-    """Scan an image with an allowed suffix; PNG text is decoded, other formats are read raw."""
+    """Scan an image with an allowed suffix.
+
+    The head must match the suffix's format. PNG text chunks are decoded and its other chunks
+    read raw, pixel chunks excepted: compressed pixels match a short rule by chance (seven of
+    the twelve PNGs in this repository did). A PNG that does not parse is read raw whole, as
+    other formats are."""
+    hits = [] if has_image_header(suffix, data) else [Hit(1, "image_header", WHY_IMAGE_HEADER)]
+    values = raw_views(data)
     if data.startswith(PNG_SIGNATURE):
         try:
             values, generated = read_png(data)
         except (ValueError, struct.error, zlib.error):
-            return [Hit(1, "undecodable", WHY_BAD_IMAGE)]
+            generated = False
+            hits.append(Hit(1, "undecodable", WHY_BAD_IMAGE))
     else:
-        values = raw_views(data)
         generated = any(map(looks_generated, values))
-    hits = scan_values(values, rules, suffix)
+    hits += scan_values(values, rules, suffix)
     if generated:
         hits.append(Hit(1, "generation_metadata", WHY_GENERATION))
     return hits
@@ -560,19 +617,24 @@ def scan_bytes(name: str, data: bytes, rules: RuleSet) -> list[Hit]:
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        return binary + [Hit(1, "undecodable", WHY_NOT_UTF8)]
-    return binary or scan_text(text, rules, suffix)
+        binary.append(Hit(1, "undecodable", WHY_NOT_UTF8))
+    else:
+        if not binary:
+            return scan_text(text, rules, suffix)
+    # Refused already; the rules still read the raw bytes, so the report names what is inside.
+    return binary + scan_values(raw_views(data), rules, suffix)
 
 
 # --- git ---------------------------------------------------------------------------
 
 
-def git(args: list[str], cwd: Path) -> bytes:
+def git(args: list[str], cwd: Path, stdin: bytes | None = None) -> bytes:
     """Run git with ``--no-replace-objects`` and return stdout; any failure is a ScanError."""
     try:
         done = subprocess.run(
             ["git", "--no-replace-objects", *args],
             cwd=cwd,
+            input=stdin,
             capture_output=True,
             check=False,
         )
@@ -622,7 +684,7 @@ def scan_worktree_file(
 
 
 def parse_raw_diff_z(raw: bytes) -> list[tuple[str, str, str]]:
-    """Parse ``git diff --raw -z --diff-filter=ACMR`` into ``(new_mode, new_oid, path)``."""
+    """Parse ``git diff --raw -z --diff-filter=ACMRT`` into ``(new_mode, new_oid, path)``."""
     entries: list[tuple[str, str, str]] = []
     parts = raw.split(b"\0")
     idx = 0
@@ -659,7 +721,8 @@ def scan_staged(
 ) -> list[Finding]:
     """Scan the index version (and names) of every file about to be committed."""
     red = redactor or NameRedactor(rules)
-    raw = git(["diff", "--cached", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    # T: a regular file and a symlink swapping places changes the stored bytes like any edit.
+    raw = git(["diff", "--cached", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMRT"], root)
     findings: list[Finding] = []
     for new_mode, new_oid, name in parse_raw_diff_z(raw):
         findings += red.scan_path(name, prefix=prefix)
@@ -684,7 +747,7 @@ def scan_unstaged(
 ) -> list[Finding]:
     """Scan working-tree files that differ from the index (and their names)."""
     red = redactor or NameRedactor(rules)
-    raw = git(["diff", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMR"], root)
+    raw = git(["diff", "--raw", "-z", "--no-abbrev", "--diff-filter=ACMRT"], root)
     findings: list[Finding] = []
     for new_mode, _new_oid, name in parse_raw_diff_z(raw):
         if new_mode == "160000":
@@ -770,15 +833,75 @@ def scan_identity(rules: RuleSet, cwd: Path | None = None) -> list[Finding]:
     return findings
 
 
+def message_views(data: bytes, encoding: str | None) -> tuple[list[str], bool]:
+    """The texts to scan for a message stored in ``encoding`` (UTF-8 when None).
+
+    git keeps a message in the bytes of i18n.commitEncoding and shows it converted, so a rule
+    with non-ASCII text matches only the decoded form. The UTF-8 reading (bad bytes replaced) is
+    scanned as well, so a declared encoding can only add findings. The flag is False when the
+    bytes are not valid in the encoding or the encoding is unknown: that text cannot be
+    scanned, and the caller reports it.
+    """
+    views = [data.decode("utf-8", "replace")]
+    try:
+        declared = data.decode(encoding or "utf-8")
+    except (LookupError, UnicodeDecodeError):
+        return views, False
+    if declared != views[0]:
+        views.insert(0, declared)
+    return views, True
+
+
+def object_encoding(data: bytes) -> str | None:
+    """The value of a commit object's top-level ``encoding`` header, if any."""
+    for line in data.partition(b"\n\n")[0].split(b"\n"):
+        if line.startswith(b"encoding "):
+            return line[len(b"encoding ") :].decode("latin-1").strip()
+    return None
+
+
 def scan_commit(kind: str, oid: str, data: bytes, rules: RuleSet, prefix: str = "") -> list[Finding]:
-    """Scan a commit or tag object: identities by the email list, the message by the rules."""
-    head, _, body = data.decode("utf-8", "replace").partition("\n\n")
+    """Scan a commit or tag object: identities by the email list, everything else by the rules.
+
+    Every header is read, not only the known ones: git keeps extra headers, and a mergetag header
+    (written when a signed tag is merged) carries a whole tag object, one space in, whose tagger
+    is checked like any identity. The object is read in the encoding its header names."""
     where = f"{prefix}{kind} {oid[:SHORT_SHA]}"
+    views, readable = message_views(data, object_encoding(data))
+    findings = [] if readable else [Finding(f"{where} message", 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        findings += scan_object_text(kind, where, text, rules)
+    return unique(findings)
+
+
+def scan_object_text(kind: str, where: str, text: str, rules: RuleSet) -> list[Finding]:
+    """Scan one decoded reading of a commit or tag object."""
+    head, _, body = text.partition("\n\n")
     findings = []
+    other: list[str] = []
+    header = ""
     for line in head.split("\n"):
-        field, _, value = line.partition(" ")
-        if field in IDENT_FIELDS:
-            findings += check_ident(f"{where} {field}", value, rules)
+        if line.startswith(" "):
+            # A continuation line of the header above it.
+            field, _, value = line[1:].partition(" ")
+            if header == "mergetag" and field in IDENT_FIELDS:
+                findings += check_ident(f"{where} mergetag {field}", value, rules)
+            else:
+                other.append(line[1:])
+            continue
+        header, _, value = line.partition(" ")
+        if header in IDENT_FIELDS:
+            findings += check_ident(f"{where} {header}", value, rules)
+        elif kind == "tag" and header == "tag":
+            # The name stored inside the tag object outlives its ref; never print it.
+            hits = scan_text(value, rules, "")
+            findings += [
+                Finding(f"{where} name", 1, hit.rule_id, f"{hit.why} ({WHY_REDACTED_HINT})")
+                for hit in hits
+            ]
+        else:
+            other.append(line)
+    findings += to_findings(f"{where} header", scan_text("\n".join(other), rules, ""))
     return findings + to_findings(f"{where} message", scan_text(body, rules, ""))
 
 
@@ -850,19 +973,90 @@ def extract_commit_tree(data: bytes) -> str | None:
     return None
 
 
+def tag_target(data: bytes) -> str | None:
+    """The object id a raw tag object points at (its ``object`` header)."""
+    head, _, _ = data.partition(b"\n\n")
+    for line in head.split(b"\n"):
+        if line.startswith(b"object "):
+            return line[7:].decode("ascii").strip()
+    return None
+
+
+class Peeled(NamedTuple):
+    """What a set of starting objects resolves to once every tag layer is read."""
+
+    findings: list[Finding]
+    commits: set[str]
+    trees: set[str]
+    blobs: set[str]
+
+
+def peel_objects(root: Path, oids: Iterable[str], rules: RuleSet, prefix: str = "") -> Peeled:
+    """Read every tag layer above ``oids`` (scanning each tag object) and sort the rest by type.
+
+    A ref may point at a commit, a tree, a blob or an annotated tag, and a tag may point at
+    another tag. Each tag object is scanned (name, tagger, message); what the chain ends in is
+    returned so the caller can scan it. An unknown or missing object is a finding, never a pass.
+    """
+    findings: list[Finding] = []
+    commits: set[str] = set()
+    trees: set[str] = set()
+    blobs: set[str] = set()
+    seen: set[str] = set()
+    pending = sorted(set(oids))
+    while pending:
+        seen.update(pending)
+        next_round: set[str] = set()
+        for oid, kind, data in batch_read_objects(root, pending):
+            short = oid[:SHORT_SHA]
+            if kind == "tag":
+                findings += scan_commit("tag", oid, data, rules, prefix=prefix)
+                target = tag_target(data)
+                if target is None:
+                    findings.append(Finding(f"{prefix}tag {short}", 1, "undecodable", WHY_MISSING))
+                elif target not in seen:
+                    next_round.add(target)
+            elif kind == "commit":
+                commits.add(oid)
+            elif kind == "tree":
+                trees.add(oid)
+            elif kind == "blob":
+                blobs.add(oid)
+            else:
+                findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
+        pending = sorted(next_round)
+    return Peeled(findings, commits, trees, blobs)
+
+
+def resolve_object(root: Path, rev: str) -> str:
+    """The full object id ``rev`` names, whatever its type; ScanError if it names nothing."""
+    try:
+        out = git(["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{object}}"], root)
+    except ScanError as exc:
+        raise ScanError(f"not a git object: {rev}") from exc
+    oid = out.strip()
+    if not OBJECT_ID.fullmatch(oid):
+        raise ScanError(f"not a git object: {rev}")
+    return oid.decode("ascii")
+
+
 def scan_history_scope(
     root: Path,
     rules: RuleSet,
     *,
     rev_args: list[str],
+    start_objects: Iterable[str] = (),
     redactor: NameRedactor | None = None,
     ref_names: Iterable[str] = (),
-    include_all_tags: bool = False,
     check_replace: bool = True,
     prefix: str = "",
 ) -> list[Finding]:
     """Scan commits, tags, all historical tree paths (incl. deleted/renamed/duplicate blobs),
-    submodules, LFS pointers, and ref names for ``rev_args``."""
+    submodules, LFS pointers, and ref names for ``rev_args`` plus ``start_objects``.
+
+    ``start_objects`` are object ids of any type (what refs point at): every tag layer above them
+    is scanned, commits they reach join the history walk, and trees or blobs they end in are
+    scanned directly."""
     red = redactor or NameRedactor(rules)
     if git(["rev-parse", "--is-shallow-repository"], root).strip() == b"true":
         raise ScanError("shallow clone: history is incomplete, run git fetch --unshallow")
@@ -874,48 +1068,37 @@ def scan_history_scope(
     for ref in ref_names:
         findings += red.scan_ref(ref, prefix=prefix)
 
-    commit_oids = [
-        line.decode("ascii")
-        for line in git(["rev-list", *rev_args], root).split(b"\n")
-        if OBJECT_ID.fullmatch(line)
-    ]
+    peeled = peel_objects(root, start_objects, rules, prefix=prefix)
+    findings += peeled.findings
 
-    tag_oids: list[str] = []
-    if include_all_tags:
-        for line in git(
-            ["for-each-ref", "--format=%(objecttype) %(objectname) %(refname)", "refs/tags"],
-            root,
-        ).split(b"\n"):
-            if not line:
-                continue
-            parts = line.decode("utf-8", "replace").split(" ", 2)
-            if len(parts) == 3:
-                obj_type, oid, ref_name = parts
-                findings += red.scan_ref(ref_name, prefix=prefix)
-                if obj_type == "tag":
-                    tag_oids.append(oid)
+    commit_oids: list[str] = []
+    if rev_args or peeled.commits:
+        feed = "".join(f"{oid}\n" for oid in sorted(peeled.commits)).encode("ascii")
+        commit_oids = [
+            line.decode("ascii")
+            for line in git(["rev-list", "--stdin", *rev_args], root, stdin=feed).split(b"\n")
+            if OBJECT_ID.fullmatch(line)
+        ]
 
-    if not commit_oids and not tag_oids:
-        return findings
-
-    root_trees: set[str] = set()
-    for oid, kind, data in batch_read_objects(root, commit_oids + tag_oids):
+    root_trees: set[str] = set(peeled.trees)
+    for oid, kind, data in batch_read_objects(root, commit_oids):
         short = oid[:SHORT_SHA]
-        if kind in ("commit", "tag"):
+        if kind == "commit":
             findings += scan_commit(kind, oid, data, rules, prefix=prefix)
-            if kind == "commit":
-                tree_oid = extract_commit_tree(data)
-                if tree_oid:
-                    root_trees.add(tree_oid)
-        elif kind == "missing":
+            tree_oid = extract_commit_tree(data)
+            if tree_oid:
+                root_trees.add(tree_oid)
+        else:
             findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
 
     # Walk every unique (tree_oid, path_prefix) across all historical commits so deleted paths,
-    # renamed endpoints, and multiple paths sharing one blob are all checked.
+    # renamed endpoints, and multiple paths sharing one blob are all checked. A blob a ref or tag
+    # points at directly has no path: it is scanned once with no suffix.
     parsed_trees: dict[str, list[tuple[str, str, str]]] = {}
     visited_tree_paths: set[tuple[str, str]] = set()
     frontier: list[tuple[str, str]] = [(tree_oid, "") for tree_oid in sorted(root_trees)]
     blob_paths: dict[str, set[str]] = defaultdict(set)
+    direct_blobs: set[str] = set(peeled.blobs)
     checked_paths: set[str] = set()
 
     while frontier:
@@ -962,15 +1145,17 @@ def scan_history_scope(
         frontier = next_frontier
 
     # Read each unique blob once, caching content hits by (oid, suffix).
-    for oid, kind, data in batch_read_objects(root, sorted(blob_paths)):
+    for oid, kind, data in batch_read_objects(root, sorted(set(blob_paths) | direct_blobs)):
         short = oid[:SHORT_SHA]
-        if kind == "missing":
+        if kind != "blob":
+            # A tree entry or ref that names a missing object, or an object of the wrong type.
             findings.append(Finding(f"{prefix}object {short}", 1, "undecodable", WHY_MISSING))
             continue
-        if kind != "blob":
-            continue
         hits_by_suffix: dict[str, list[Hit]] = {}
-        for full_path in sorted(blob_paths[oid]):
+        if oid in direct_blobs:
+            hits_by_suffix[""] = scan_bytes("", data, rules)
+            findings += to_findings(f"{prefix}blob {short}", hits_by_suffix[""])
+        for full_path in sorted(blob_paths.get(oid, ())):
             suffix = Path(full_path).suffix.lower()
             if suffix not in hits_by_suffix:
                 hits_by_suffix[suffix] = scan_bytes(full_path, data, rules)
@@ -983,19 +1168,25 @@ def scan_history_scope(
 
 
 def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = None) -> list[Finding]:
-    """Scan every blob, commit, tag, historical path and ref reachable from any ref."""
-    all_refs = [
-        line.decode("utf-8", "replace")
-        for line in git(["for-each-ref", "--format=%(refname)"], root).split(b"\n")
-        if line
-    ]
+    """Scan every object reachable from any ref: commits, every tag layer (nested tags too),
+    trees and blobs, including refs that point straight at a tree or a blob, plus every
+    historical path and every ref name. Covers at least what ``git rev-list --objects --all``
+    lists."""
+    all_refs: list[str] = []
+    ref_objects: list[str] = []
+    for line in git(["for-each-ref", "--format=%(objectname) %(refname)"], root).split(b"\n"):
+        if not line:
+            continue
+        oid, _, ref = line.decode("utf-8", "replace").partition(" ")
+        ref_objects.append(oid)
+        all_refs.append(ref)
     return scan_history_scope(
         root,
         rules,
         rev_args=["--all"],
+        start_objects=ref_objects,
         redactor=redactor,
         ref_names=all_refs,
-        include_all_tags=True,
         check_replace=True,
     )
 
@@ -1003,14 +1194,122 @@ def scan_history(root: Path, rules: RuleSet, redactor: NameRedactor | None = Non
 # --- files and messages ------------------------------------------------------------
 
 
-def scan_message(path: Path, rules: RuleSet) -> list[Finding]:
-    """Scan a commit message file; lines starting with ``#`` are comments."""
+def read_commit_encoding(cwd: Path | None = None) -> str | None:
+    """``i18n.commitEncoding`` as git would apply it to the next commit; None when not set."""
     try:
-        text = path.read_bytes().decode("utf-8", "replace")
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "--get", "i18n.commitEncoding"],
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ScanError(f"cannot read i18n.commitEncoding: cannot run git: {exc}") from exc
+    if done.returncode == 1:
+        return None
+    if done.returncode != 0:
+        detail = done.stderr.decode("utf-8", "replace").strip() or f"exit {done.returncode}"
+        raise ScanError(f"cannot read i18n.commitEncoding: git config failed: {detail}")
+    return done.stdout.decode("latin-1").strip() or None
+
+
+CUT_LINE = b"------------------------ >8 ------------------------\n"
+
+
+UNREADABLE = object()  # a config value git cannot give: read as "do not assume a cleanup"
+
+
+def last_config_value(pattern: str, cwd: Path | None = None) -> bytes | None | object:
+    """The value git applies for the keys matching ``pattern`` (the last one set), raw bytes.
+
+    None when no such key is set. UNREADABLE when one is set without a value or git cannot
+    answer: the callers read that as "do not assume a cleanup", which scans more, never less."""
+    try:
+        done = subprocess.run(
+            ["git", "--no-replace-objects", "config", "-z", "--get-regexp", pattern],
+            cwd=cwd or Path.cwd(),
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return UNREADABLE
+    entries = [entry for entry in done.stdout.split(b"\0") if entry]
+    if done.returncode == 1 and not entries:
+        return None
+    if done.returncode != 0 or not entries:
+        return UNREADABLE
+    _key, newline, value = entries[-1].partition(b"\n")
+    return value if newline and value else UNREADABLE
+
+
+def committed_message(data: bytes, cwd: Path | None = None) -> bytes:
+    """The part of a commit-msg hook's message file that the commit will keep.
+
+    git runs the hook before it cleans the message up (git-commit(1) ``--cleanup``,
+    githooks(5)). With no editor git sets ``GIT_EDITOR=:`` for the hook and cleans up
+    whitespace only, so every line stays. With an editor the default cleanup, ``strip``,
+    removes the lines that start with the comment string (``core.commentChar`` or
+    ``core.commentString``, ``#`` by default) and, under ``-v``, the diff from the scissors
+    line on; ``scissors`` removes only the scissors line and what follows it; ``verbatim`` and
+    ``whitespace`` remove nothing. ``--cleanup`` on the command line is not visible here, and
+    neither is ``-v``: a scissors line under ``strip`` is taken as git's. Whatever cannot be
+    read (the comment string ``auto``, a config git cannot answer) keeps every line.
+
+    Removed comment lines become empty lines, so line numbers still match the hook's file.
+    """
+    if os.environ.get("GIT_EDITOR") == ":":
+        return data
+    cleanup = last_config_value(r"^commit\.cleanup$", cwd)
+    if cleanup is None or cleanup == b"default":
+        cleanup = b"strip"
+    if cleanup not in (b"strip", b"scissors"):
+        return data
+    comment = last_config_value(r"^core\.comment(char|string)$", cwd)
+    if comment is None:
+        comment = b"#"
+    if not isinstance(comment, bytes) or comment == b"auto":
+        return data
+    cut = comment + b" " + CUT_LINE
+    if data.startswith(cut):
+        data = b""
+    else:
+        at = data.find(b"\n" + cut)
+        if at >= 0:
+            data = data[: at + 1]
+    if cleanup == b"scissors":
+        return data
+    lines = data.split(b"\n")
+    return b"\n".join(b"" if line.startswith(comment) else line for line in lines)
+
+
+def scan_message(path: Path, rules: RuleSet, kept_out: Path | None = None) -> list[Finding]:
+    """Scan a commit message file, every line of it.
+
+    A line starting with ``#`` is not skipped: git keeps it in the stored message unless the
+    commit is cleaned up (``git commit -F FILE`` without ``--cleanup`` does not strip it), and
+    what an editor's template adds there (branch, file names) is as public as the commit.
+    There is no commit object yet, so the bytes are read in i18n.commitEncoding (UTF-8 when it
+    is not set), the encoding git will store them under.
+
+    With ``kept_out`` (the commit-msg hook) only what the commit will keep is scanned, as
+    ``committed_message`` works it out, and those bytes are written to ``kept_out`` first so
+    the hook's next scanner reads the same text; a failed write is an error, not a pass."""
+    try:
+        data = path.read_bytes()
     except OSError as exc:
         raise ScanError(f"cannot read message file {path}: {exc.strerror}") from exc
-    kept = "\n".join("" if line.startswith("#") else line for line in text.split("\n"))
-    return to_findings(path.as_posix(), scan_text(kept, rules, ""))
+    if kept_out is not None:
+        data = committed_message(data)
+        try:
+            kept_out.write_bytes(data)
+        except OSError as exc:
+            raise ScanError(f"cannot write {kept_out}: {exc.strerror}") from exc
+    where = path.as_posix()
+    views, readable = message_views(data, read_commit_encoding())
+    findings = [] if readable else [Finding(where, 1, "undecodable", WHY_BAD_ENCODING)]
+    for text in views:
+        findings += to_findings(where, scan_text(text, rules, ""))
+    return unique(findings)
 
 
 def walk_error(exc: OSError) -> None:
@@ -1100,13 +1399,15 @@ def run_scans(
         findings += scan_history(root, rules, redactor=redactor)
     if args.rev:
         assert root is not None
+        # The object may be a commit, an annotated (possibly nested) tag, a tree or a blob:
+        # each tag layer is scanned and what the chain ends in is scanned by its type.
         findings += scan_history_scope(
             root,
             rules,
-            rev_args=[args.rev],
+            rev_args=[],
+            start_objects=[resolve_object(root, args.rev)],
             redactor=redactor,
             ref_names=args.ref_names,
-            include_all_tags=False,
             check_replace=True,
         )
     if args.range_spec:
@@ -1118,7 +1419,6 @@ def run_scans(
             rev_args=[args.range_spec],
             redactor=redactor,
             ref_names=args.ref_names,
-            include_all_tags=False,
             check_replace=True,
             prefix=prefix,
         )
@@ -1137,7 +1437,6 @@ def run_scans(
             rev_args=rev_args,
             redactor=redactor,
             ref_names=other_refs,
-            include_all_tags=False,
             check_replace=False,
             prefix="[other-refs] ",
         )
@@ -1147,7 +1446,7 @@ def run_scans(
     if args.identity:
         findings += scan_identity(rules)
     if args.message:
-        findings += scan_message(args.message, rules)
+        findings += scan_message(args.message, rules, kept_out=args.as_committed)
     if args.paths:
         findings += scan_paths(args.paths, rules, redactor=redactor)
     return findings
@@ -1195,7 +1494,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rev",
         metavar="COMMIT",
-        help="scan a specific commit and its full reachable history (paths, blobs, messages)",
+        help="scan one object and everything it reaches: a commit and its history, an annotated (nested) tag layer by layer, a tree or a blob",
     )
     parser.add_argument(
         "--range",
@@ -1227,7 +1526,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--message",
         type=Path,
         metavar="FILE",
-        help="scan a commit message file (lines starting with # are ignored)",
+        help="scan a commit message file, every line of it",
+    )
+    parser.add_argument(
+        "--as-committed",
+        type=Path,
+        metavar="OUT",
+        help="with --message, for the commit-msg hook: scan only what git keeps after it cleans "
+        "the message up (an editor commit strips its comment lines) and write that text to OUT",
     )
     parser.add_argument(
         "--rules",
@@ -1256,6 +1562,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="emit a structured, redacted JSON report on stdout",
     )
     parser.add_argument(
+        "--clone-mode",
+        action="store_true",
+        help="print 'maintainer' or 'contributor' (genops.mode, case-insensitive, or "
+        "AGENT_GENOPS_REQUIRE_PRIVATE=1) and exit; the hooks act on this answer",
+    )
+    parser.add_argument(
         "--redact-stream",
         action="store_true",
         help="read lines from stdin and print them with sensitive paths redacted",
@@ -1267,6 +1579,32 @@ def main(argv: list[str] | None = None) -> int:
     """Parse arguments, run the scans, print findings; return the exit status."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    modes = [
+        args.staged,
+        args.unstaged,
+        args.untracked,
+        args.tracked,
+        args.history,
+        args.rev,
+        args.range_spec,
+        args.other_refs_except,
+        args.ref_names,
+        args.identity,
+        args.message,
+        args.paths,
+    ]
+    if args.as_committed and not args.message:
+        parser.error("--as-committed needs --message")
+    if args.clone_mode:
+        if args.redact_stream or any(modes):
+            parser.error("--clone-mode takes no other mode")
+        try:
+            maintainer = is_maintainer_required()
+        except ScanError as exc:
+            print(f"privacy_scan: error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        print(MAINTAINER_MODE_VALUE if maintainer else CONTRIBUTOR_MODE_VALUE)
+        return EXIT_CLEAN
     if args.redact_stream:
         sys.stdout.reconfigure(errors="backslashreplace")
         try:
@@ -1286,20 +1624,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"privacy_scan: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
             return EXIT_ERROR
 
-    modes = [
-        args.staged,
-        args.unstaged,
-        args.untracked,
-        args.tracked,
-        args.history,
-        args.rev,
-        args.range_spec,
-        args.other_refs_except,
-        args.ref_names,
-        args.identity,
-        args.message,
-        args.paths,
-    ]
     if not any(modes):
         parser.error("nothing to scan: give a mode (see --help) or a PATH")
     sys.stdout.reconfigure(errors="backslashreplace")

@@ -6,12 +6,6 @@ remote_name=${1:-}
 remote_url=${2:-}
 zero_oid="0000000000000000000000000000000000000000"
 
-clone_mode=$(git --no-replace-objects config --get genops.mode 2>/dev/null || true)
-is_maintainer=0
-if [ "${AGENT_GENOPS_REQUIRE_PRIVATE:-0}" = "1" ] || [ "$clone_mode" = "maintainer" ]; then
-  is_maintainer=1
-fi
-
 url_allowed() {
   url=$1
   custom=$(git --no-replace-objects config --get genops.allowedPushUrl 2>/dev/null || true)
@@ -34,16 +28,33 @@ url_allowed() {
   esac
 }
 
-if [ "$is_maintainer" = "1" ] && [ -n "$remote_url" ]; then
-  if ! url_allowed "$remote_url"; then
-    echo "pre-push: refused in maintainer mode: remote '${remote_name:-unknown}' URL is not the approved upstream repository." >&2
-    exit 1
-  fi
+if [ -n "$remote_url" ]; then
+  # The scanner owns the one reading of the clone mode (genops.mode, case-insensitive, or
+  # AGENT_GENOPS_REQUIRE_PRIVATE=1); anything but its two answers stops the push.
+  clone_mode=$(python3 -B tools/privacy_scan.py --clone-mode) || {
+    echo "pre-push: refused: could not read the clone mode from tools/privacy_scan.py --clone-mode." >&2
+    exit 2
+  }
+  case "$clone_mode" in
+    maintainer)
+      if ! url_allowed "$remote_url"; then
+        echo "pre-push: refused in maintainer mode: remote '${remote_name:-unknown}' URL is not the approved upstream repository." >&2
+        exit 1
+      fi
+      ;;
+    contributor) ;;
+    *)
+      echo "pre-push: refused: tools/privacy_scan.py --clone-mode gave an unexpected answer." >&2
+      exit 2
+      ;;
+  esac
 fi
 
-# Direct invocation without push ref lines (or test stub without --rev): fall back to full history.
-if ! grep -q -- '--rev' tools/privacy_scan.py 2>/dev/null || [ -t 0 ]; then
+# Direct invocation (git always passes the remote name and URL; a terminal has no push ref lines
+# to read): scan the full history instead of waiting on stdin.
+if [ "$#" -eq 0 ] || [ -t 0 ]; then
   python3 -B tools/privacy_scan.py --history
+  sh tools/secret_scan.sh ignore-check HEAD
   exec sh tools/secret_scan.sh history
 fi
 
@@ -56,17 +67,20 @@ while IFS=' ' read -r local_ref local_sha remote_ref _remote_sha; do
   : "${_remote_sha:-}"
   seen_input=1
   if [ "$local_sha" = "$zero_oid" ]; then
-    python3 -B tools/privacy_scan.py --ref-name "$remote_ref"
+    # A deletion publishes no content and no new name, so nothing is checked.
+    echo "pre-push: deleting a remote ref publishes nothing; its name is not checked." >&2
     continue
   fi
   pushed_any=1
   python3 -B tools/privacy_scan.py --rev "$local_sha" --ref-name "$remote_ref"
+  sh tools/secret_scan.sh ignore-check "$local_sha"
   sh tools/secret_scan.sh rev "$local_sha"
   exclude_args="$exclude_args $local_sha"
 done
 
 if [ "$seen_input" = "0" ]; then
   python3 -B tools/privacy_scan.py --history
+  sh tools/secret_scan.sh ignore-check HEAD
   exec sh tools/secret_scan.sh history
 fi
 

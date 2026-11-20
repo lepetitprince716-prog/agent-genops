@@ -19,7 +19,9 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # the hooks rejec
 python3 tools/privacy_scan.py --tracked --history              # expect: clean
 ```
 
-`pre-commit` runs `--identity --staged`, `commit-msg` runs `--message "$1"`, `pre-push` runs `--history`. CI runs `--no-private --tracked --history` on every push to `main` and every pull request.
+The hooks run the scanner like this. `pre-commit` runs `--identity --staged`. `commit-msg` runs `--message "$1" --as-committed <file in the git directory>` and hands that file to the secret scan (the whole message file when it comes back empty), so both read only what the commit will keep. `pre-push` runs `--rev <sha> --ref-name <ref>` once for each ref being pushed, and then looks at the other local refs only to warn. A push that deletes a remote ref publishes nothing, so it is not checked. Only a hand run of `.githooks/pre-push` with no arguments, or from a terminal, scans `--history`. Each hook also runs the Betterleaks wrapper; see [PRIVACY.md](../PRIVACY.md#how-the-guard-works).
+
+CI runs `--no-private --tracked --history` on every push and every pull request. On a pull request the scanner and rules come from the base branch commit, not from the pull request.
 
 ### Modes
 
@@ -27,13 +29,27 @@ Combine them freely. `PATH` may be a file or a directory (recursive, `.git` skip
 
 | Flag | Scans |
 | --- | --- |
-| `--staged` | the index: what the next commit will contain |
+| `--staged` | the index, content and file names: what the next commit will contain |
+| `--unstaged` | working-tree changes relative to the index |
+| `--untracked` | untracked files that git does not ignore |
 | `--tracked` | every tracked file as it is in the working tree |
-| `--history` | every blob, commit and tag reachable from any ref, plus author, committer and tagger emails and messages |
+| `--history` | everything reachable from any ref: every blob, commit and tag, the file names in every commit, the ref names, nested tags layer by layer, refs that point straight at a tree or a blob, and the author, committer and tagger emails and messages. A `refs/replace` entry is a finding. A shallow clone is an error |
+| `--rev COMMIT` | one object and everything it reaches: a commit and its history, an annotated tag layer by layer, a tree or a blob |
+| `--range BASE..HEAD` | the commits in a range and their file names |
+| `--other-refs-except REV` | local history reachable from the other refs, leaving out the given revs (repeatable); the pre-push hook uses it for its warning |
+| `--ref-name REF` | check a target ref name against the rules (repeatable) |
 | `--identity` | the email in `GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` must match `allowed_emails` |
-| `--message FILE` | a commit message file; lines starting with `#` are ignored |
+| `--message FILE` | a commit message file; every line is scanned, `#` lines too |
+| `--as-committed OUT` | with `--message`, for the commit-msg hook: scan only what git keeps after the hook and write it to OUT (a failed write is exit 2). git cleans up after the hook. With no editor (`GIT_EDITOR=:`), or `commit.cleanup` `verbatim` or `whitespace`, that is every line. Under `strip`, the default with an editor, lines starting with the comment string (`core.commentChar` or `core.commentString`, `#` by default) and everything from the scissors line on are dropped; under `scissors`, only the scissors line and what follows. A comment string of `auto`, or a config git cannot read, keeps every line |
 | `--rules FILE` | use another public rules file |
 | `--no-private` | do not load the private rules |
+| `--require-private` | fail unless non-empty private rules are loaded |
+| `--source-labels` | prefix staged, unstaged, untracked and branch findings with their source |
+| `--json` | print a redacted JSON report on stdout |
+| `--clone-mode` | print `maintainer` or `contributor` and exit; the hooks act on this answer |
+| `--redact-stream` | read lines from stdin and print them with sensitive paths redacted |
+
+The clone mode is `maintainer` when `git config genops.mode` is `maintainer` (any letter case) or `AGENT_GENOPS_REQUIRE_PRIVATE=1` is set, and `contributor` when the key is `contributor` or not set. Any other value is refused (exit 2) by the scanner and so by every hook.
 
 Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations look like `docs/a.md:12`, `blob 1a2b3c4d5e6f docs/a.md:12` (history), `commit 1a2b3c4d5e6f author:1` or `message:3` (annotated tags say `tag`), and `identity author:1`. Images report line 1. The guard fails closed: a file it cannot read or decode is a finding.
 
@@ -51,8 +67,9 @@ Exit status: `0` clean, `1` findings, `2` usage or internal error. Locations loo
 | `tunnel_host` | hosts under ts.net, trycloudflare.com, cfargotunnel.com and ngrok |
 | `lan_hostname` | `<name>.local`, `.lan`, `.internal`, `.home.arpa` |
 | `generation_metadata` | PNG text chunks `prompt`, `workflow`, `parameters`, `Comment`, `Description`, or a ComfyUI graph; raw-byte check for JPEG, WEBP, GIF |
-| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes` |
-| `undecodable` | a file that is not valid UTF-8, or a file, PNG chunk or git object that cannot be read or parsed |
+| `binary_not_allowed` | a file with NUL bytes whose suffix is not in `allowed_binary_suffixes`; the rules still read its raw bytes, as they do for a file that is not valid UTF-8 |
+| `image_header` | a file with an image suffix that does not start with that format's header (PNG signature, JPEG `FF D8 FF`, `GIF87a`/`GIF89a`, `RIFF`…`WEBP`, ICO `00 00 01 00`) |
+| `undecodable` | a file that is not valid UTF-8, a commit message not valid in its encoding (the commit's `encoding` header, `i18n.commitEncoding` for the commit-msg hook, else UTF-8), or a file, PNG chunk or git object that cannot be read or parsed |
 
 Author, committer and tagger emails (`--identity`, `--history`) face a stricter test than `email`: only `allowed_emails` patterns pass.
 
@@ -76,10 +93,36 @@ Your own patterns (names, handles, machine names) live outside the repository in
 ### Limits
 
 - Pattern based: base64, URL-encoded or split-up values are not decoded.
-- File names are not scanned and pixel data is not inspected, so keep generated images out of the repository.
+- The workflow policy (`tools/workflow_policy.py`) undoes percent-encoding up to four rounds and refuses a string that a fifth round would still change (`over_encoded`); it does not decode HTML entities.
+- File names and ref names are scanned against the same rules, and a name that matches is printed as a redacted alias. Pixel data is not inspected, so keep generated images out of the repository.
+- A PNG's text chunks are decoded and read, and so is every other chunk except the pixel chunks (`IDAT`, `fdAT`): bytes in the pixel chunks are not matched against the rules.
+- A hostname with an underscore right in front of it (`_name.local_`, as Markdown emphasis writes it) is not caught by the `lan_hostname` rule.
 - JPEG, WEBP and GIF are scanned as raw bytes; a large photo can rarely trip a rule by chance.
 - `--history` stops on a shallow clone (exit 2); run `git fetch --unshallow` first.
-- With `git commit -v` the diff shown in the editor is part of the message file and is scanned too.
+- The commit-msg hook cannot see `--cleanup` on the command line. An editor commit with `--cleanup=verbatim` or `--cleanup=whitespace` keeps git's comment lines in the commit, and the hook does not scan them; the pre-push scan reads the stored commit and still refuses them.
+- The hook cannot see `-v` either. Under `strip` it takes a scissors line as git's and skips what follows, which git keeps when `-v` was not given; pre-push catches that too. Under `verbatim` or `whitespace` the `-v` diff is scanned, though git drops it.
+
+### Secret scan wrapper
+
+`secret_scan.sh` runs Betterleaks with `--redact`, with live validation off, and always with Betterleaks' default rules: it loads neither the repository's own Betterleaks config nor one named in the environment (`BETTERLEAKS_CONFIG`, `GITLEAKS_CONFIG` and their `_TOML` forms are cleared). The default config's path prefilter, which skips whole files by name (image and font suffixes, office documents, lock files, `node_modules` and vendor folders), is replaced with one that skips nothing, so those files are read like any other. A finding is one line, `rule path:line commit`. It takes one mode:
+
+| Mode | Scans |
+| --- | --- |
+| `staged` | the index; content git treats as binary (a NUL byte in the first 8000 bytes, or `binary` or `-diff` in any attributes file git reads: `.gitattributes`, `.git/info/attributes`, the user's or the system's), which Betterleaks skips, is read again through stdin, where a finding carries no path and no exemption applies; `rev`, `range` and `history` do the same for the blobs their commits add or change, `files` for named files with a NUL byte |
+| `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
+| `message FILE` | one commit message file |
+| `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages, every tag object layer by layer, and trees or blobs that a ref points at directly |
+| `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
+| `range BASE..HEAD` | the commits in a range, merges against their first parent, and their messages |
+| `files FILE...` | the named working-tree files; symlinks are not followed. A file whose head Betterleaks' dir mode sniffs and skips (PDF, ELF, ZIP, gzip, MZ and more) is read again from a copy with an added empty first line, so a finding there counts one line more |
+| `ignore-check --index` or `ignore-check OBJECT` | exits 1 unless `.betterleaksignore` and `.gitleaksignore` in the working tree are byte for byte the versions in the index or in the tree of `OBJECT`; a missing file counts as a version |
+
+Exit status: `0` clean, `2` usage error, `3` Betterleaks is missing, anything else is a finding or a Betterleaks failure. The hooks run `ignore-check` before each scan, so a working-tree ignore file that the commit does not carry cannot hide a finding. Environment controls (`SECRET_SCAN_IGNORE_PATH`, `SECRET_SCAN_IGNORE_ALLOW=1`, and the redaction settings) are described in the header of the script.
+
+Limits of the secret scan:
+
+- A false positive in content git treats as binary cannot be allowed. Its second reading goes through stdin, where a finding has no path and its line is counted among other files, so a `:rule:line` fingerprint could cover a token in another file; that reading uses an empty ignore list and turns inline allow comments off, and a `.betterleaksignore` entry without a path has no effect on it in any mode. Change the file instead.
+- Betterleaks reads the raw bytes of binary content. A token inside a compressed PNG text chunk (`zTXt`, or an `iTXt` with compression on) is not found, and neither is one that touches binary bytes with no space or line break between them.
 
 ## Kernel classes
 
@@ -153,7 +196,9 @@ git config user.email "<id>+<name>@users.noreply.github.com"   # hook 只放行 
 python3 tools/privacy_scan.py --tracked --history              # 应当输出 clean
 ```
 
-`pre-commit` 运行 `--identity --staged`，`commit-msg` 运行 `--message "$1"`，`pre-push` 运行 `--history`。CI 在每次推送 `main` 和每个 pull request 时运行 `--no-private --tracked --history`。
+hook 这样调用扫描器：`pre-commit` 运行 `--identity --staged`；`commit-msg` 运行 `--message "$1" --as-committed <git 目录里的一个文件>`，再把这个文件交给密钥扫描（它是空的就改交整个说明文件），两者都只读提交会留下的内容；`pre-push` 对每个被推送的 ref 运行一次 `--rev <sha> --ref-name <ref>`，再检查本地其余的 ref，但那一步只告警。删除远端 ref 的推送不发布任何内容，所以不检查。只有不带参数、或在终端里手动运行 `.githooks/pre-push` 时，才会扫 `--history`。每个 hook 还会运行 Betterleaks 包装脚本，见 [PRIVACY.md](../PRIVACY.md#防护怎么工作)。
+
+CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --history`。pull request 上，扫描器和规则取自 base 分支的那个提交，不用 pull request 自己带的版本。
 
 #### 参数
 
@@ -161,13 +206,27 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 
 | 参数 | 扫描对象 |
 | --- | --- |
-| `--staged` | 暂存区，也就是下一次提交会包含的内容 |
+| `--staged` | 暂存区的内容和文件名，也就是下一次提交会包含的东西 |
+| `--unstaged` | 工作区里相对暂存区有改动的文件 |
+| `--untracked` | 没被 git 忽略的未跟踪文件 |
 | `--tracked` | 工作区里每个已跟踪的文件 |
-| `--history` | 所有引用可达的 blob、提交和标签，外加作者、提交者、标签者的邮箱和提交说明 |
+| `--history` | 所有 ref 可达的一切：每个 blob、提交和标签，每个提交里的文件名，ref 名，逐层展开的嵌套标签，直接指向 tree 或 blob 的 ref，以及作者、提交者、标签者的邮箱和提交说明。`refs/replace` 里有条目就算一条发现。浅克隆会报错 |
+| `--rev COMMIT` | 一个对象和它能到达的一切：一个提交连同它的历史、逐层展开的带注释标签、一个 tree 或 blob |
+| `--range BASE..HEAD` | 一个提交区间里的提交和文件名 |
+| `--other-refs-except REV` | 其余 ref 可达的本地历史，排除给定的 rev（可重复）；pre-push 用它做告警 |
+| `--ref-name REF` | 按规则检查目标 ref 名（可重复） |
 | `--identity` | `GIT_AUTHOR_IDENT` 和 `GIT_COMMITTER_IDENT` 里的邮箱必须匹配 `allowed_emails` |
-| `--message FILE` | 一个提交说明文件，`#` 开头的行忽略 |
+| `--message FILE` | 一个提交说明文件，每一行都扫，`#` 开头的也算 |
+| `--as-committed OUT` | 和 `--message` 一起用，给 commit-msg 钩子：只扫 git 在钩子之后清理完会留下的内容，并把它写进 OUT（写不进去是退出码 2）。没开编辑器（`GIT_EDITOR=:`），或 `commit.cleanup` 是 `verbatim`、`whitespace` 时，留下的是每一行。`strip`（开编辑器时的默认）去掉以注释字符串（`core.commentChar` 或 `core.commentString`，默认 `#`）开头的行和剪刀线及其后的内容；`scissors` 只去掉剪刀线及其后的内容。注释字符串是 `auto`，或 git 读不出配置时，留下每一行 |
 | `--rules FILE` | 换用另一份公开规则 |
 | `--no-private` | 不加载私有规则 |
+| `--require-private` | 没有加载到非空的私有规则就失败 |
+| `--source-labels` | 在暂存、未暂存、未跟踪和分支的命中前加上来源标签 |
+| `--json` | 在标准输出打印脱敏的 JSON 报告 |
+| `--clone-mode` | 打印 `maintainer` 或 `contributor` 然后退出；hook 按这个答案行事 |
+| `--redact-stream` | 从标准输入读行，把敏感路径脱敏后打印 |
+
+克隆模式：`git config genops.mode` 的值是 `maintainer`（大小写不限），或设了 `AGENT_GENOPS_REQUIRE_PRIVATE=1`，就是 `maintainer`；值是 `contributor` 或没设，是 `contributor`；其他值扫描器一律拒绝（exit 2），所以每个 hook 都拒绝。
 
 退出码：`0` 干净，`1` 有发现，`2` 用法错误或内部错误。位置写法见上面的英文部分，图片一律报第 1 行。宁可误报也不漏报：读不了或解不开的文件，本身就算一条发现。
 
@@ -185,8 +244,9 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 | `tunnel_host` | ts.net、trycloudflare.com、cfargotunnel.com、ngrok 下的主机名 |
 | `lan_hostname` | `<name>.local`、`.lan`、`.internal`、`.home.arpa` |
 | `generation_metadata` | PNG 文本块 `prompt`、`workflow`、`parameters`、`Comment`、`Description`，或 ComfyUI 节点图；JPEG、WEBP、GIF 查原始字节 |
-| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件 |
-| `undecodable` | 不是合法 UTF-8 的文件，或读不了、解析不了的文件、PNG 数据块、git 对象 |
+| `binary_not_allowed` | 含 NUL 字节、后缀又不在 `allowed_binary_suffixes` 里的文件；规则仍按原始字节读它，不是合法 UTF-8 的文件也一样 |
+| `image_header` | 带图片后缀、开头却不是该格式文件头的文件（PNG 签名、JPEG `FF D8 FF`、`GIF87a`/`GIF89a`、`RIFF`…`WEBP`、ICO `00 00 01 00`） |
+| `undecodable` | 不是合法 UTF-8 的文件，按自己的编码（提交的 `encoding` 头；commit-msg 钩子看 `i18n.commitEncoding`；都没有就是 UTF-8）解不开的提交说明，或读不了、解析不了的文件、PNG 数据块、git 对象 |
 
 作者、提交者和标签者的邮箱（`--identity`、`--history`）要过更严的一关：只有匹配 `allowed_emails` 的才放行。
 
@@ -199,10 +259,36 @@ python3 tools/privacy_scan.py --tracked --history              # 应当输出 cl
 #### 局限
 
 - 只做模式匹配：base64、URL 编码、被拆开的值都不会解码。
-- 不检查文件名，也不检查像素数据，所以生成的图片不要放进仓库。
+- 工作流策略（`tools/workflow_policy.py`）最多解四轮百分号编码，第五轮还会变的字符串直接拒绝（`over_encoded`）；它不解 HTML 实体。
+- 文件名和 ref 名也按同一套规则检查，命中的名字以脱敏别名输出。不检查像素数据，所以生成的图片不要放进仓库。
+- PNG 的文本块（`tEXt`、`zTXt`、`iTXt`）会解码后读，除像素块（`IDAT`、`fdAT`）以外的其他块也按原始字节读；像素块里的字节不参与规则匹配。
+- 下划线紧贴在主机名开头的写法（如 Markdown 强调写成的 `_name.local_`）不会被 `lan_hostname` 规则抓到。
 - JPEG、WEBP、GIF 按原始字节扫描，较大的照片偶尔会碰巧触发规则。
 - 浅克隆上 `--history` 会直接报错退出（退出码 2），先执行 `git fetch --unshallow`。
-- 用 `git commit -v` 时，编辑器里的 diff 也在提交说明文件里，会一起被扫描。
+- commit-msg 钩子看不到命令行上的 `--cleanup`。编辑器式提交加 `--cleanup=verbatim` 或 `--cleanup=whitespace` 时，git 的注释行会进提交，钩子不扫它们；推送前的扫描读存下来的提交对象，照样会拦。
+- 钩子也看不到 `-v`。`strip` 下它把剪刀线当成 git 加的，不扫其后的内容，而没带 `-v` 时 git 会保留这些内容；推送前的扫描同样会拦。`verbatim` 或 `whitespace` 下 `-v` 的 diff 会被扫，尽管 git 会删掉它。
+
+#### 密钥扫描包装脚本
+
+`secret_scan.sh` 用 `--redact` 运行 Betterleaks，关掉在线验证，始终用 Betterleaks 的默认规则：不加载仓库自己的 Betterleaks 配置，也不用环境变量指定的配置（`BETTERLEAKS_CONFIG`、`GITLEAKS_CONFIG` 及其 `_TOML` 形式会被清掉）。默认配置里按文件名整份跳过的路径预过滤（图片和字体后缀、办公文档、lock 文件、`node_modules` 和 vendor 目录等）换成了什么都不跳过的版本，这些文件和别的文件一样读。一条命中就是一行 `规则 路径:行号 提交`。它接受一个模式：
+
+| 模式 | 扫描对象 |
+| --- | --- |
+| `staged` | 暂存区；git 当作二进制的内容（前 8000 字节里有 NUL 字节，或 git 读到的任一属性文件里标了 `binary`、`-diff`：`.gitattributes`、`.git/info/attributes`、用户级或系统级的属性文件）Betterleaks 会跳过，这部分另经 stdin 再读一遍，命中不带路径，也不认任何豁免；`rev`、`range`、`history` 对各自提交新增或改动的 blob 同样处理，`files` 对指定文件里含 NUL 字节的同样处理 |
+| `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
+| `message FILE` | 一个提交说明文件 |
+| `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明、逐层展开的每个标签对象，以及 ref 直接指向的 tree 或 blob |
+| `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |
+| `range BASE..HEAD` | 一个区间里的提交（合并提交对照第一个父提交）和它们的提交说明 |
+| `files FILE...` | 指定的工作区文件，不跟随符号链接。文件头被 Betterleaks 的 dir 模式认成 PDF、ELF、ZIP、gzip、MZ 等而被跳过的文件，另用加了一个空行的副本再读一遍，命中的行号因此多 1 |
+| `ignore-check --index` 或 `ignore-check OBJECT` | 工作区里的 `.betterleaksignore` 和 `.gitleaksignore` 必须和暂存区里、或 `OBJECT` 的 tree 里的版本逐字节相同，否则退出码为 1；文件不存在也算一个版本 |
+
+退出码：`0` 干净，`2` 用法错误，`3` 找不到 Betterleaks，其余是命中或 Betterleaks 自己失败。hook 在每次扫描之前先跑 `ignore-check`，所以提交里没有的工作区 ignore 文件，不能用来遮住命中。环境变量（`SECRET_SCAN_IGNORE_PATH`、`SECRET_SCAN_IGNORE_ALLOW=1` 和脱敏相关的几个）写在脚本开头的注释里。
+
+密钥扫描的局限：
+
+- git 当作二进制的内容里的误报没有办法放行。这部分经 stdin 再读一遍，命中不带路径，行号又和别的文件一起数，一条 `:规则:行号` 指纹可能放过另一个文件里的令牌；所以这一遍用空的 ignore 列表、关掉行内豁免，`.betterleaksignore` 里不带路径的条目在任何模式下都对它不起作用。只能改文件本身。
+- Betterleaks 读的是二进制内容的原始字节。压缩过的 PNG 文本块（`zTXt`，或开了压缩的 `iTXt`）里的令牌找不到，令牌和二进制字节紧贴、中间没有空格或换行的也找不到。
 
 ### 内核分类
 

@@ -26,7 +26,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOKS = ("pre-commit", "commit-msg", "pre-push")
-STUB_PASS = "import sys\nsys.exit(0)\n"
+# The pass stub answers the clone-mode question the pre-push hook asks before it scans (a
+# contributor clone, as these repositories are), so a push reaches the per-ref scans. It also
+# answers --redact-stream the way the real scanner does for paths that are not private: the
+# text comes back unchanged (secret_scan.sh prints a finding only through that call).
+STUB_PASS = (
+    "import sys\n"
+    "if sys.argv[1:] == ['--clone-mode']:\n"
+    "    print('contributor')\n"
+    "if '--redact-stream' in sys.argv[1:]:\n"
+    "    sys.stdout.write(sys.stdin.read())\n"
+    "sys.exit(0)\n"
+)
 STUB_FAIL = "import sys\nsys.stderr.write('FIRST-SCAN-REFUSED\\n')\nsys.exit(1)\n"
 IDENTITY = "1+tester@users.noreply.github.com"
 

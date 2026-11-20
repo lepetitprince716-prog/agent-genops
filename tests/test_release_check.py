@@ -805,5 +805,97 @@ class ReleaseAndCheckTests(unittest.TestCase):
             self.assertIn("email", combined(scan))
 
 
+class ReleaseInputValidationTests(unittest.TestCase):
+    """What ``./check release`` accepts as its target before it scans anything."""
+
+    def release(self, repo: SyntheticRepo, ref: str, commit: str, *more: str) -> subprocess.CompletedProcess[str]:
+        return repo.check(
+            "release",
+            "--to",
+            "origin",
+            "--ref",
+            ref,
+            "--commit",
+            commit,
+            "--allowed-url",
+            str(repo.remote),
+            "--manifest-dir",
+            str(repo.manifest_dir),
+            "--allow-new-ref",
+            *more,
+        )
+
+    def clean_candidate(self, repo: SyntheticRepo) -> str:
+        repo.write("docs/guide.md", "# Guide\n\nA clean change.\n")
+        repo.git("add", "docs/guide.md")
+        return repo.commit_unchecked("clean change")
+
+    def test_ref_must_be_one_valid_branch_ref(self) -> None:
+        if shutil.which("betterleaks") is None:
+            self.fail("betterleaks is not installed: brew install betterleaks")
+        repo = SyntheticRepo(self, maintainer=True)
+        commit = self.clean_candidate(repo)
+        bad = (
+            "refs/heads/*",
+            "refs/heads/a:refs/tags/v1",
+            "refs/heads/",
+            "refs/heads/a..b",
+            "refs/heads/a b",
+            "refs/heads//x",
+            "refs/heads/x.lock",
+            "refs/heads/x@{y}",
+            "refs/heads/x?",
+            "refs/heads/x[",
+            "refs/tags/v1",
+            "main",
+        )
+        for ref in bad:
+            with self.subTest(ref=ref):
+                res = self.release(repo, ref, commit)
+                self.assertEqual(res.returncode, 2, combined(res))
+                self.assertIn("--ref", combined(res))
+                self.assertEqual(list(repo.manifest_dir.iterdir()), [])
+        ok = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(ok.returncode, 0, combined(ok))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+
+    def test_every_push_url_of_the_remote_must_be_the_one_approved_url(self) -> None:
+        if shutil.which("betterleaks") is None:
+            self.fail("betterleaks is not installed: brew install betterleaks")
+        repo = SyntheticRepo(self, maintainer=True)
+        commit = self.clean_candidate(repo)
+        rogue = repo.base / "rogue.git"
+        repo.git("init", "-q", "--bare", str(rogue), cwd=repo.base)
+
+        # Control: the single approved push URL passes and writes one manifest.
+        ok = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(ok.returncode, 0, combined(ok))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+        # A second push URL: git pushes to every one of them, the first is the approved one.
+        repo.git("remote", "set-url", "--add", "--push", "origin", str(repo.remote))
+        repo.git("remote", "set-url", "--add", "--push", "origin", str(rogue))
+        listed = repo.git("remote", "get-url", "--push", "--all", "origin").stdout.split()
+        self.assertEqual(listed, [str(repo.remote), str(rogue)])
+        two = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(two.returncode, 2, combined(two))
+        self.assertIn("push URL", combined(two))
+
+        # A second plain url entry doubles as a second push URL when no pushurl is set.
+        repo.git("config", "--unset-all", "remote.origin.pushurl")
+        repo.git("remote", "set-url", "--add", "origin", str(rogue))
+        both = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(both.returncode, 2, combined(both))
+
+        # The same approved URL listed twice is still not one address.
+        repo.git("config", "--unset-all", "remote.origin.url")
+        repo.git("config", "--add", "remote.origin.url", str(repo.remote))
+        repo.git("config", "--add", "remote.origin.url", str(repo.remote))
+        dup = self.release(repo, "refs/heads/feature/ok", commit)
+        self.assertEqual(dup.returncode, 2, combined(dup))
+        self.assertEqual(len(list(repo.manifest_dir.iterdir())), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
