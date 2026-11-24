@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import resource
 import select
 import shutil
 import signal
@@ -30,7 +31,7 @@ case " $* " in
   {pattern}) ;;
   *) exec {real} "$@" ;;
 esac
-if [ -p /dev/stdin ]; then how=pipe; else how=file; fi
+if [ -p /dev/stdin ]; then how=pipe; elif [ -f /dev/stdin ]; then how=file; else how=other; fi
 printf '%s %s\\n' "$how" "{name} $*" >>"$FEED_LOG"
 exec {real} "$@"
 """
@@ -82,7 +83,29 @@ class FeedTests(unittest.TestCase):
         lines = log.read_text().splitlines()
         self.assertTrue(any("git " in line and "cat-file --batch" in line for line in lines), lines)
         self.assertTrue(any("betterleaks stdin" in line for line in lines), lines)
-        self.assertEqual([line for line in lines if line.startswith("pipe ")], [])
+        self.assertEqual([line for line in lines if not line.startswith("file ")], [])
+
+    def test_input_that_cannot_be_staged_is_refused_not_passed(self) -> None:
+        repo = Repo(self)
+        repo.add_file("note.txt", "note\n")
+        repo.git("-c", f"core.hooksPath={os.devnull}", "commit", "-q", "-m", "long\n\n" + "clean words\n" * 6000)
+        limit = 16 * 1024
+
+        def limit_file_size() -> None:
+            resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
+
+        result = subprocess.run(
+            ["sh", "tools/secret_scan.sh", "range", "HEAD~1..HEAD"],
+            cwd=repo.path,
+            env=repo.env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            preexec_fn=limit_file_size,
+        )
+        self.assertNotEqual(result.returncode, 0, combined(result))
+        self.assertIn("cannot stage the input for betterleaks", result.stderr)
 
     def test_range_returns_when_new_pipes_are_tiny_and_poll_misreports(self) -> None:
         size, writable_when_full = new_pipe_state()
