@@ -218,6 +218,8 @@ Titles stage groups `Step 1`, `Step 2`, `Step 3`, and stacks `Models` and `Contr
 
 Reads top to bottom, like an architecture diagram: every group is a box, `Controls` first, and in each box the main chain runs down the middle with the nodes that feed it on the left and each stage's preview on the right. Boxes stack in columns; a column taller than the canvas is wide wraps into the next column. An optional module stays one box.
 
+By default `stack` writes its MODEL, CLIP, VAE and CONDITIONING links between columns as hidden links (the frontend's own `extra.linkPresentation`): each end shows a small tag, and tags of one output stack into one (`VAE ×2`), so a loaded model or prompt does not draw a curve across every column. The links stay in the workflow, are still routed and keep their reroutes, and the queued prompt is the same. When a type's hidden links leave two or more outputs, each carries a label naming its source: the node's title, else its display name, else the output's name, and `<name>: <output name>` for a node that feeds two outputs of the type. Latent and image links, and links inside a column, stay drawn. `--hide-links none` draws every link; `--hide-links resources` turns hiding on for a preset that does not default to it (the other presets list no links between columns, so asking changes nothing there). A frontend that does not know the key draws these links as the routes written for them.
+
 ### `auto`
 
 `--preset auto` evaluates the graph topology and picks the first matching rule (recording both the choice and the reason in the stderr summary and `.report.json`):
@@ -235,7 +237,7 @@ Reads top to bottom, like an architecture diagram: every group is a box, `Contro
 
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
-cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME]
+cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
              [--all-enabled] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide

@@ -218,6 +218,8 @@ wrote out/steps.report.json
 
 像架构图一样自上而下阅读：每个组是一个框，`Controls` 排最前；框内主链竖着走在中间，喂它的节点在左侧，每个阶段的预览在右侧。框按列堆叠，一列高过画布宽度就折到右边的新列。可选模块整块一个框。
 
+`stack` 默认把跨列的 MODEL、CLIP、VAE、CONDITIONING 连线写成隐藏线（ComfyUI 前端自带的 `extra.linkPresentation`）：线的两端各画一个小标签，同一输出口的标签叠成一个（如 `VAE ×2`），不再有一条条曲线横穿各列。这些线仍在工作流里，照常走线并写 reroute，排队的 prompt 不变。某个类型的隐藏线来自两个及以上输出口时，每条线带 `label` 写明来源：节点标题，没有就用节点显示名，再没有就用输出口名；同一个节点在该类型里接出两个及以上输出口时写成 `<名字>: <输出口名>`。LATENT、IMAGE 连线和列内的连线照常画出。`--hide-links none` 把所有线都画出来；`--hide-links resources` 给默认不隐藏的预设打开隐藏（另外五个预设不列跨列连线，打开也没有变化）。不认识这个键的前端会把这些线照常画成走好的线。
+
 ### `auto`（根据图规模自动选型）
 
 传入 `--preset auto` 时，`cwc` 按顺序匹配第一条成立的规则（并在摘要行和报告中写明命中原因）：
@@ -235,7 +237,7 @@ wrote out/steps.report.json
 
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
-cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME]
+cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
              [--all-enabled] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide
