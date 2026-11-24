@@ -32,6 +32,20 @@ that still crosses a box is tried again with a wider clearance; one that fails b
 plain spline and is listed in ``RouteResult.unresolved``. A dummy chain that crosses a box is
 routed like any other link.
 
+Layout may declare rectangles to keep off (``LayoutResult.keepout``: the ``y`` presets list the
+group titles' text). Routing then treats each as it treats a box, with three differences:
+
+- a plain spline or a dummy chain that crosses one, drawn at the default cap, is routed through
+  a grid in which the keepout blocks like a box, and keeps its spline or its chain when no route
+  clears it there: the keepout never costs a link the shape it would have had without it;
+- a link routed for a box that finds no route clear of the keepout is routed again through a
+  grid without it, which is the route it would have had with no keepout declared;
+- the keepout is held to the default cap only (:func:`_crossing`), and a link that still meets
+  it is not unresolved.
+
+The grids with and without the keepout share their bounds and their track table, so a track one
+output takes in either is taken in both.
+
 Links of one output share reroutes as a bus tree: two links share a reroute while their points up
 to it and the direction to their next point are the same, so sharing never changes how either
 link is drawn. Reroutes are never shared across outputs.
@@ -66,6 +80,7 @@ CLEARANCES = (10.0, 20.0)  # px kept between a route and every box; the second i
 FLANK_RUN = 3  # grid steps: a run at least this long gets a flank reroute next to its turn
 EPSILON = 1e-6  # as G2: a curve within this of a box edge is on the edge
 BUCKET = 400  # px: the box index's square
+KEEPOUT = "keepout:"  # key prefix of a keepout rectangle in the indexes and grids
 
 
 @dataclass(frozen=True)
@@ -110,31 +125,44 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
         Renderer.CLASSIC: _Index([(key, classic_box(node, facts[key])) for key, node in nodes.items()]),
         Renderer.VUE: _Index([(key, vue_box(node, facts[key])) for key, node in nodes.items()]),
     }
+    keepout = [(f"{KEEPOUT}{k}", rect) for k, rect in enumerate(result.keepout)]
+    walls = _Index(keepout) if keepout else None
     canvas.set_reroutes([], [])
     anchors: dict[Renderer, Anchors] = {renderer: {} for renderer in Renderer}
     drawn = sorted(((link, _ends(link, nodes, facts, anchors)) for link in canvas.links), key=lambda pair: _net_order(pair[0]))
     drawn = [(link, e) for link, e in drawn if e]
     links = [link for link, _ in drawn]
     ends = {link.id: e for link, e in drawn}
-    plain = {link.id for link in links if _crossing(link, (), ends[link.id], boxes)} | set(result.forced)
+    needed = {link.id for link in links if _crossing(link, (), ends[link.id], boxes)} | set(result.forced)
+    plain = needed | {link.id for link in links if walls and _crossing(link, (), ends[link.id], boxes, walls=walls)}
     chains: dict[int, list[Point]] = {}
+    kept: dict[int, list[Point]] = {}  # dummy chains clear of the boxes, not of the keepout
     dummy = 0
     for link in links:
         points = result.waypoints.get(link.id)
         if points:
             snapped = [(float(round(x / GRID) * GRID), float(round(y / GRID) * GRID)) for x, y in points]
-            if not _crossing(link, snapped, ends[link.id], boxes):
+            if not _crossing(link, snapped, ends[link.id], boxes, walls=walls):
                 chains[link.id] = snapped
                 dummy += 1
                 continue
+            if walls and not _crossing(link, snapped, ends[link.id], boxes):
+                kept[link.id] = snapped
+            else:
+                needed.add(link.id)
             plain.add(link.id)
     unresolved: list[int] = []
     runs: dict[tuple[object, Cell, Cell], None] = {}  # a run once, however many links of its output take it
     owners = sorted(((key, envelope(node, facts[key])) for key, node in nodes.items()), key=lambda kv: id_order(kv[0]))
     frames = [group.bounding for group in canvas.groups] if result.fence_frames else []
-    grids = [Grid.build(owners, CLEARANCES[0], frames=frames)]
-    # one track table: a track taken is taken at any clearance
-    grids.extend(Grid.build(owners, c, grids[0].used, frames) for c in CLEARANCES[1:])
+    grids = [Grid.build(owners + keepout, CLEARANCES[0], frames=frames)]
+    # one track table: a track taken is taken at any clearance, and with or without the keepout
+    grids.extend(Grid.build(owners + keepout, c, grids[0].used, frames) for c in CLEARANCES[1:])
+    checks = [walls] * len(grids)  # the keepout each grid's routes are checked against as drawn
+    if keepout:
+        spread = [rect for _, rect in keepout]
+        grids.extend(Grid.build(owners, c, grids[0].used, frames, spread) for c in CLEARANCES)
+        checks.extend([None] * len(CLEARANCES))
     # per output: each point and heading on a routed path, to that path, the point's index, its reroutes and its corners
     trees: dict[object, dict[tuple[Cell, int], tuple[list[Cell], int, list[Point], list[int]]]] = {}
     # per grid and output: the tree's points and headings as search states, and how many of the tree's entries that covers
@@ -144,7 +172,10 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
             continue
         net = _net(link)
         tree = trees.setdefault(net, {})
-        for g, grid in enumerate(grids):
+        # a link routed only for the keepout keeps its plain spline or dummy chain rather than a
+        # route that ignores the keepout
+        tries = len(grids) if link.id in needed else len(CLEARANCES)
+        for g, grid in enumerate(grids[:tries]):
             start = _start(ends[link.id], grid)
             goal = _goal(ends[link.id], grid)
             rows = _rows(ends[link.id])
@@ -173,7 +204,7 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
                 else:
                     corners = _corners(cells)
                     points = _points(cells, corners, rows)
-                if not _crossing(link, points, ends[link.id], boxes, skip):
+                if not _crossing(link, points, ends[link.id], boxes, skip, checks[g]):
                     path = cells
                     break
             if path is None:
@@ -186,7 +217,11 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
                 tree.setdefault((path[k], STEPS.index(step)), (path, k, points, corners))
             break
         else:
-            unresolved.append(link.id)
+            if link.id in kept:
+                chains[link.id] = kept[link.id]
+                dummy += 1
+            elif link.id in needed:
+                unresolved.append(link.id)
     reroutes, extensions = _trees(links, chains)
     canvas.set_reroutes(reroutes, extensions)
     return RouteResult(
@@ -274,10 +309,17 @@ def _same_segments(trunk: list[Point], branch: list[Point]) -> int:
     return n
 
 
-def _crossing(link: Link, points: Iterable[Point], ends: Ends, boxes: dict[Renderer, _Index], skip: int = 0) -> bool:
+def _crossing(
+    link: Link, points: Iterable[Point], ends: Ends, boxes: dict[Renderer, _Index], skip: int = 0, walls: _Index | None = None
+) -> bool:
     """Whether ``link`` drawn through reroutes at ``points`` crosses a node box that is not one of
-    its ends, under either renderer, at the default and at an unlimited reroute spline cap. The
-    first ``skip`` segments are known to be clear.
+    its ends, under either renderer, at the default and at an unlimited reroute spline cap, or a
+    rectangle of ``walls`` (the keepout) under either renderer at the default cap. The first
+    ``skip`` segments are known to be clear.
+
+    The keepout is held to the default cap only: a curve the frontend draws at its default
+    setting stays off it, while a Z or a route whose turns bulge into it at an unlimited cap is
+    kept, since a title read through a line is a blemish where a box crossed is an error.
 
     The link is drawn as :func:`cwc.canvas.reroutes.paths_between` draws it with no other link
     through its reroutes, from the same helpers, so the curves are the same floats. A segment
@@ -296,7 +338,7 @@ def _crossing(link: Link, points: Iterable[Point], ends: Ends, boxes: dict[Rende
             leaving = directions[i - first] if i else None
             entering = None if i == last else directions[i + 1 - first]
             c1, c2 = segment_controls(a, b, leaving, entering, REROUTE_CAP)
-            if index.hit(a, c1, c2, b, own):
+            if index.hit(a, c1, c2, b, own) or (walls is not None and walls.hit(a, c1, c2, b, own)):
                 return True
             if chain:
                 d1, d2 = segment_controls(a, b, leaving, entering, math.inf)

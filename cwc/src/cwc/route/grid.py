@@ -1,9 +1,10 @@
 """The free space between node boxes as a 20 px grid, and the track search over it.
 
 A grid point ``(i, j)`` is the canvas point ``(i * GRID, j * GRID)``. It is blocked when it lies
-within ``clearance`` of a node envelope (the union of the classic and Vue boxes), so a straight
-run between free points keeps that distance from every box and a reroute's circle (radius 10)
-never covers a node. Every other point is free: the gaps between layers inside a group, the gaps
+within ``clearance`` of a node envelope (the union of the classic and Vue boxes), or of a
+rectangle routing keeps off (:mod:`cwc.route`), so a straight run between free points keeps that
+distance from every box and a reroute's circle (radius 10) never covers a node. Every other point
+is free: the gaps between layers inside a group, the gaps
 between groups, the corridors between bands and the margin outside the groups are all free space
 here; the grid does not know which is which (:mod:`cwc.route` names the channel afterwards).
 The one exception is the sides of the group frames: a step up or down closer than ``GRID`` to
@@ -97,11 +98,19 @@ class Grid:
 
     @classmethod
     def build(
-        cls, boxes: list[tuple[str, Rect]], clearance: float, used: dict[int, set[object]] | None = None, frames: Iterable[Rect] = ()
+        cls,
+        boxes: list[tuple[str, Rect]],
+        clearance: float,
+        used: dict[int, set[object]] | None = None,
+        frames: Iterable[Rect] = (),
+        extent: Iterable[Rect] = (),
     ) -> Grid:
-        """``used``: a track table to share with another grid over the same ``boxes`` (the bounds,
-        and so the edge codes, do not depend on ``clearance``); ``frames``: the group frames whose
-        sides are fenced."""
+        """``boxes`` block the points within ``clearance`` of them, each point owned by the first
+        box that blocks it. ``used``: a track table to share with another grid of the same bounds
+        (the bounds, and so the edge codes, do not depend on ``clearance``); ``frames``: the group
+        frames whose sides are fenced; ``extent``: rectangles the bounds take in as they take in
+        the boxes, blocking nothing, so a grid without some of the boxes can share the track
+        table of one with them."""
         owner: dict[Cell, str] = {}
         for key, box in boxes:
             i0 = math.floor((box.x - clearance) / GRID) + 1
@@ -111,9 +120,10 @@ class Grid:
             for i in range(i0, i1 + 1):
                 for j in range(j0, j1 + 1):
                     owner.setdefault((i, j), key)
-        if boxes:
-            lo = (min(math.floor(b.x / GRID) for _, b in boxes) - MARGIN, min(math.floor(b.y / GRID) for _, b in boxes) - MARGIN)
-            hi = (max(math.ceil(b.right / GRID) for _, b in boxes) + MARGIN, max(math.ceil(b.bottom / GRID) for _, b in boxes) + MARGIN)
+        spread = [box for _, box in boxes] + list(extent)
+        if spread:
+            lo = (min(math.floor(b.x / GRID) for b in spread) - MARGIN, min(math.floor(b.y / GRID) for b in spread) - MARGIN)
+            hi = (max(math.ceil(b.right / GRID) for b in spread) + MARGIN, max(math.ceil(b.bottom / GRID) for b in spread) + MARGIN)
         else:
             lo, hi = (0, 0), (0, 0)
         grid = cls(owner, lo, hi, clearance=clearance) if used is None else cls(owner, lo, hi, used, clearance)

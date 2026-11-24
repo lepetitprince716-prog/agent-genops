@@ -184,6 +184,10 @@ class LayoutResult:
     ``fence_frames``: routing keeps its upright runs a grid step or more off the left and right
     sides of every group frame (:mod:`cwc.route.grid`); set by a ``y`` preset, whose buses run
     beside and between the frames of its columns. False for an ``x`` preset.
+    ``keepout``: rectangles routing keeps its runs off where it can, as it keeps them off node
+    boxes, and falls back to ignoring where it cannot (:mod:`cwc.route`); a ``y`` preset lists
+    the title text of every group (:func:`cwc.canvas.titles.title_rect`). Empty for an ``x``
+    preset.
     """
 
     preset: str
@@ -199,3 +203,4 @@ class LayoutResult:
     forced: tuple[int, ...] = ()
     tracks: Mapping[int, float] = field(default_factory=dict)
     fence_frames: bool = False
+    keepout: tuple[Rect, ...] = ()
