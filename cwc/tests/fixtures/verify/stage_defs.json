@@ -1,0 +1,17 @@
+{
+  "StageLoader": {"inputs": [{"name": "ckpt_name", "type": "COMBO", "widget": true}], "outputs": [["MODEL", "MODEL"], ["VAE", "VAE"]]},
+  "StageLatent": {"inputs": [], "outputs": [["LATENT", "LATENT"]]},
+  "StageSampler": {"inputs": [{"name": "model", "type": "MODEL"}, {"name": "latent_image", "type": "LATENT"}], "outputs": [["LATENT", "LATENT"]]},
+  "StageGuidedSampler": {"inputs": [{"name": "guider", "type": "GUIDER"}, {"name": "latent_image", "type": "LATENT"}], "outputs": [["output", "LATENT"], ["denoised_output", "LATENT"]]},
+  "StageGuider": {"inputs": [{"name": "model", "type": "MODEL"}], "outputs": [["GUIDER", "GUIDER"]]},
+  "StageLatentScale": {"inputs": [{"name": "samples", "type": "LATENT"}], "outputs": [["LATENT", "LATENT"]]},
+  "StageLatentMix": {"inputs": [{"name": "samples_a", "type": "LATENT"}, {"name": "samples_b", "type": "LATENT"}], "outputs": [["LATENT", "LATENT"]]},
+  "StageDecode": {"inputs": [{"name": "samples", "type": "LATENT"}, {"name": "vae", "type": "VAE"}], "outputs": [["IMAGE", "IMAGE"]]},
+  "StageEncode": {"inputs": [{"name": "pixels", "type": "IMAGE"}, {"name": "vae", "type": "VAE"}], "outputs": [["LATENT", "LATENT"]]},
+  "StageImageScale": {"inputs": [{"name": "image", "type": "IMAGE"}], "outputs": [["IMAGE", "IMAGE"]]},
+  "StageImageMix": {"inputs": [{"name": "image_a", "type": "IMAGE"}, {"name": "image_b", "type": "IMAGE"}], "outputs": [["IMAGE", "IMAGE"]]},
+  "StagePreview": {"inputs": [{"name": "images", "type": "IMAGE"}], "outputs": [], "output_node": true},
+  "StageSave": {"inputs": [{"name": "images", "type": "IMAGE"}], "outputs": [], "output_node": true},
+  "StageCompare": {"inputs": [{"name": "image_a", "type": "IMAGE"}, {"name": "image_b", "type": "IMAGE"}], "outputs": [], "output_node": true},
+  "StageReroute": {"virtual": true, "behavior": "passthrough", "inputs": [], "outputs": []}
+}

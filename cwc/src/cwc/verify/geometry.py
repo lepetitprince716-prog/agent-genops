@@ -105,7 +105,7 @@ def check_geometry(
         skipped.append({"code": Code.G3.value, "reason": "no membership or before canvas given"})
     record(Code.G4, check_group_overlap(canvas, policy))
     into_cockpit = links_into(view, cockpit_groups)
-    record(Code.G5, check_direction(view, policy, into_cockpit))
+    record(Code.G5, check_direction(view, policy, into_cockpit, preset.axis if preset else "x"))
     record(Code.G6, check_grid(view, policy))
     record(Code.G9, check_aspect(view))
     report.metrics[Code.G10.value] = _link_length(view, defs, policy, before)

@@ -785,6 +785,114 @@
     }
    }
   },
+  "compare": {
+   "all_enabled": {
+    "1": {
+     "_meta": {
+      "title": "Load Image"
+     },
+     "class_type": "LoadImage",
+     "inputs": {
+      "image": "a.png"
+     }
+    },
+    "2": {
+     "_meta": {
+      "title": "Load Image"
+     },
+     "class_type": "LoadImage",
+     "inputs": {
+      "image": "b.png"
+     }
+    },
+    "3": {
+     "_meta": {
+      "title": "A / B"
+     },
+     "class_type": "ImageCompare",
+     "inputs": {
+      "compare_view": {
+       "__value__": [
+        "",
+        ""
+       ]
+      },
+      "image_a": [
+       "1",
+       0
+      ],
+      "image_b": [
+       "2",
+       0
+      ]
+     }
+    },
+    "4": {
+     "_meta": {
+      "title": "Compare Images"
+     },
+     "class_type": "ImageCompare",
+     "inputs": {
+      "compare_view": {
+       "__value__": [
+        "",
+        ""
+       ]
+      },
+      "image_a": [
+       "2",
+       0
+      ],
+      "image_b": [
+       "1",
+       0
+      ]
+     }
+    }
+   },
+   "factory": {
+    "1": {
+     "_meta": {
+      "title": "Load Image"
+     },
+     "class_type": "LoadImage",
+     "inputs": {
+      "image": "a.png"
+     }
+    },
+    "2": {
+     "_meta": {
+      "title": "Load Image"
+     },
+     "class_type": "LoadImage",
+     "inputs": {
+      "image": "b.png"
+     }
+    },
+    "3": {
+     "_meta": {
+      "title": "A / B"
+     },
+     "class_type": "ImageCompare",
+     "inputs": {
+      "compare_view": {
+       "__value__": [
+        "",
+        ""
+       ]
+      },
+      "image_a": [
+       "1",
+       0
+      ],
+      "image_b": [
+       "2",
+       0
+      ]
+     }
+    }
+   }
+  },
   "dynamic_match": {
    "all_enabled": {
     "1": {

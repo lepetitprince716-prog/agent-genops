@@ -20,8 +20,11 @@ from cwc.nodedefs.learn import command as learn_command
 from cwc.nodedefs.registry import NodeDefs, read_source
 from cwc.nodedefs.types import NodeDef
 from cwc.layout.presets import load_presets
+from cwc.layout.types import HideLinks
 from cwc.pipeline import AUTO, Compiled, compile_document, preset_guide
+from cwc.render.command import SKINS
 from cwc.render.command import command as render_command
+from cwc.render.skin import Theme
 from cwc.report import Code, CwcError, ExitCode, Mode, Report, Severity, sort_findings
 from cwc.resources import read_bytes
 
@@ -62,6 +65,12 @@ def _parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="layout preset, or auto to choose one by the graph's size and shape (default: the graph's _workflow.layout.preset, else bento); `cwc presets` describes each",
     )
+    build.add_argument(
+        "--hide-links",
+        choices=[mode.value for mode in HideLinks],
+        help="which links the canvas writes hidden in extra.linkPresentation: resources hides the MODEL, CLIP, VAE and "
+        "CONDITIONING links between columns, none draws every link (default: the preset's choice, resources for stack)",
+    )
     build.add_argument("--all-enabled", action="store_true", help="also write <name>.full.api.json")
     build.add_argument("--allow-unknown", action="store_true", help="accept node types with no definition")
     build.add_argument("--json", action="store_true", help="print a JSON summary")
@@ -85,6 +94,8 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument("graph", metavar="GRAPH.ui.json", help="canvas workflow (UI JSON, or a PNG carrying one)")
     render.add_argument("-o", "--output", required=True, metavar="OUT.svg", help="SVG file to write")
     render.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    render.add_argument("--skin", choices=SKINS, default=SKINS[0], help="debug: boxes, slots and splines as the frontend draws them; diagram: a figure with the notes in extra.cwc")
+    render.add_argument("--theme", choices=[theme.value for theme in Theme], help="colours of the diagram skin (default light)")
     render.add_argument("--json", action="store_true", help="print the summary as JSON")
     render.set_defaults(run=render_command)
     return parser
@@ -253,7 +264,13 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     try:
         doc = load_authoring(read_file(source, "authoring file"))
         defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
-        compiled = compile_document(doc, defs, allow_unknown=args.allow_unknown, preset=args.preset)
+        compiled = compile_document(
+            doc,
+            defs,
+            allow_unknown=args.allow_unknown,
+            preset=args.preset,
+            hide_links=HideLinks(args.hide_links) if args.hide_links else None,
+        )
         report = compiled.report
         exit_code = ExitCode.OK if report.ok else ExitCode.CHECK_FAILED
         if report.ok:

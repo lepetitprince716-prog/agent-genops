@@ -1,9 +1,10 @@
-"""Necessity diagnostics N1-N6. Static topology and mode checks; nothing is removed.
+"""Necessity diagnostics N1-N7. Static topology and mode checks; nothing is removed.
 
 * N1, N2 use the all-enabled graph: every link counts whatever the node modes. A node of
   unknown type may be an output node, so it counts as one (no false dead-node reports).
   Frontend-only nodes never run and are not reported as dead; links pass through them.
 * N3 compares nodes of one type by their widget values and the sources of their links.
+* N7 (stage handoff without a preview) lives in :mod:`cwc.verify.previews`.
 * N4-N6 describe canvases cwc did not write; compile output cannot contain them.
   A muted or bypassed node is in a module when some group around it holds only real
   nodes of that same mode. Stray notes are reported only on canvases that have groups.
@@ -19,11 +20,12 @@ from cwc.report import Code, Finding, Severity
 from cwc.nodedefs.types import Behavior
 from cwc.verify.graph import OFF_MODES, CanvasFacts, GroupMembers, reaching
 from cwc.verify.policy import Policy
+from cwc.verify.previews import check_stage_previews
 
 
 def check_necessity(facts: CanvasFacts, policy: Policy) -> list[Finding]:
-    """N1-N3: dead nodes, no output node, duplicate nodes."""
-    return _dead_nodes(facts, policy) + _duplicates(facts)
+    """N1-N3 and N7: dead nodes, no output node, duplicate nodes, stage handoffs without a preview."""
+    return _dead_nodes(facts, policy) + _duplicates(facts) + check_stage_previews(facts)
 
 
 def check_tidiness(facts: CanvasFacts) -> list[Finding]:

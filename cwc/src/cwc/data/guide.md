@@ -11,7 +11,13 @@ is. This guide lists what cwc accepts beyond that.
 2. `cwc compile GRAPH.json -o out` and read stderr: every error and warning comes with a hint,
    one `E8 info` line names the keys that have no effect yet, and a successful run ends with one
    summary line.
-3. `cwc render out/GRAPH.ui.json -o GRAPH.svg` to look at the canvas without ComfyUI.
+3. `cwc render out/GRAPH.ui.json -o GRAPH.svg` to look at the canvas without ComfyUI. Add
+   `--skin diagram` (and `--theme dark`) for a figure: panels, modules, right-angled links, and
+   the title and notes below.
+
+With more than one sampler, an `N7 info` line names each handoff from one sampler to the next that has no
+PreviewImage (or ImageCompare) on the first stage's picture. Put one at every stage boundary so the stages
+can be compared; the line does not change the exit code or `ok`.
 
 ## Relaxations of the API format
 
@@ -33,7 +39,7 @@ is. This guide lists what cwc accepts beyond that.
 | `ui_order` | integer | Orders the Controls group's members of one kind, lower first, members without it last. The kinds keep their own order (positive prompt, negative prompt, reference image, size and batch, seed, other), and a member fed by another member stays after it, so `ui_order` decides only among, say, two `other` controls side by side. Elsewhere it matters only when more than 12 nodes of one group sit at the same step of the data flow and are cut into chunks. |
 | `ui_locked` | `true` or a list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
 | `ui_expose` | list of widget names | Checked (the names must be widgets of the node), no effect on the canvas yet. |
-| `ui_note` | string | Accepted, no effect on the canvas yet. |
+| `ui_note` | string | Written into the canvas's `extra.cwc`; `cwc render --skin diagram` draws it as a note to the right of the node's module. |
 
 The keys marked "no effect yet" are listed, with the nodes that set them, in one `E8 info` line
 on stderr and in the report when any is set. It does not change the exit code or `ok`.
@@ -59,10 +65,10 @@ example the sampler, and `ui_role: "pipeline"` to keep a prompt out of it.
 | Key | Value | Effect |
 |---|---|---|
 | `format` | `1` | Required when `_workflow` is present. |
-| `layout` | `{"preset": NAME}` | The layout preset; `--preset` overrides it. `cwc presets` lists the names. |
-| `groups` | `{GROUP_ID: {"title": string, "note": string}}` | `title` names the group made by `ui_group`. `note` is accepted, no effect yet. |
+| `layout` | `{"preset": NAME}` | The layout preset; `--preset` overrides it. `cwc presets` lists the names; `stack` reads top to bottom with each stage's preview beside it, for a graph of several stages. |
+| `groups` | `{GROUP_ID: {"title": string, "note": string}}` | `title` names the group made by `ui_group`. `note` is written into the canvas's `extra.cwc`; `cwc render --skin diagram` draws it at the top right of the group's panel. |
 | `models` | list of `{"name", "url", "directory"}`, all strings | Written to the canvas's `models` list, which ComfyUI reads to offer missing model downloads. |
-| `title` | string | Accepted, no effect yet. |
+| `title` | string | Written into the canvas's `extra.cwc`; `cwc render --skin diagram` draws it as the figure's title. |
 | `locale` | string | Accepted, no effect yet. |
 
 Any other key in `_workflow`, `_workflow.layout` or a `groups` entry is an error.

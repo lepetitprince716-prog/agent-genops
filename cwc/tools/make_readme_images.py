@@ -16,7 +16,7 @@ writes ``docs/images/<name>-<palette>.png``:
 
 - ``hero``: the left part of the ``bento`` canvas of ``hires.json`` (the groups in
   ``HERO_GROUPS``), zoomed in the frontend so that node titles stay legible at 830 pixels.
-- ``<preset>``: the whole canvas of ``landscape.json`` in each of the five presets, at the
+- ``<preset>``: the whole canvas of ``landscape.json`` in each of the six presets, at the
   frontend's scale 1, shrunk to the same width. A canvas narrower than ``PRESET_RATIO`` (width
   over height) is widened to it with the frontend's empty grid, so none shows taller than that.
 
@@ -75,7 +75,7 @@ SHOTS = (
     Shot("hero", "hires.json", "bento", HERO_GROUPS),
     *(
         Shot(preset, "landscape.json", preset, None)
-        for preset in ("bento", "swimlanes", "cockpit-split", "tower-preview", "stepped")
+        for preset in ("bento", "swimlanes", "cockpit-split", "tower-preview", "stepped", "stack")
     ),
 )
 

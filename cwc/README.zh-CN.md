@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>零第三方依赖</strong> · <strong>内置 702 个核心节点定义</strong> · <strong>377 KB 免安装单文件 <code>cwc.pyz</code></strong> · <strong>5 套专业布局预设</strong>
+  <strong>零第三方依赖</strong> · <strong>内置 702 个核心节点定义</strong> · <strong>377 KB 免安装单文件 <code>cwc.pyz</code></strong> · <strong>6 套专业布局预设</strong>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   </picture>
 </p>
 
-上图是 `cwc compile` 将 9 节点高清放大工作流 [`docs/images/src/hires.json`](docs/images/src/hires.json) 编译为 `.ui.json` 后，直接拖入真实 ComfyUI 前端（1.59.1，仅隐藏顶部菜单栏）截取的左半侧画布。完整全画布效果见下方[五套布局预设](#五套布局预设)，开箱即用的示例画布见 [`showcase/`](showcase/README.zh-CN.md)。
+上图是 `cwc compile` 将 9 节点高清放大工作流 [`docs/images/src/hires.json`](docs/images/src/hires.json) 编译为 `.ui.json` 后，直接拖入真实 ComfyUI 前端（1.59.1，仅隐藏顶部菜单栏）截取的左半侧画布。完整全画布效果见下方[六套布局预设](#六套布局预设)，开箱即用的示例画布见 [`showcase/`](showcase/README.zh-CN.md)。
 
 ---
 
@@ -160,9 +160,9 @@ wrote out/steps.report.json
 
 ---
 
-## 五套布局预设
+## 六套布局预设
 
-通过 `--preset <名称>`（或 JSON 顶层的 `_workflow.layout.preset`）即可切换排版架构；运行 `cwc presets` 可查看每种预设的适用场景。下面是同一个 12 节点工作流 `landscape.json` 在五套预设下的实机编译效果：
+通过 `--preset <名称>`（或 JSON 顶层的 `_workflow.layout.preset`）即可切换排版架构；运行 `cwc presets` 可查看每种预设的适用场景。下面是同一个 12 节点工作流 `landscape.json` 在六套预设下的实机编译效果：
 
 ### `bento`（默认便当盒网格）
 
@@ -209,6 +209,17 @@ wrote out/steps.report.json
 
 将第一列固定为上下堆叠的 `Models` 与 `Controls`，后续处理阶段依次命名为 `Step 1`、`Step 2`、`Step 3`，专为教学文章与分步演示工作流打造。
 
+### `stack`（自上而下的架构图竖排）
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/stack-dark.png">
+  <img src="docs/images/stack-light.png" width="830" alt="stack 预设">
+</picture>
+
+像架构图一样自上而下阅读：每个组是一个框，`Controls` 排最前；框内主链竖着走在中间，喂它的节点在左侧，每个阶段的预览在右侧。框按列堆叠，一列高过画布宽度就折到右边的新列。可选模块整块一个框。
+
+`stack` 默认把跨列的 MODEL、CLIP、VAE、CONDITIONING 连线写成隐藏线（ComfyUI 前端自带的 `extra.linkPresentation`）：线的两端各画一个小标签，同一输出口不带 label 的标签叠成一个（如 `VAE ×2`），不再有一条条曲线横穿各列。这些线仍在工作流里，照常走线并写 reroute，排队的 prompt 不变。某个类型的隐藏线来自两个及以上输出口时，每条线带 `label` 写明来源，写法和前端给这个节点起的标题一致：节点标题，没有就用显示名（节点包没起显示名时就是类名），连定义都没有时用类名；同一个节点在该类型里接出两个及以上输出口时再加上 `: <输出口名>`。两个来源会写出同样的 label 时（比如两个都没起标题的提示词节点），这两个来源都不写，因为这样的 label 分不出谁是谁。带 label 的线在两端各有自己的小标签，不会叠在一起。LATENT、IMAGE 连线和列内的连线照常画出。`--hide-links none` 把所有线都画出来；`--hide-links resources` 给默认不隐藏的预设打开隐藏（另外五个预设不列跨列连线，打开也没有变化）。不认识这个键的前端会把这些线照常画成走好的线。
+
 ### `auto`（根据图规模自动选型）
 
 传入 `--preset auto` 时，`cwc` 按顺序匹配第一条成立的规则（并在摘要行和报告中写明命中原因）：
@@ -226,19 +237,19 @@ wrote out/steps.report.json
 
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
-cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME]
+cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
              [--all-enabled] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
-cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
+cwc render   GRAPH.ui.json -o OUT.svg [--skin debug|diagram] [--theme light|dark] [--nodedefs FILE|URL] [--json]
 ```
 
 | 命令 | 功能说明 |
 |---|---|
 | `node` | 查看单个节点定义（输入、控件与默认值、下拉框可选枚举、输出），或按类名/显示名/分类搜索。未知 `TYPE` 退出码为 `3` 并在 stderr 提示最接近的类型；搜索无结果退出码为 `1`（`--json` 下输出 `[]`）。 |
 | `compile` | 将 API 图编译为 `<name>.ui.json` 画布与 `<name>.api.json`。加 `--all-enabled` 会额外写出所有可选模块开启时的 `<name>.full.api.json`。 |
-| `presets` | 列出五套预设的结构特点、适用场景以及 `auto` 的选型规则。 |
+| `presets` | 列出六套预设的结构特点、适用场景以及 `auto` 的选型规则。 |
 | `guide` | 打印单页编写指南。 |
 | `learn` | 从成对的 `.ui.json` 画布与 API prompt 中自动学习自定义节点的控件排列模板。 |
 | `render` | 无需启动浏览器或 ComfyUI，直接把 `.ui.json` 画布渲染成 `.svg` 矢量图。 |
@@ -263,7 +274,7 @@ ComfyUI 的 **702 个核心节点定义**已直接打包在 `cwc` 内部。若�
 
 E7 也涵盖 `cwc` 不认识的 `_meta` 键：以 `ui_` 开头的是错误并提示最接近的键；其他的是警告。同一个节点上一个 `_meta` 键被另一个键覆盖时，会给出一条 E7 警告，点出两个键并提示该删哪个（退出码和 `ok` 不变）。优先级顺序：`ui_role: cockpit` 高于 `ui_group`，`ui_group` 高于 `ui_role: plumbing`，`ui_optional` 高于 `ui_role` 的 `cockpit` 和 `plumbing`。
 
-`cwc` 已接受但当前暂不渲染的预留键（`ui_locked`、`ui_expose`、`ui_note`、`_workflow.title`、`_workflow.locale`、`_workflow.groups.<id>.note`）每次编译汇总为一条 `E8` info 结论（退出码和 `ok` 不变）。
+`ui_note`、`_workflow.title`、`_workflow.groups.<id>.note` 写进画布的 `extra.cwc`，由 `cwc render --skin diagram` 画成模块注释、图头标题和面板右上的元信息。`cwc` 已接受但当前暂不生效的预留键（`ui_locked`、`ui_expose`、`_workflow.locale`）每次编译汇总为一条 `E8` info 结论（退出码和 `ok` 不变）。
 
 </details>
 
@@ -305,7 +316,7 @@ E7 也涵盖 `cwc` 不认识的 `_meta` 键：以 `ui_` 开头的是错误并提
 
 ## 架构文档与项目状态
 
-- **当前已就绪**：完整编译管线（`normalize` → `instantiate` → `annotate` → `layout` → `route` → `verify`）、五套布局预设、六个核心命令、单文件免安装包构建器（`tools/build_pyz.py`）、Agent 技能包（[`skills/`](skills/comfyui-workflow-compiler/SKILL.md)）以及 [`showcase/`](showcase/README.zh-CN.md) 教程样板间。
+- **当前已就绪**：完整编译管线（`normalize` → `instantiate` → `annotate` → `layout` → `route` → `verify`）、六套布局预设、六个核心命令、单文件免安装包构建器（`tools/build_pyz.py`）、Agent 技能包（[`skills/`](skills/comfyui-workflow-compiler/SKILL.md)）以及 [`showcase/`](showcase/README.zh-CN.md) 教程样板间。
 - **下一阶段计划（M3）**：保持拓扑不变的无损画布整理（`cwc beautify`）、画布内嵌注释与导览卡、以及 PNG 工作流元数据嵌入与提取（`cwc embed` / `cwc extract`）。
 
 深度工程与前端实测文档（英文）：

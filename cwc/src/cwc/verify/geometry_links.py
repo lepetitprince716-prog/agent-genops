@@ -126,12 +126,12 @@ def check_crossings(view: GeometryView, policy: Policy) -> tuple[list[Finding], 
 
 
 def check_direction(
-    view: GeometryView, policy: Policy, exempt: frozenset[int] = frozenset()
+    view: GeometryView, policy: Policy, exempt: frozenset[int] = frozenset(), axis: str = "x"
 ) -> tuple[list[Finding], dict[str, Any]]:
-    """G5: the share of links whose output anchor lies right of the input anchor (classic
-    anchors), feedback links and ``exempt`` links (those into the cockpit) left out. One
-    finding when the share is over 5 %."""
-    counted = direction(view.canvas, view.splines[Renderer.CLASSIC], exempt)
+    """G5: the share of links drawn against ``axis`` (classic anchors,
+    :func:`cwc.canvas.direction.runs_back`), feedback links and ``exempt`` links (those into the
+    cockpit) left out. One finding when the share is over 5 %."""
+    counted = direction(view.canvas, view.splines[Renderer.CLASSIC], exempt, axis)
     backward, share = list(counted.backward), counted.share
     metrics = {
         "links": len(counted.considered),
@@ -142,13 +142,14 @@ def check_direction(
         "cockpit_links": len(exempt & view.splines[Renderer.CLASSIC].keys()),
         "right_to_left_links": backward,
     }
+    drawn = "right to left" if axis == "x" else "against the reading direction"
     findings = []
     if counted.over:
         findings.append(
             Finding(
                 Code.G5,
                 Severity.ERROR if policy.strict else Severity.WARNING,
-                f"{len(backward)} of {len(counted.considered)} links ({share:.1%}) are drawn right to left; the limit is {G5_SHARE:.0%}",
+                f"{len(backward)} of {len(counted.considered)} links ({share:.1%}) are drawn {drawn}; the limit is {G5_SHARE:.0%}",
                 data={"links": backward, "share": round(share, 4)},
             )
         )

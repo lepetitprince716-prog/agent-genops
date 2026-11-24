@@ -46,7 +46,7 @@ from cwc.nodedefs.types import (
     WidgetSpec,
 )
 
-__all__ = ["from_object_info", "widget_layout", "slot_layout", "match_widget", "WidgetValues"]
+__all__ = ["from_object_info", "widget_layout", "export_widgets", "slot_layout", "match_widget", "WidgetValues"]
 
 # widgets_values as saved (positional) or a mapping from widget name to value.
 WidgetValues = Union[Sequence[Any], Mapping[str, Any]]
@@ -411,6 +411,9 @@ class _Layout:
         self.assigned = assigned
         self.widgets: list[WidgetSpec] = []
         self.slots: list[SlotSpec] = []
+        # Widgets the frontend creates with ``serialize = false``: absent from widgets_values,
+        # each with the number of persisted widgets created before it.
+        self.unpersisted: list[tuple[int, WidgetSpec]] = []
 
     def run(self, inputs: Sequence[InputSpec]) -> tuple[tuple[WidgetSpec, ...], tuple[SlotSpec, ...]]:
         for spec in inputs:
@@ -459,6 +462,8 @@ class _Layout:
             for c in wt.remote_companions:
                 if c.requires == "remote" or _js_truthy(remote.get("refresh_button")):
                     self.widgets.append(WidgetSpec(c.name, WidgetKind.COMPANION, spec.name, copy.deepcopy(c.default), c.to_prompt))
+        if not wt.persist:
+            self.unpersisted.append((position, WidgetSpec(spec.name, WidgetKind.VALUE, spec.name, value, to_prompt=wt.to_prompt)))
         if _control_applies(spec.name, spec.options, wt.control, fe):
             assert wt.control is not None
             self.widgets.extend(_control_widgets(spec, wt.control, fe))
@@ -504,6 +509,33 @@ def widget_layout(nodedef: NodeDef, values: WidgetValues | None = None) -> tuple
         return nodedef.widgets
     widgets, _ = _Layout(frontend(), values, expand=True, assigned=False).run(nodedef.inputs)
     return widgets
+
+
+def export_widgets(
+    nodedef: NodeDef, values: WidgetValues | None = None, layout: Sequence[WidgetSpec] | None = None
+) -> tuple[tuple[WidgetSpec, int | None], ...]:
+    """Every widget of a node in the frontend's ``node.widgets`` order, the order ``graphToPrompt``
+    exports them in: a persisted widget with its index in ``widgets_values``, a widget the
+    frontend does not persist (``widget.serialize = false``, such as ``IMAGECOMPARE``) with
+    ``None``. A canvas cannot carry the value of the second kind, so a loaded node holds its
+    initial value, the spec's ``default``; ``to_prompt`` says whether the export writes it.
+
+    ``layout`` is the persisted layout the caller already has (default
+    :func:`widget_layout` of ``values``); the unpersisted widgets come from ``inputs``.
+    """
+    persisted = tuple(layout) if layout is not None else widget_layout(nodedef, values)
+    replay = _Layout(frontend(), values, expand=True, assigned=False)
+    replay.run(nodedef.inputs)
+    out: list[tuple[WidgetSpec, int | None]] = []
+    pending = iter(replay.unpersisted)
+    following = next(pending, None)
+    for index in range(len(persisted) + 1):
+        while following is not None and min(following[0], len(persisted)) == index:
+            out.append((following[1], None))
+            following = next(pending, None)
+        if index < len(persisted):
+            out.append((persisted[index], index))
+    return tuple(out)
 
 
 def slot_layout(

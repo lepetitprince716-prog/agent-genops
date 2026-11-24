@@ -309,7 +309,8 @@ class E5LiteralTest(CheckCase):
         }
         authoring, findings = self.passes(doc)
         self.assertEqual([(f.code, f.severity) for f in findings], [(Code.E5, Severity.WARNING)])
-        self.assertNotIn("compare_view", authoring.full[authoring.ids["compare"]]["inputs"])
+        # the frontend exports the widget's initial value, not the author's (frontend_exports.json, case "compare")
+        self.assertEqual(authoring.full[authoring.ids["compare"]]["inputs"]["compare_view"], {"__value__": ["", ""]})
 
     def test_dynamic_combo_value_must_be_an_option(self):
         doc = {

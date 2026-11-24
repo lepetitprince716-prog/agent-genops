@@ -4,7 +4,7 @@ anything else.
 
 Contract types are in :mod:`cwc.layout.types`, presets in :mod:`cwc.layout.presets`;
 ``docs/ARCHITECTURE.md`` has the rules. Inside a group: :mod:`cwc.layout.inner`; between
-groups: :mod:`cwc.layout.place`.
+groups: :mod:`cwc.layout.place`; a preset along y places by :mod:`cwc.layout.stack` instead.
 """
 
 from __future__ import annotations
@@ -15,11 +15,12 @@ from typing import Any, Callable, Mapping
 from cwc.annotate.graph import GraphView, group_ranks
 from cwc.annotate.palette import group_colour, zone_class
 from cwc.annotate.types import COCKPIT_KEY, Annotations, CockpitSlot, GroupPlan, Source, Zone
-from cwc.canvas.direction import Direction, direction
+from cwc.canvas.direction import Direction, direction, runs_back
 from cwc.canvas.envelope import Renderer, shows_preview
 from cwc.canvas.geometry import Rect, snap_up
 from cwc.canvas.links import canvas_splines
 from cwc.canvas.model import Canvas
+from cwc.layout import stack
 from cwc.layout.inner import Fill, Graph, Part, group_parts, segment_zone
 from cwc.layout.items import Item
 from cwc.layout.place import place
@@ -52,6 +53,8 @@ def layout(
     if missing:
         raise NotImplementedError(f"layout: preset {preset.name!r} uses {', '.join(missing)}, which layout does not implement yet")
     graph = Graph.of(canvas, annotations.nodes, defs)
+    if preset.axis is Axis.Y:
+        return _layout_stack(canvas, annotations, preset, defs, graph)
     units = _units(graph, annotations, preset.cockpit_split.core if preset.cockpit_split is not None else None, _fill_of(preset, defs, graph))
     tops, top_of, cut = _segments(list(annotations.children(None)), units, _top_of(annotations), graph)
     tops = _frames_after_cockpit(_ranked(tops, top_of, GraphView(canvas, defs)))
@@ -67,13 +70,58 @@ def layout(
     return _write(canvas, annotations, preset, placed, x0, cockpit, cut)
 
 
+def _layout_stack(canvas: Canvas, annotations: Annotations, preset: Preset, defs: DefLookup, graph: Graph) -> LayoutResult:
+    """Layout along y (:mod:`cwc.layout.stack`): the groups cut, ranked and ordered as along x,
+    the cockpit frames first, then stacked in columns."""
+    outputs = frozenset(
+        key for key, node in graph.nodes.items() if (nodedef := defs.get(node.type)) is not None and nodedef.output_node
+    )
+    core = preset.cockpit_split.core if preset.cockpit_split is not None else None
+    drawn: dict[str, stack.Drawn] = {}
+    boxes: dict[str, stack.Lanes] = {}
+    units: dict[str, list[Part]] = {}
+
+    def build(group: GroupPlan) -> list[Part]:
+        children = [build(child) for child in annotations.children(group.key)]
+        parts = []
+        for lanes in stack.group_lanes(graph, group, children, outputs, core if group.key == COCKPIT_KEY else None):
+            boxes[lanes.key] = lanes
+            parts.append(stack.draw_alone(graph, lanes, drawn))
+        units[group.key] = parts
+        return parts
+
+    for top in annotations.children(None):
+        build(top)
+    tops, top_of, cut = _segments(list(annotations.children(None)), units, _top_of(annotations), graph)
+    tops = _frames_after_cockpit(_ranked(tops, top_of, GraphView(canvas, defs)))
+    tops = [g for g in tops if g.zone is Zone.COCKPIT] + [g for g in tops if g.zone is not Zone.COCKPIT]
+    cockpit = frozenset(g.key for g in tops if g.zone is Zone.COCKPIT)
+    x0 = float(preset.guide_width + GUIDE_GAP) if annotations.reserve_guide else 0.0
+    stacked = stack.place_stack(
+        graph,
+        [boxes[part.key] for g in tops for part in units[g.key]],
+        x0=x0,
+        wrap_ratio=preset.wrap_ratio,
+        fits_of=lambda: _fits(canvas, graph, top_of, cockpit, preset.axis),
+        drawn=drawn,
+        sources={link.id: (str(link.origin_id), link.origin_slot) for link in canvas.links},
+    )
+    result = _write(canvas, annotations, preset, stacked.placed, x0, cockpit, cut)
+    return stack.finish(canvas, graph, result, stacked, drawn)
+
+
 def _unimplemented(preset: Preset) -> list[str]:
     """The preset features placement does not read yet. Each would be silently ignored, giving a
     canvas that looks like the preset and is not, so layout refuses the preset instead; remove a
-    line here when its feature is implemented."""
+    line here when its feature is implemented. Along y (:mod:`cwc.layout.stack`) no slot, repeat,
+    corridor or preview is read."""
     out = []
-    if preset.axis is not Axis.X:
-        out.append(f"axis {preset.axis.value}")
+    if preset.axis is Axis.Y:
+        if preset.preview is not None:
+            out.append("a preview along y")
+        if any(slot.repeat is not None for band in preset.bands for slot in band.slots):
+            out.append("repeat along y")
+        out.extend(f"a {kind} corridor along y" for kind in sorted({rule.kind.value for rule in preset.corridors}))
     if any(slot.under_guide for band in preset.bands for slot in band.slots):
         out.append("under_guide")
     # Instances repeated along y stack at one x, so a later stage's links run back left.
@@ -87,42 +135,49 @@ def _unimplemented(preset: Preset) -> list[str]:
     return out
 
 
-def _fits(canvas: Canvas, graph: Graph, top: Mapping[str, str], cockpit: frozenset[str]) -> Callable[[Placed], bool]:
+def _fits(
+    canvas: Canvas, graph: Graph, top: Mapping[str, str], cockpit: frozenset[str], axis: str = "x"
+) -> Callable[[Placed], bool]:
     """Whether a placement keeps G5 within its limit, counted as G5 counts it
-    (:mod:`cwc.canvas.direction`), the links into the cockpit frames left out: into their own
-    members and into the members of groups nested in them, as ``check_geometry`` leaves out the
-    links into every group in ``LayoutResult.cockpit`` and the groups nested in them. ``top``:
-    each grouped node's placed group (a segment's key for a member of a cut group), which
-    ``cockpit`` names.
+    (:mod:`cwc.canvas.direction`, along ``axis``), the links into the cockpit frames left out:
+    into their own members and into the members of groups nested in them, as
+    ``check_geometry`` leaves out the links into every group in ``LayoutResult.cockpit`` and the
+    groups nested in them. ``top``: each grouped node's placed group (a segment's key for a
+    member of a cut group), which ``cockpit`` names.
 
-    A link runs right to left when its output anchor's x exceeds its input anchor's x, and an
-    anchor's x is the node's x plus an offset fixed by the node's size and slots. The offsets
-    and the counted links are read once from the canvas as it stands; each placement then only
-    adds node x positions, with no curve built (the wrap search asks once per candidate cut)."""
+    An anchor is the node's position plus an offset fixed by the node's size and slots. The
+    offsets and the counted links are read once from the canvas as it stands; each placement
+    then only adds node positions, with no curve built (the wrap search asks once per
+    candidate cut)."""
     inside = {key for key in top if top[key] in cockpit}
     exempt = frozenset(link for link, _, target in graph.edges if target in inside)
     nodes = canvas.node_map()
     curves = canvas_splines(canvas, dict(graph.facts), Renderer.CLASSIC)
-    base = direction(canvas, curves, exempt)
+    base = direction(canvas, curves, exempt, axis)
     by_id = {link.id: link for link in canvas.links}
     counted = []
     for link_id in base.considered:
         link, curve = by_id[link_id], curves[link_id]
         origin, target = str(link.origin_id), str(link.target_id)
-        counted.append((link_id, origin, curve.p0[0] - nodes[origin].pos[0], target, curve.p3[0] - nodes[target].pos[0]))
+        (ox, oy), (tx, ty) = nodes[origin].pos, nodes[target].pos
+        counted.append((link_id, origin, (curve.p0[0] - ox, curve.p0[1] - oy), target, (curve.p3[0] - tx, curve.p3[1] - ty)))
 
     def fits(placed: Placed) -> bool:
-        x = {key: node.pos[0] for key, node in nodes.items()}
+        pos = {key: (node.pos[0], node.pos[1]) for key, node in nodes.items()}
 
-        def walk(part: Part, at: float) -> None:
-            for key, (px, _) in part.nodes.items():
-                x[key] = at + px
-            for child, (cx, _) in part.children:
-                walk(child, at + cx)
+        def walk(part: Part, at_x: float, at_y: float) -> None:
+            for key, (px, py) in part.nodes.items():
+                pos[key] = (at_x + px, at_y + py)
+            for child, (cx, cy) in part.children:
+                walk(child, at_x + cx, at_y + cy)
 
-        for part, at, _ in placed.parts:
-            walk(part, at)
-        backward = tuple(i for i, a, out_dx, b, in_dx in counted if x[a] + out_dx > x[b] + in_dx)
+        for part, at_x, at_y in placed.parts:
+            walk(part, at_x, at_y)
+        backward = tuple(
+            i
+            for i, a, (odx, ody), b, (idx, idy) in counted
+            if runs_back((pos[a][0] + odx, pos[a][1] + ody), (pos[b][0] + idx, pos[b][1] + idy), axis)
+        )
         return not Direction(considered=base.considered, backward=backward, feedback=base.feedback).over
 
     return fits

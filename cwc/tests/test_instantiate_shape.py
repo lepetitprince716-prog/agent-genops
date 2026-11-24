@@ -82,5 +82,35 @@ class FrontendShapeTest(unittest.TestCase):
                 self.assertTrue(slot["links"] is None or slot["links"] == sorted(slot["links"]) and slot["links"])
 
 
+
+# Node 3 of a frontend 1.59.1 serialize() (ComfyUI 0.45.0, classic renderer): two LoadImage
+# nodes created and linked into a new ImageCompare by tests/oracle_runner.py capture.
+FRONTEND_IMAGE_COMPARE = {
+    "id": 3,
+    "type": "ImageCompare",
+    "flags": {},
+    "mode": 0,
+    "inputs": [
+        {"localized_name": "image_a", "name": "image_a", "shape": 7, "type": "IMAGE", "link": 1},
+        {"localized_name": "image_b", "name": "image_b", "shape": 7, "type": "IMAGE", "link": 2},
+        {"localized_name": "compare_view", "name": "compare_view", "type": "IMAGECOMPARE", "widget": {"name": "compare_view"}, "link": None},
+    ],
+    "outputs": [],
+    "properties": {"Node name for S&R": "ImageCompare"},
+    "widgets_values": [],
+    "widgets_values_named": {},
+}
+
+
+class UnpersistedWidgetShapeTest(unittest.TestCase):
+    """ImageCompare's compare_view: a slot, and a widget serialize() leaves out of the tables."""
+
+    def test_the_node_is_written_as_the_frontend_writes_it(self):
+        canvas = instantiate(graphs.build(graphs.compare()))
+        ours = next(node for node in canvas.raw["nodes"] if node["id"] == 3)
+        self.assertEqual({k: v for k, v in ours.items() if k not in SKIPPED | {"title"}}, FRONTEND_IMAGE_COMPARE)
+        self.assertEqual(list(ours)[-2:], ["widgets_values", "widgets_values_named"])
+
+
 if __name__ == "__main__":
     unittest.main()

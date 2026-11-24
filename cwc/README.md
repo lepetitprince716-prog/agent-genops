@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Zero external dependencies</strong> · <strong>702 bundled core nodes</strong> · <strong>377 KB single-file <code>cwc.pyz</code></strong> · <strong>5 layout presets</strong>
+  <strong>Zero external dependencies</strong> · <strong>702 bundled core nodes</strong> · <strong>377 KB single-file <code>cwc.pyz</code></strong> · <strong>6 layout presets</strong>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   </picture>
 </p>
 
-The screenshot above shows the left half of the canvas `cwc compile` generates for the nine-node high-res pipeline in [`docs/images/src/hires.json`](docs/images/src/hires.json) (captured directly from ComfyUI frontend 1.59.1 with menus hidden). Full-canvas comparisons are shown under [Five presets](#five-presets), and ready-to-drop example canvases live in [`showcase/`](showcase/README.md).
+The screenshot above shows the left half of the canvas `cwc compile` generates for the nine-node high-res pipeline in [`docs/images/src/hires.json`](docs/images/src/hires.json) (captured directly from ComfyUI frontend 1.59.1 with menus hidden). Full-canvas comparisons are shown under [Six presets](#six-presets), and ready-to-drop example canvases live in [`showcase/`](showcase/README.md).
 
 ---
 
@@ -160,9 +160,9 @@ Keys that are accepted for forward compatibility but not yet rendered on the can
 
 ---
 
-## Five Presets
+## Six Presets
 
-Use `--preset <name>` (or `_workflow.layout.preset`) to pick a layout architecture, or run `cwc presets` to see when to use each. Here is the same twelve-node graph (`landscape.json`) compiled across all five presets:
+Use `--preset <name>` (or `_workflow.layout.preset`) to pick a layout architecture, or run `cwc presets` to see when to use each. Here is the same twelve-node graph (`landscape.json`) compiled across all six presets:
 
 ### `bento`
 
@@ -209,6 +209,17 @@ Uses the `bento` arrangement with an enlarged right-hand gallery box: whenever t
 
 Titles stage groups `Step 1`, `Step 2`, `Step 3`, and stacks `Models` and `Controls` in the first column—ideal for teaching workflows and step-by-step tutorials.
 
+### `stack`
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/stack-dark.png">
+  <img src="docs/images/stack-light.png" width="830" alt="The stack preset">
+</picture>
+
+Reads top to bottom, like an architecture diagram: every group is a box, `Controls` first, and in each box the main chain runs down the middle with the nodes that feed it on the left and each stage's preview on the right. Boxes stack in columns; a column taller than the canvas is wide wraps into the next column. An optional module stays one box.
+
+By default `stack` writes its MODEL, CLIP, VAE and CONDITIONING links between columns as hidden links (the frontend's own `extra.linkPresentation`): each end shows a small tag, and the unlabelled tags of one output stack into one (`VAE ×2`), so a loaded model or prompt does not draw a curve across every column. The links stay in the workflow, are still routed and keep their reroutes, and the queued prompt is the same. When a type's hidden links leave two or more outputs, each link is labelled with its source as the frontend titles that node: its title, else its display name (the class name when the node pack gives it no other), else its class name, with `: <output name>` added for a node that feeds two outputs of the type. Sources that would carry the same label, such as two untitled prompts, stay unlabelled, since that label would tell nothing apart. A labelled link keeps a tag of its own at each end rather than stacking. Latent and image links, and links inside a column, stay drawn. `--hide-links none` draws every link; `--hide-links resources` turns hiding on for a preset that does not default to it (the other presets list no links between columns, so asking changes nothing there). A frontend that does not know the key draws these links as the routes written for them.
+
 ### `auto`
 
 `--preset auto` evaluates the graph topology and picks the first matching rule (recording both the choice and the reason in the stderr summary and `.report.json`):
@@ -226,12 +237,12 @@ Titles stage groups `Step 1`, `Step 2`, `Step 3`, and stacks `Models` and `Contr
 
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
-cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME]
+cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
              [--all-enabled] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
-cwc render   GRAPH.ui.json -o OUT.svg [--nodedefs FILE|URL] [--json]
+cwc render   GRAPH.ui.json -o OUT.svg [--skin debug|diagram] [--theme light|dark] [--nodedefs FILE|URL] [--json]
 ```
 
 | Command | Description |
@@ -267,8 +278,10 @@ node overrides is an E7 warning that names both keys and says what to remove; th
 `ok` do not change. `ui_role: cockpit` beats `ui_group`, `ui_group` beats `ui_role: plumbing`,
 and `ui_optional` beats `ui_role` `cockpit` and `plumbing`.
 
-A key `cwc` accepts but does not use yet (`ui_locked`, `ui_expose`, `ui_note`,
-`_workflow.title`, `_workflow.locale`, `_workflow.groups.<id>.note`) is named in one info
+`ui_note`, `_workflow.title` and `_workflow.groups.<id>.note` are written into the canvas's
+`extra.cwc` block, which `cwc render --skin diagram` draws as module notes, the figure title and
+panel meta lines. A key `cwc` accepts but does not use yet (`ui_locked`, `ui_expose`,
+`_workflow.locale`) is named in one info
 finding, E8, per compile: one stderr line that lists the keys and the nodes that set them, and,
 in the report of a successful compile, the keys one by one in `data.keys`. The exit code and
 `ok` do not change.
@@ -323,7 +336,7 @@ usual range finding, in a canvas coordinate it is past the limit above.
 
 ## Architecture & Project Status
 
-- **Working today**: The complete compilation pipeline (`normalize` → `instantiate` → `annotate` → `layout` → `route` → `verify`), all five layout presets, single-file `cwc.pyz` / portable zip packaging (`tools/build_pyz.py`), agent skill package (`skills/`), and the [`showcase/`](showcase/README.md) tutorial workflows.
+- **Working today**: The complete compilation pipeline (`normalize` → `instantiate` → `annotate` → `layout` → `route` → `verify`), all six layout presets, single-file `cwc.pyz` / portable zip packaging (`tools/build_pyz.py`), agent skill package (`skills/`), and the [`showcase/`](showcase/README.md) tutorial workflows.
 - **Planned next (M3)**: Lossless geometry tidying of existing canvases (`cwc beautify`), in-canvas Markdown notes (`cwc check`), and PNG workflow embedding/extraction (`cwc embed` / `cwc extract`).
 
 Deep-dive engineering docs:

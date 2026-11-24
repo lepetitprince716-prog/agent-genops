@@ -18,7 +18,7 @@ from typing import Any
 from cwc.canvas.model import Canvas, Node, id_order
 from cwc.instantiate import node as build
 from cwc.instantiate.order import execution_order
-from cwc.nodedefs.derive import widget_layout
+from cwc.nodedefs.derive import export_widgets, widget_layout
 from cwc.normalize.types import Authoring
 
 __all__ = ["instantiate"]
@@ -128,7 +128,9 @@ def _node(
     if title is not None and title != shown:
         raw["title"] = title
     raw["properties"] = build.properties(type_, nodedef)
-    if positional:
+    # LGraphNode.serialize writes both tables whenever the node has a widget, also one it
+    # does not persist (ImageCompare's compare_view gives [] and {}).
+    if positional or (nodedef is not None and any(index is None for _, index in export_widgets(nodedef, values))):
         raw["widgets_values"] = positional
         if named is not None:
             raw["widgets_values_named"] = named

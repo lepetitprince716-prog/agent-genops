@@ -1,9 +1,9 @@
 """Verification: the checks that decide whether an artefact may be written.
 
 * :func:`verify_compile` holds a compiled canvas to every compile rule: structure
-  S1-S6, necessity N1-N3, bypass closure and optional-group purity B1-B3, and
+  S1-S6, necessity N1-N3 and N7, bypass closure and optional-group purity B1-B3, and
   equivalence with the strict prompts Q1-Q2.
-* :func:`verify_canvas` runs structure and necessity N1-N6 on any canvas, with the
+* :func:`verify_canvas` runs structure and necessity N1-N7 on any canvas, with the
   severities of the given mode (compile blocks; beautify and check mostly report).
 
 Every check reads the canvas through the prompt package's export rules where a prompt
@@ -68,7 +68,7 @@ def _name_authors(findings: list[Finding], authoring: Authoring) -> list[Finding
 
 
 def verify_canvas(canvas: Canvas, defs: DefLookup, *, mode: Mode) -> Report:
-    """Structure S1-S6 and necessity N1-N6 under the severities of ``mode``."""
+    """Structure S1-S6 and necessity N1-N7 under the severities of ``mode``."""
     facts = CanvasFacts(canvas, defs)
     policy = Policy.for_mode(mode)
     report = _report(mode, facts)

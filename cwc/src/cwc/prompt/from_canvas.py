@@ -6,7 +6,9 @@ Per node, in order:
    not emitted.
 2. Every widget with a name whose ``to_prompt`` is true writes its value; list values are
    wrapped as ``{"__value__": [...]}``. Values come from ``widgets_values`` by position.
-   ``widgets_values_named`` is used only with ``named_restore=True`` (see below).
+   ``widgets_values_named`` is used only with ``named_restore=True`` (see below). A widget
+   the frontend does not persist (``IMAGECOMPARE``) writes its initial value
+   (:func:`cwc.nodedefs.derive.export_widgets`).
 3. Every input socket is resolved through bypassed, muted and virtual nodes
    (:mod:`cwc.prompt.bypass`); a resolved link overwrites the widget value, an unresolved
    one leaves the input out (or leaves the widget value in place).
@@ -30,6 +32,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from cwc.canvas.model import Canvas, Link, Node, NodeMode
+from cwc.nodedefs.derive import export_widgets
 from cwc.nodedefs.types import Behavior, NodeDef, WidgetSpec
 from cwc.prompt.bypass import Graph, ResolveNode, resolve_input
 from cwc.prompt.dynamic import dynamic_widgets, process
@@ -178,14 +181,17 @@ def _widget_inputs(
         return {name: wrap_widget_value(value) for name, value in values.items()}
     named = node.widgets_values_named if named_restore else None
     positional = node.widgets_values if isinstance(node.widgets_values, list) else []
-    layout = widget_layout(nodedef, _layout_values(node, named_restore))
+    values = _layout_values(node, named_restore)
+    layout = widget_layout(nodedef, values)
     dynamic = dynamic_widgets(nodedef, layout)
     inputs: dict[str, Any] = {}
-    for index, spec in enumerate(layout):
+    for spec, index in export_widgets(nodedef, values, layout):
         if spec.name is None or not spec.to_prompt:
             continue
         if spec.name in pushed:
             value = pushed[spec.name]
+        elif index is None:
+            value = spec.default
         elif named is not None:
             value = named[spec.name] if spec.name in named else spec.default
         else:

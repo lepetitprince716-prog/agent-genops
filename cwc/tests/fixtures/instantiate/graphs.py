@@ -4,7 +4,8 @@
 ``serialize()`` of a hand-built graph) as an authoring document, so what instantiate
 writes can be held against what the frontend wrote. The other graphs are hand-written
 around the layouts that need care: optional module chains, Autogrow groups that
-grow with links, DynamicCombo nodes, and match-type nodes with some slots linked.
+grow with links, DynamicCombo nodes, match-type nodes with some slots linked, and image
+compare nodes, whose one widget the frontend exports but does not persist.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ def cases() -> dict[str, tuple[Authoring, Any]]:
         "match_partial": (build(match_partial()), DEFS),
         "dynamic_text": (build(dynamic_text()), DEFS),
         "capture": (build(capture()), DEFS),
+        "compare": (build(compare()), DEFS),
     }
 
 
@@ -255,4 +257,20 @@ def match_partial() -> dict[str, Any]:
         "out_pick": _node("PreviewImage", {"images": ["pick", 0]}),
         "out_branch": _node("PreviewImage", {"images": ["branch", 0]}),
         "out_back": _node("PreviewImage", {"images": ["back", 0]}),
+    }
+
+
+# --- a widget the frontend does not persist ------------------------------------------------
+
+
+def compare() -> dict[str, Any]:
+    """Two images into an ImageCompare, and the same pair into a second, optional one.
+
+    ``compare_view`` (``IMAGECOMPARE``) has a slot and a widget that ``serialize()`` leaves out
+    of ``widgets_values`` while ``graphToPrompt`` exports its initial value."""
+    return {
+        "a": _node("LoadImage", {"image": "a.png"}),
+        "b": _node("LoadImage", {"image": "b.png"}),
+        "compare": _node("ImageCompare", {"image_a": ["a", "IMAGE"], "image_b": ["b", "IMAGE"]}, title="A / B"),
+        "compare_off": _node("ImageCompare", {"image_a": ["b", "IMAGE"], "image_b": ["a", "IMAGE"]}, ui_optional=True),
     }
