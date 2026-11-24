@@ -1,9 +1,16 @@
-"""Links drawn right to left: the one definition that G5 checks and layout budgets for.
+"""Links drawn against the reading direction: the one definition that G5 checks and layout
+budgets for.
 
-A link runs right to left when its output anchor lies right of its input anchor (classic
-curves, :func:`cwc.canvas.links.canvas_splines`). Feedback links (those a depth-first search
-closes a cycle with) and exempt links (those into the cockpit) are not counted. The share of
-the counted links that run right to left may be at most ``G5_SHARE``.
+On the x axis a link runs back when its output anchor lies right of its input anchor (classic
+curves, :func:`cwc.canvas.links.canvas_splines`). On the y axis it runs back when its input
+anchor lies more than ``Y_SLACK`` above its output anchor and not right of it: a link into a
+later column climbs to that column's top and reads forward. Feedback links (those a
+depth-first search closes a cycle with) and exempt links (those into the cockpit) are not
+counted. The share of the counted links that run back may be at most ``G5_SHARE``.
+
+``axis`` is compared as a string (``"x"`` or ``"y"``): ``cwc.layout.types.Axis`` is a ``str``
+enum and compares equal, and importing it here would be circular, because ``cwc.layout``
+imports this module.
 """
 
 from __future__ import annotations
@@ -15,6 +22,16 @@ from cwc.canvas.links import Spline
 from cwc.canvas.model import Canvas, id_order
 
 G5_SHARE = 0.05
+Y_SLACK = 20
+
+
+def runs_back(p0: tuple[float, float], p3: tuple[float, float], axis: str = "x") -> bool:
+    """Whether a link from output anchor ``p0`` to input anchor ``p3`` runs against ``axis``."""
+    if axis == "x":
+        return p0[0] > p3[0]
+    if axis == "y":
+        return p3[1] < p0[1] - Y_SLACK and p3[0] <= p0[0]
+    raise ValueError(f"unknown axis {axis!r}")
 
 
 def feedback_links(canvas: Canvas) -> set[int]:
@@ -53,7 +70,7 @@ def feedback_links(canvas: Canvas) -> set[int]:
 
 @dataclass(frozen=True)
 class Direction:
-    """``considered``: the counted link ids; ``backward``: those drawn right to left (sorted);
+    """``considered``: the counted link ids; ``backward``: those drawn against the axis (sorted);
     ``feedback``: the feedback links among the drawable ones."""
 
     considered: tuple[int, ...]
@@ -70,9 +87,11 @@ class Direction:
         return self.share > G5_SHARE
 
 
-def direction(canvas: Canvas, curves: Mapping[int, Spline], exempt: frozenset[int] = frozenset()) -> Direction:
-    """Count the drawable links (``curves``: classic curves by link id) of ``canvas``."""
+def direction(
+    canvas: Canvas, curves: Mapping[int, Spline], exempt: frozenset[int] = frozenset(), axis: str = "x"
+) -> Direction:
+    """Count the drawable links (``curves``: classic curves by link id) of ``canvas`` along ``axis``."""
     feedback = feedback_links(canvas)
     considered = tuple(link.id for link in canvas.links if link.id in curves and link.id not in feedback and link.id not in exempt)
-    backward = tuple(sorted(i for i in considered if curves[i].p0[0] > curves[i].p3[0]))
+    backward = tuple(sorted(i for i in considered if runs_back(curves[i].p0, curves[i].p3, axis)))
     return Direction(considered=considered, backward=backward, feedback=frozenset(feedback & set(curves)))
