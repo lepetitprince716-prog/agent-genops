@@ -1,0 +1,481 @@
+{
+ "_workflow": {
+  "format": 1,
+  "layout": {
+   "preset": "auto"
+  },
+  "title": "Two-pass image, base and upscale",
+  "groups": {
+   "models": {
+    "title": "Models",
+    "note": "flow shift 3"
+   },
+   "base": {
+    "title": "Base pass",
+    "note": "1024 x 1024, 25 steps, CFG 2.5"
+   },
+   "upscale": {
+    "title": "Upscale pass",
+    "note": "lanczos to 1456 x 1456, 9 steps at denoise 0.35"
+   },
+   "output": {
+    "title": "Output"
+   },
+   "lora": {
+    "title": "Style LoRA"
+   },
+   "ab": {
+    "title": "A/B against the plain sampler",
+    "note": "same seed, patch bypassed; enable to compare each stage"
+   }
+  }
+ },
+ "unet": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "model.safetensors",
+   "weight_dtype": "default"
+  },
+  "_meta": {
+   "title": "Diffusion model",
+   "ui_group": "models"
+  }
+ },
+ "shift": {
+  "class_type": "ModelSamplingAuraFlow",
+  "inputs": {
+   "model": [
+    "unet",
+    "MODEL"
+   ],
+   "shift": 3.0
+  },
+  "_meta": {
+   "title": "Flow shift",
+   "ui_group": "models"
+  }
+ },
+ "lora": {
+  "class_type": "LoraLoaderModelOnly",
+  "inputs": {
+   "model": [
+    "shift",
+    "MODEL"
+   ],
+   "lora_name": "style_lora.safetensors",
+   "strength_model": 1.0
+  },
+  "_meta": {
+   "title": "Style LoRA",
+   "ui_optional": true,
+   "ui_group": "lora"
+  }
+ },
+ "patch": {
+  "class_type": "ExampleModelPatch",
+  "inputs": {
+   "model": [
+    "lora",
+    "MODEL"
+   ],
+   "preset": "medium"
+  },
+  "_meta": {
+   "title": "Example Model Patch",
+   "ui_group": "models",
+   "ui_note": "patches the model; off gives the plain sampler"
+  }
+ },
+ "clip": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3.5_9b.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "_meta": {
+   "title": "Text encoder",
+   "ui_group": "models"
+  }
+ },
+ "vae": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "flux2_vae.safetensors"
+  },
+  "_meta": {
+   "title": "VAE",
+   "ui_group": "models"
+  }
+ },
+ "pos": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "clip": [
+    "clip",
+    "CLIP"
+   ],
+   "text": "a quiet mountain lake at dawn, mist over the water, pine forest on the far shore"
+  },
+  "_meta": {
+   "title": "Positive prompt"
+  }
+ },
+ "neg": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "clip": [
+    "clip",
+    "CLIP"
+   ],
+   "text": "blurry, low quality, watermark"
+  },
+  "_meta": {
+   "title": "Negative prompt"
+  }
+ },
+ "size": {
+  "class_type": "EmptyFlux2LatentImage",
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "_meta": {
+   "title": "Image size"
+  }
+ },
+ "base_sampler": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "patch",
+    "MODEL"
+   ],
+   "positive": [
+    "pos",
+    0
+   ],
+   "negative": [
+    "neg",
+    0
+   ],
+   "latent_image": [
+    "size",
+    0
+   ],
+   "seed": 2026102717,
+   "steps": 25,
+   "cfg": 2.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 1.0
+  },
+  "_meta": {
+   "title": "Base sampler",
+   "ui_group": "base",
+   "ui_seed": "fixed"
+  }
+ },
+ "base_decode": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "base_sampler",
+    "LATENT"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Decode base",
+   "ui_group": "base"
+  }
+ },
+ "base_preview": {
+  "class_type": "PreviewImage",
+  "inputs": {
+   "images": [
+    "base_decode",
+    "IMAGE"
+   ]
+  },
+  "_meta": {
+   "title": "Base preview",
+   "ui_group": "base"
+  }
+ },
+ "up_scale": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "base_decode",
+    "IMAGE"
+   ],
+   "upscale_method": "lanczos",
+   "width": 1456,
+   "height": 1456,
+   "crop": "disabled"
+  },
+  "_meta": {
+   "title": "Fit to 1456",
+   "ui_group": "upscale"
+  }
+ },
+ "up_encode": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "up_scale",
+    "IMAGE"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Encode",
+   "ui_group": "upscale"
+  }
+ },
+ "up_sampler": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "patch",
+    "MODEL"
+   ],
+   "positive": [
+    "pos",
+    0
+   ],
+   "negative": [
+    "neg",
+    0
+   ],
+   "latent_image": [
+    "up_encode",
+    0
+   ],
+   "seed": 2026102717,
+   "steps": 9,
+   "cfg": 2.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.35
+  },
+  "_meta": {
+   "title": "Upscale sampler",
+   "ui_group": "upscale",
+   "ui_seed": "fixed"
+  }
+ },
+ "up_decode": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "up_sampler",
+    "LATENT"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Decode upscale",
+   "ui_group": "upscale"
+  }
+ },
+ "save": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "images": [
+    "up_decode",
+    "IMAGE"
+   ],
+   "filename_prefix": "two_pass"
+  },
+  "_meta": {
+   "title": "Save",
+   "ui_group": "output"
+  }
+ },
+ "ab_base_sampler": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "lora",
+    "MODEL"
+   ],
+   "positive": [
+    "pos",
+    0
+   ],
+   "negative": [
+    "neg",
+    0
+   ],
+   "latent_image": [
+    "size",
+    0
+   ],
+   "seed": 2026102717,
+   "steps": 25,
+   "cfg": 2.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 1.0
+  },
+  "_meta": {
+   "title": "Base sampler, plain",
+   "ui_optional": true,
+   "ui_group": "ab",
+   "ui_seed": "fixed"
+  }
+ },
+ "ab_base_decode": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "ab_base_sampler",
+    "LATENT"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Decode base, plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ },
+ "ab_up_scale": {
+  "class_type": "ImageScale",
+  "inputs": {
+   "image": [
+    "ab_base_decode",
+    "IMAGE"
+   ],
+   "upscale_method": "lanczos",
+   "width": 1456,
+   "height": 1456,
+   "crop": "disabled"
+  },
+  "_meta": {
+   "title": "Fit to 1456, plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ },
+ "ab_up_encode": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "ab_up_scale",
+    "IMAGE"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Encode, plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ },
+ "ab_up_sampler": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "lora",
+    "MODEL"
+   ],
+   "positive": [
+    "pos",
+    0
+   ],
+   "negative": [
+    "neg",
+    0
+   ],
+   "latent_image": [
+    "ab_up_encode",
+    0
+   ],
+   "seed": 2026102717,
+   "steps": 9,
+   "cfg": 2.5,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.35
+  },
+  "_meta": {
+   "title": "Upscale sampler, plain",
+   "ui_optional": true,
+   "ui_group": "ab",
+   "ui_seed": "fixed"
+  }
+ },
+ "ab_up_decode": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "ab_up_sampler",
+    "LATENT"
+   ],
+   "vae": [
+    "vae",
+    "VAE"
+   ]
+  },
+  "_meta": {
+   "title": "Decode upscale, plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ },
+ "ab_compare_base": {
+  "class_type": "ImageCompare",
+  "inputs": {
+   "image_a": [
+    "base_decode",
+    "IMAGE"
+   ],
+   "image_b": [
+    "ab_base_decode",
+    "IMAGE"
+   ]
+  },
+  "_meta": {
+   "title": "Compare base: patched / plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ },
+ "ab_compare_up": {
+  "class_type": "ImageCompare",
+  "inputs": {
+   "image_a": [
+    "up_decode",
+    "IMAGE"
+   ],
+   "image_b": [
+    "ab_up_decode",
+    "IMAGE"
+   ]
+  },
+  "_meta": {
+   "title": "Compare upscale: patched / plain",
+   "ui_optional": true,
+   "ui_group": "ab"
+  }
+ }
+}

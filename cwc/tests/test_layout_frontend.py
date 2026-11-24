@@ -55,7 +55,7 @@ from cwc.layout.presets import get_preset
 from cwc.prompt.model import prompt_diff
 from cwc.route import route
 
-PRESETS = ["bento", "swimlanes", "stepped", "cockpit-split", "tower-preview"]
+PRESETS = ["bento", "swimlanes", "stepped", "cockpit-split", "tower-preview", "stack"]
 SEEDS = (0, 3, 4, 11, 14)
 RENDERERS = ("classic", "vue")
 CHECKS = ("console", "envelope", "expanded_box", "collapsed_box", "membership", "serialize", "prompt")
