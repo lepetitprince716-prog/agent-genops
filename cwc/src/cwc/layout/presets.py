@@ -9,6 +9,7 @@ Document shape (every key required unless marked optional; unknown keys are refu
          "wrap_ratio": <number > 1; >= 1 when axis is "y">,
          "guide_width": <positive multiple of 20>,
          "numbering": "number" | "step",
+         "hide_links": "none" | "resources",
          "palette": "<palette name>",
          "bands": [{"slots": [{"zones": ["<zone>", ...],
                                "stack": "x" | "y",            (optional, default "y")
@@ -45,6 +46,7 @@ from cwc.layout.types import (
     CockpitSplit,
     CorridorKind,
     CorridorRule,
+    HideLinks,
     Numbering,
     Preset,
     Preview,
@@ -57,7 +59,7 @@ FILE = "presets.json"
 FORMAT = 1
 DEFAULT = "bento"
 
-_PRESET_KEYS = {"axis", "wrap_ratio", "guide_width", "numbering", "palette", "bands", "corridors"}
+_PRESET_KEYS = {"axis", "wrap_ratio", "guide_width", "numbering", "hide_links", "palette", "bands", "corridors"}
 _OPTIONAL_KEYS = {"cockpit_split", "preview", "tray"}
 
 
@@ -119,6 +121,7 @@ def _preset(name: str, entry: Any) -> Preset:
         cockpit_split=_cockpit_split(entry.get("cockpit_split"), where),
         preview=preview,
         tray=tray,
+        hide_links=_enum(HideLinks, entry["hide_links"], f"{where} hide_links"),
     )
 
 

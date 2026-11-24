@@ -19,13 +19,14 @@ from cwc.layout import layout
 from cwc.canvas.geometry import snap_up
 from cwc.layout.presets import DEFAULT, load_presets
 from cwc.layout.section import BAND_GAP, SCREEN_W
-from cwc.layout.types import LayoutResult
+from cwc.layout.types import HideLinks, LayoutResult
 from cwc.nodedefs.registry import NodeDefs
 from cwc.normalize import normalize
 from cwc.normalize.types import Authoring
 from cwc.render.notes import collect_notes, write_notes
 from cwc.report import Code, CwcError, ExitCode, Finding, Mode, Report, Severity
 from cwc.route import RouteResult, route
+from cwc.route.presentation import mark_hidden
 from cwc.verify import verify_compile
 from cwc.verify.geometry import check_geometry
 
@@ -122,13 +123,20 @@ class Compiled:
 
 
 def compile_document(
-    doc: dict[str, Any], defs: NodeDefs, *, allow_unknown: bool = False, preset: str | None = None
+    doc: dict[str, Any],
+    defs: NodeDefs,
+    *,
+    allow_unknown: bool = False,
+    preset: str | None = None,
+    hide_links: HideLinks | None = None,
 ) -> Compiled:
     """Compile a parsed authoring document.
 
     The layout preset is ``preset`` when given, else the document's ``_workflow.layout.preset``,
     else ``bento``; ``auto`` (from either place) picks one after annotate by :func:`choose_auto`,
-    and the report's ``metrics["preset_auto"]`` then records the rule and the counts. Raises ``CwcError(INPUT_ERROR)`` for authoring errors (E1-E7), for an
+    and the report's ``metrics["preset_auto"]`` then records the rule and the counts.
+    ``hide_links`` overrides the preset's own choice of which links are written hidden
+    (:mod:`cwc.route.presentation`). Raises ``CwcError(INPUT_ERROR)`` for authoring errors (E1-E7), for an
     unknown preset name, and for a preset layout does not implement yet (E7), also when
     ``auto`` chose it: it never falls back to another preset. Verification
     and geometry failures do not raise: they are errors in the returned report, and
@@ -153,6 +161,7 @@ def compile_document(
             )
         raise CwcError(ExitCode.INPUT_ERROR, [_preset_error(message)]) from None
     routes = route(canvas, laid, defs)
+    mark_hidden(canvas, laid.forced, hide_links or chosen.hide_links, defs)
     write_notes(canvas, collect_notes(authoring, plan, laid, canvas))
     report = verify_compile(canvas, authoring, defs)
     geometry = check_geometry(

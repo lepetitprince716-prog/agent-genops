@@ -6,6 +6,7 @@
       "wrap_ratio": 2.4,
       "guide_width": 460,
       "numbering": "number",
+      "hide_links": "none",
       "palette": "semantic",
       "bands": [
         {
@@ -30,6 +31,7 @@
       "wrap_ratio": 2.4,
       "guide_width": 460,
       "numbering": "number",
+      "hide_links": "none",
       "palette": "semantic",
       "bands": [
         {
@@ -50,6 +52,7 @@
       "wrap_ratio": 2.4,
       "guide_width": 460,
       "numbering": "number",
+      "hide_links": "none",
       "palette": "semantic",
       "bands": [
         {
@@ -72,6 +75,7 @@
       "wrap_ratio": 2.4,
       "guide_width": 460,
       "numbering": "number",
+      "hide_links": "none",
       "palette": "semantic",
       "bands": [
         {
@@ -97,6 +101,7 @@
       "wrap_ratio": 2.4,
       "guide_width": 480,
       "numbering": "step",
+      "hide_links": "none",
       "palette": "official",
       "bands": [
         {
@@ -121,6 +126,7 @@
       "wrap_ratio": 1,
       "guide_width": 460,
       "numbering": "number",
+      "hide_links": "resources",
       "palette": "semantic",
       "bands": [
         {

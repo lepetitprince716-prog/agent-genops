@@ -37,6 +37,11 @@ class Numbering(str, Enum):
     STEP = "step"  # "Step 1", "Step 2"
 
 
+class HideLinks(str, Enum):
+    NONE = "none"  # every link is drawn
+    RESOURCES = "resources"  # links between columns that carry a resource are hidden (cwc.route.presentation)
+
+
 @dataclass(frozen=True)
 class Slot:
     """One place in a band. ``zones``: the zones whose groups go here, in this order.
@@ -117,6 +122,7 @@ class Preset:
     cockpit_split: CockpitSplit | None = None
     preview: Preview | None = None
     tray: Tray | None = None
+    hide_links: HideLinks = HideLinks.NONE
 
     def home(self, zone: Zone) -> tuple[int, int]:
         """``(band, slot)`` of ``zone``."""
