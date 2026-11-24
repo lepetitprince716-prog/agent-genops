@@ -96,21 +96,22 @@ def _two_outputs(ay):
     )
 
 
-def _one_output_two_inputs():
-    """One output feeding a target behind an obstacle (link 1) and a target far below (link 2)."""
+def _one_output_two_inputs(branch=True, branch_y=700):
+    """One output feeding a target behind an obstacle (link 1) and, with ``branch``, a target at
+    ``branch_y`` (link 2)."""
     source = _node(1, "Source", (0, 100), (300, 60))
     obstacle = _node(2, "Obstacle", (520, 90), (300, 80))
     near = _node(3, "Target1", (1200, 100), (300, 60))
-    below = _node(4, "Target2", (1200, 700), (300, 60))
-    source["outputs"] = [{"name": "o", "type": "X", "links": [1, 2]}]
+    below = _node(4, "Target2", (1200, branch_y), (300, 60))
+    source["outputs"] = [{"name": "o", "type": "X", "links": [1, 2] if branch else [1]}]
     near["inputs"] = [{"name": "i", "type": "X", "link": 1}]
-    below["inputs"] = [{"name": "i", "type": "X", "link": 2}]
+    below["inputs"] = [{"name": "i", "type": "X", "link": 2 if branch else None}]
     return Canvas(
         {
             "last_node_id": 4,
             "last_link_id": 2,
             "nodes": [source, obstacle, near, below],
-            "links": [[1, 1, 0, 3, 0, "X"], [2, 1, 0, 4, 0, "X"]],
+            "links": [[1, 1, 0, 3, 0, "X"]] + ([[2, 1, 0, 4, 0, "X"]] if branch else []),
             "groups": [],
             "config": {},
             "extra": {},
@@ -260,6 +261,27 @@ class KeepoutTest(unittest.TestCase):
         result = _route(canvas, [start])
         self.assertEqual((result.rerouted, result.unresolved), ((1,), ()))
         self.assertEqual(_chain(canvas, 2), [])
+
+    def test_a_run_shared_with_a_fallback_route_keeps_the_channel_of_the_grid_that_routed_it(self):
+        # link 1 goes around the obstacle in a grid with the keepout. Link 2 leaves along link 1's
+        # route, but every way into its input meets the keepout there, so it is routed again in a
+        # grid without it. The runs it repeats stay named as link 1 routed them
+        entry = Rect(1060, 240, 120, 180)  # over every grid point a route could enter Target2 from
+        alone = _one_output_two_inputs(branch=False, branch_y=300)
+        trunk = _route(alone, [entry])
+        self.assertEqual((trunk.rerouted, trunk.unresolved), ((1,), ()))
+        self.assertTrue(any("keepout:" in channel.id for channel in trunk.channels))
+        canvas = _one_output_two_inputs(branch_y=300)
+        result = _route(canvas, [entry])
+        self.assertEqual((result.rerouted, result.unresolved), ((1, 2), ()))
+        # link 2 repeats link 1's route and is not clear of the keepout: no grid with it routed it
+        self.assertEqual(_chain(canvas, 2)[: len(_chain(canvas, 1))], _chain(canvas, 1))
+        self.assertTrue(all(crosses(path, entry) for path in _drawn(canvas, link=2).values()))
+        for channel in trunk.channels:
+            self.assertEqual(
+                [(c.id, c.free) for c in result.channels if c.id == channel.id],
+                [(channel.id, channel.free)],
+            )
 
     def test_a_fallback_route_keeps_off_a_track_taken_for_a_keepout(self):
         across_a = Rect(700, -30, 80, 80)  # across output A's straight line
