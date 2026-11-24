@@ -2,7 +2,8 @@
 values (E5) and link targets (E6); produces the strict prompt inputs and widget values.
 
 Strict prompt inputs follow the frontend's export: every persisted widget that enters
-the prompt carries a value (an omitted one gets its widget default), linked inputs are
+the prompt carries a value (an omitted one gets its widget default), a widget the
+frontend does not persist but exports (``IMAGECOMPARE``) carries its initial value, linked inputs are
 ``[numeric id, output index]``, unlinked optional sockets are absent. Key order is the
 export's: widgets in widget order, then links in slot order.
 """
@@ -14,7 +15,7 @@ import difflib
 from dataclasses import dataclass, field
 from typing import Any
 
-from cwc.nodedefs.derive import slot_layout
+from cwc.nodedefs.derive import export_widgets, slot_layout
 from cwc.nodedefs.types import NodeDef, WidgetKind
 from cwc.normalize.diagnostics import Findings, listing
 from cwc.normalize.ids import RawNode
@@ -188,7 +189,8 @@ def _literal(target: Target, value: Any, aid: str, out: Findings) -> Any:
     if target.kind is Kind.UNPERSISTED:
         out.warning(
             Code.E5,
-            f"node {aid!r} input {target.name!r}: the frontend does not keep this widget's value; it is dropped",
+            f"node {aid!r} input {target.name!r}: the frontend does not keep this widget's value; "
+            "it is dropped and the prompt carries the widget's initial value",
             [aid],
         )
         return INVALID
@@ -258,11 +260,13 @@ def _prompt_inputs(
     nodedef: NodeDef, surf: Surface, split: _Split, linked: dict[str, Any], accepted: dict[str, Any], opaque: dict[str, Any]
 ) -> dict[str, Any]:
     inputs: dict[str, Any] = {}
-    for widget in surf.layout:
+    for widget, index in export_widgets(nodedef, split.literals, surf.layout):
         if widget.name is None or not widget.to_prompt:
             continue
         if widget.name in linked:
             inputs[widget.name] = linked[widget.name]
+        elif index is None:
+            inputs[widget.name] = wrap_widget_value(copy.deepcopy(widget.default))
         elif widget.name in accepted:
             inputs[widget.name] = wrap_widget_value(accepted[widget.name])
         else:

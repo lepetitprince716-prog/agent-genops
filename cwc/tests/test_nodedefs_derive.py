@@ -6,7 +6,7 @@ import unittest
 from tests import support  # noqa: F401  (puts src/ on sys.path)
 
 from cwc.nodedefs._frontend import frontend
-from cwc.nodedefs.derive import from_object_info, slot_layout, widget_layout
+from cwc.nodedefs.derive import export_widgets, from_object_info, slot_layout, widget_layout
 from cwc.nodedefs.types import SlotSpec, Tier, WidgetKind
 from cwc.resources import read_json
 
@@ -195,6 +195,22 @@ class WidgetDecisionTest(unittest.TestCase):
         nd = derive("ImageCompare")
         self.assertEqual(nd.widgets, ())
         self.assertEqual(slots(nd)[-1], ("compare_view", "IMAGECOMPARE", "compare_view"))
+
+    def test_widget_that_is_not_persisted_is_exported_with_its_initial_value(self):
+        # frontend 1.59.1 graphToPrompt: "compare_view": {"__value__": ["", ""]}
+        # (tests/fixtures/instantiate/frontend_exports.json, case "compare")
+        exported = export_widgets(derive("ImageCompare"))
+        self.assertEqual([(w.name, w.to_prompt, w.default, index) for w, index in exported], [("compare_view", True, ["", ""], None)])
+
+    def test_export_order_puts_an_unpersisted_widget_between_its_neighbours(self):
+        info = synthetic({"a": ["INT", {}], "view": ["IMAGECOMPARE", {"socketless": True}], "b": ["FLOAT", {}]})
+        nd = from_object_info("T", info)
+        self.assertEqual(names(nd.widgets), ["a", "b"])
+        self.assertEqual([(w.name, index) for w, index in export_widgets(nd)], [("a", 0), ("view", None), ("b", 1)])
+
+    def test_persisted_widgets_export_with_their_positions(self):
+        nd = derive("KSampler")
+        self.assertEqual([(w.name, index) for w, index in export_widgets(nd)], [(w.name, i) for i, w in enumerate(nd.widgets)])
 
     def test_patched_type_is_incomplete(self):
         nd = derive("CustomCombo")
