@@ -223,6 +223,54 @@ class LabelRule(unittest.TestCase):
         self.assertEqual(DEFS.get("CLIPTextEncode").display_name, "CLIP Text Encode (Prompt)")
         self.assertEqual(canvas.extra[KEY], {"1": {"hidden": True}, "2": {"hidden": True}, "3": {"hidden": True, "label": "Style prompt"}})
 
+    def test_names_are_compared_and_written_trimmed(self):
+        # the frontend trims a label before drawing it: titles that differ only by surrounding
+        # spaces would show the same text, and a title of spaces alone is no title
+        nodes = [
+            (2, "CLIPTextEncode", "Positive prompt", [("CONDITIONING", "CONDITIONING")]),
+            (3, "CLIPTextEncode", "Positive prompt ", [("CONDITIONING", "CONDITIONING")]),
+            (4, "CLIPTextEncode", "   ", [("CONDITIONING", "CONDITIONING")]),
+            (5, "CLIPTextEncode", " Style prompt ", [("CONDITIONING", "CONDITIONING")]),
+            (6, "KSampler", None, []),
+            (7, "KSampler", None, []),
+        ]
+        links = [(1, 2, 0, 6, 1, "CONDITIONING"), (2, 3, 0, 6, 2, "CONDITIONING"), (3, 4, 0, 7, 1, "CONDITIONING"), (4, 5, 0, 7, 2, "CONDITIONING")]
+        canvas = _canvas(nodes, links)
+        mark_hidden(canvas, (1, 2, 3, 4), HideLinks.RESOURCES, DEFS)
+        self.assertEqual(
+            canvas.extra[KEY],
+            {
+                "1": {"hidden": True},
+                "2": {"hidden": True},
+                "3": {"hidden": True, "label": "CLIP Text Encode (Prompt)"},
+                "4": {"hidden": True, "label": "Style prompt"},
+            },
+        )
+
+    def test_a_display_name_and_output_names_are_trimmed_too(self):
+        info = {
+            "SpacedLoader": {
+                "input": {"required": {}},
+                "input_order": {"required": []},
+                "output": ["MODEL", "MODEL"],
+                "output_is_list": [False, False],
+                "output_name": [" base ", "tuned"],
+                "name": "SpacedLoader",
+                "display_name": " Spaced loader ",
+                "description": "",
+                "python_module": "custom_nodes.spaced",
+                "category": "loaders",
+                "output_node": False,
+            }
+        }
+        defs = NodeDefs.load(object_info=info)
+        loader = (1, "SpacedLoader", None, [(" base ", "MODEL"), ("tuned", "MODEL")])
+        canvas = _canvas([loader, (2, "KSampler", None, []), (3, "KSampler", None, [])], [(1, 1, 0, 2, 0, "MODEL"), (2, 1, 1, 3, 0, "MODEL")])
+        mark_hidden(canvas, (1, 2), HideLinks.RESOURCES, defs)
+        self.assertEqual(
+            canvas.extra[KEY], {"1": {"hidden": True, "label": "Spaced loader: base"}, "2": {"hidden": True, "label": "Spaced loader: tuned"}}
+        )
+
     def test_three_outputs_of_one_node_and_an_empty_display_name(self):
         # a bundled definition with three CONDITIONING outputs and no display name: the class names
         # the node, as in the frontend's header, and each output adds its own name

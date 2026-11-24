@@ -74,19 +74,21 @@ def _labels(links: list[Link], nodes: dict[str, Node], defs: NodeDefs) -> dict[i
 
 
 def _node_name(node: Node | None, link: Link, defs: NodeDefs) -> str:
-    """The source node's header as the frontend writes it: title, else display name, else class."""
+    """The source node's header as the frontend writes it: title, else display name, else class.
+
+    Trimmed, because the frontend trims a label before drawing it: two names that differ only by
+    surrounding spaces would read the same."""
     if node is None:
         return str(link.type)
-    if node.title:
-        return node.title
+    title = (node.title or "").strip()
+    if title:
+        return title
     nodedef = defs.get(node.type)
-    if nodedef is not None and nodedef.display_name:
-        return nodedef.display_name
-    return node.type
+    display = (nodedef.display_name or "").strip() if nodedef is not None else ""
+    return display or node.type
 
 
 def _output_name(node: Node | None, link: Link) -> str:
     outputs = node.outputs if node is not None else []
-    if link.origin_slot < len(outputs) and outputs[link.origin_slot].get("name"):
-        return str(outputs[link.origin_slot]["name"])
-    return str(link.type)
+    name = str(outputs[link.origin_slot].get("name") or "").strip() if link.origin_slot < len(outputs) else ""
+    return name or str(link.type)

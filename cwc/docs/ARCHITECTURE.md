@@ -296,8 +296,9 @@ How compile and tidy place nodes and groups, and how the checks read the result.
   track like any other and does not change the queued prompt, so a frontend that does not know the
   key draws the route. Labels, per type: all hidden links of the type leave one output (node and
   slot): no `label`, so the frontend's own stacked tag reads `VAE x2`; two or more outputs: each
-  output is named by its node's header as the frontend titles it: the node's `title` (an empty
-  title is none), else the definition's `display_name` (ComfyUI fills it with the class name when
+  output is named by its node's header as the frontend titles it: the node's `title` (trimmed,
+  since the frontend trims a label before drawing it; one empty once trimmed is none), else the
+  definition's `display_name` (ComfyUI fills it with the class name when
   the node pack names the node nothing else, and the frontend's default title is
   `display_name || name`), else the class name for a node with no definition, and
   `<name>: <output name>` when one node leaves two or more of the type's outputs; a link has that
