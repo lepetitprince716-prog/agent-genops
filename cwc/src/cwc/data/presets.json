@@ -115,6 +115,30 @@
         }
       ],
       "corridors": []
+    },
+    "stack": {
+      "axis": "y",
+      "wrap_ratio": 1,
+      "guide_width": 460,
+      "numbering": "number",
+      "palette": "semantic",
+      "bands": [
+        {
+          "slots": [
+            {"zones": ["cockpit"]},
+            {"zones": ["model", "prompt"]},
+            {"zones": ["sampling", "stage"]},
+            {"zones": ["postprocess"]},
+            {"zones": ["output"]}
+          ]
+        },
+        {
+          "slots": [
+            {"zones": ["control", "optional"]}
+          ]
+        }
+      ],
+      "corridors": []
     }
   }
 }

@@ -20,10 +20,16 @@ from typing import Any
 
 from tests.support import FIXTURES
 
+from cwc.canvas.direction import direction, runs_back
 from cwc.canvas.envelope import COLLAPSED_PAD, VUE_COLLAPSED_PAD, Renderer, box_facts
 from cwc.canvas.geometry import Rect
 from cwc.canvas.links import crosses, spline
 from cwc.canvas.model import Canvas
+from cwc.layout import _fits
+from cwc.layout.inner import Graph, Part
+from cwc.layout.presets import load_presets
+from cwc.layout.section import Placed
+from cwc.layout.types import Axis
 from cwc.nodedefs.registry import NodeDefs
 from cwc.report import Code, Mode, Report, Severity
 from cwc.verify.geometry import check_geometry
@@ -531,6 +537,69 @@ class Direction(unittest.TestCase):
     def test_a_self_link_is_a_feedback_edge(self) -> None:
         report = run(canvas([node(1, 0, 0)], [link(1, 1, 1)]))
         self.assertEqual(report.metrics["G5"]["feedback_links"], 1)
+
+
+class DirectionAlongY(unittest.TestCase):
+    """G5 on the y axis. Node 1 sits at (0, 0): its output anchor is (291, 14). Node 2 at
+    (x, y) has its input anchor at (x + 10, y + 14). The link runs back when that anchor is
+    more than 20 above (y < -20) and not right of the output anchor (x <= 281)."""
+
+    def backward(self, x: float, y: float) -> int:
+        return run(canvas([node(1, 0, 0), node(2, x, y)], [link(1, 1, 2)]), preset=_y_preset()).metrics["G5"]["right_to_left"]
+
+    def test_the_table(self) -> None:
+        cases = {
+            "below, same column": ((0, 300), 0),
+            "above, same column": ((0, -300), 1),
+            "20 above: within the slack": ((0, -20), 0),
+            "21 above: past the slack": ((0, -21), 1),
+            "above, input anchor right of the output anchor": ((282, -300), 0),
+            "above, input anchor level with the output anchor": ((281, -300), 1),
+            "left at the same height": ((-1000, 0), 0),
+        }
+        for name, ((x, y), expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.backward(x, y), expected)
+
+    def test_the_x_axis_is_unchanged_without_a_preset_and_with_an_x_preset(self) -> None:
+        above = canvas([node(1, 0, 0), node(2, 0, -300)], [link(1, 1, 2)])
+        self.assertEqual(run(above).metrics["G5"]["right_to_left"], 1)  # 10 < 291
+        self.assertEqual(run(above, preset=load_presets()["bento"]).metrics["G5"]["right_to_left"], 1)
+        below_right = canvas([node(1, 0, 0), node(2, 0, 300)], [link(1, 1, 2)])
+        self.assertEqual(run(below_right, preset=_y_preset()).metrics["G5"]["right_to_left"], 0)
+        self.assertEqual(run(below_right).metrics["G5"]["right_to_left"], 1)
+
+    def test_the_message_names_the_reading_direction(self) -> None:
+        cv = canvas([node(1, 0, 0), node(2, 0, -300)], [link(1, 1, 2)])
+        (y_finding,) = found(run(cv, preset=_y_preset()), Code.G5)
+        self.assertEqual(y_finding.message, "1 of 1 links (100.0%) are drawn against the reading direction; the limit is 5%")
+        (x_finding,) = found(run(cv), Code.G5)
+        self.assertEqual(x_finding.message, "1 of 1 links (100.0%) are drawn right to left; the limit is 5%")
+
+    def test_an_unknown_axis_is_refused(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown axis 'z'"):
+            runs_back((0, 0), (0, 0), "z")
+
+    def test_layout_budget_agrees_with_the_check_on_the_same_anchors(self) -> None:
+        # _fits reads anchor offsets once and adds node positions; G5 builds the curves.
+        # One counted link: G5 is over exactly when that link runs back.
+        for axis in ("x", "y"):
+            for x in (-1000, -300, 0, 271, 281, 282, 300, 1000):
+                for y in (-1000, -300, -21, -20, 0, 20, 300, 1000):
+                    with self.subTest(axis=axis, x=x, y=y):
+                        cv = canvas([node(1, 0, 0), node(2, 0, 600)], [link(1, 1, 2)])
+                        graph = Graph.of(cv, {}, NoDefs())
+                        fits = _fits(cv, graph, {}, frozenset(), axis)
+                        part = Part(key="g", plan=None, letter="", box=Rect(0, 0, 0, 0), nodes={"2": (0, 0)})  # type: ignore[arg-type]
+                        budget = fits(Placed(parts=[(part, x, y)], bands=[], items=[], band_of=[]))
+                        cv.node_map()["2"].set_pos(x, y)
+                        curve = GeometryView.build(cv, NoDefs()).splines[Renderer.CLASSIC][1]
+                        self.assertEqual(budget, not runs_back(curve.p0, curve.p3, axis))
+                        self.assertEqual(budget, not direction(cv, {1: curve}, axis=axis).over)
+
+
+def _y_preset() -> Any:
+    return replace(load_presets()["bento"], axis=Axis.Y)
 
 
 class Aspect(unittest.TestCase):

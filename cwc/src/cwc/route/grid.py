@@ -6,6 +6,10 @@ run between free points keeps that distance from every box and a reroute's circl
 never covers a node. Every other point is free: the gaps between layers inside a group, the gaps
 between groups, the corridors between bands and the margin outside the groups are all free space
 here; the grid does not know which is which (:mod:`cwc.route` names the channel afterwards).
+The one exception is the sides of the group frames: a step up or down closer than ``GRID`` to
+the left or right side of a frame, within its height, is fenced off (``Grid.fence``), since a
+link run on a frame's border reads as part of the frame. Crossing a side is a step along x and
+stays free.
 
 The search is A* over ``(point, heading)``: a step costs 1, a turn ``TURN`` more, and a step
 along a grid edge another output already uses ``SHARED`` more, so each output takes its own
@@ -26,7 +30,7 @@ from cwc.canvas.geometry import GRID, Rect
 
 Cell = tuple[int, int]
 STEPS = ((1, 0), (0, 1), (-1, 0), (0, -1))  # east, south, west, north
-EAST = 0
+EAST, SOUTH, NORTH = 0, 1, 3
 TURN = 3
 SHARED = 40
 WEIGHT = 3  # the search's greed: at most this many times the cheapest cost
@@ -74,6 +78,7 @@ class Grid:
     hi: Cell
     used: dict[int, set[object]] = field(default_factory=dict)  # by edge code
     clearance: float = 0.0  # px a free point keeps from every box: the first free column right of a box depends on it
+    fence: frozenset[int] = frozenset()  # edge codes of the upright grid edges along the frame sides
     stride: int = field(init=False)
     blocked: bytearray = field(init=False)
 
@@ -91,9 +96,12 @@ class Grid:
         self.blocked = blocked
 
     @classmethod
-    def build(cls, boxes: list[tuple[str, Rect]], clearance: float, used: dict[int, set[object]] | None = None) -> Grid:
+    def build(
+        cls, boxes: list[tuple[str, Rect]], clearance: float, used: dict[int, set[object]] | None = None, frames: Iterable[Rect] = ()
+    ) -> Grid:
         """``used``: a track table to share with another grid over the same ``boxes`` (the bounds,
-        and so the edge codes, do not depend on ``clearance``)."""
+        and so the edge codes, do not depend on ``clearance``); ``frames``: the group frames whose
+        sides are fenced."""
         owner: dict[Cell, str] = {}
         for key, box in boxes:
             i0 = math.floor((box.x - clearance) / GRID) + 1
@@ -108,7 +116,20 @@ class Grid:
             hi = (max(math.ceil(b.right / GRID) for _, b in boxes) + MARGIN, max(math.ceil(b.bottom / GRID) for _, b in boxes) + MARGIN)
         else:
             lo, hi = (0, 0), (0, 0)
-        return cls(owner, lo, hi, clearance=clearance) if used is None else cls(owner, lo, hi, used, clearance)
+        grid = cls(owner, lo, hi, clearance=clearance) if used is None else cls(owner, lo, hi, used, clearance)
+        grid.fence = frozenset(grid._sides(frames))
+        return grid
+
+    def _sides(self, frames: Iterable[Rect]) -> Iterable[int]:
+        """The edge codes of the upright grid edges less than ``GRID`` from a side of one of
+        ``frames`` whose span meets the frame's."""
+        (lo_i, lo_j), (hi_i, hi_j) = self.lo, self.hi
+        for frame in frames:
+            j0, j1 = max(lo_j, math.floor(frame.y / GRID)), min(hi_j - 1, math.ceil(frame.bottom / GRID) - 1)
+            for side in (frame.x, frame.right):
+                for i in range(max(lo_i, math.floor(side / GRID - 1) + 1), min(hi_i, math.ceil(side / GRID + 1) - 1) + 1):
+                    for j in range(j0, j1 + 1):
+                        yield ((i - lo_i + 1) * self.stride + (j - lo_j + 1)) * 2 + 1
 
     def free(self, cell: Cell) -> bool:
         return cell not in self.owner and self.lo[0] <= cell[0] <= self.hi[0] and self.lo[1] <= cell[1] <= self.hi[1]
@@ -124,9 +145,12 @@ class Grid:
                 out.append(((pi * stride + pj) * 4 + d, pi, pj))
         return out
 
-    def search(self, starts: Sequence[State], goal: Cell, net: object, tree: Starts | None = None) -> tuple[list[Cell], int] | None:
+    def search(
+        self, starts: Sequence[State], goal: Cell, net: object, tree: Starts | None = None, arrive: tuple[int, ...] = (EAST,)
+    ) -> tuple[list[Cell], int] | None:
         """A cheap path from one of ``starts`` (from :meth:`states`) or of ``tree`` to ``goal``,
-        arriving heading right, or ``None`` when the goal cannot be reached. The search is
+        arriving with one of the headings ``arrive`` (right by default), or ``None`` when the goal
+        cannot be reached. The search is
         weighted (``WEIGHT`` times the Manhattan distance left), which trades the shortest path
         for a search that stays near the straight line; ties break on the state, so the result is
         deterministic. Returns the path, which begins at the start it used, and that start's
@@ -144,10 +168,10 @@ class Grid:
         pops come in the same order as with every start queued at once."""
         if not ((starts or tree) and self.free(goal)):
             return None
-        stride, blocked, used = self.stride, self.blocked, self.used
+        stride, blocked, used, fence = self.stride, self.blocked, self.used, self.fence
         lo_i, lo_j = self.lo
         gi, gj = goal[0] - lo_i + 1, goal[1] - lo_j + 1
-        target = (gi * stride + gj) * 4 + EAST
+        targets = {(gi * stride + gj) * 4 + heading for heading in arrive}
         span = len(blocked) * 4
         span_cost = (1 + TURN + SHARED) * span + 1
         unit = span_cost * span
@@ -184,7 +208,7 @@ class Grid:
             cost = rest % span_cost
             if cost > best[state]:
                 continue
-            if state == target:
+            if state in targets:
                 path = []
                 at: int | None = state
                 heading = EAST
@@ -201,8 +225,11 @@ class Grid:
                 if blocked[n]:
                     continue
                 total = cost + step
-                if used:
-                    others = used.get((p if dp > 0 else n) * 2 + (nd & 1))
+                if used or fence:
+                    edge = (p if dp > 0 else n) * 2 + (nd & 1)
+                    if edge in fence:
+                        continue
+                    others = used.get(edge)
                     if others and (len(others) > 1 or net not in others):
                         total += SHARED
                 nxt = n * 4 + nd

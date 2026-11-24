@@ -7,7 +7,8 @@ Which links get reroutes:
 - a link inside a group that spans layers takes the dummy slots layout reserved for it
   (``LayoutResult.waypoints``) as its reroutes, snapped to the 20 px grid;
 - any other link whose plain spline crosses a node box that is not one of its ends, under either
-  renderer, is routed through the free space between boxes (:mod:`cwc.route.grid`);
+  renderer, or that layout lists in ``LayoutResult.forced``, is routed through the free space
+  between boxes (:mod:`cwc.route.grid`);
 - every other link stays a plain spline.
 
 A route is a path of grid points that leaves the output heading right and reaches the input
@@ -21,7 +22,9 @@ the search had to move off that line (a box there) stays, or the segment would r
 the flank and through that box.
 
 A route starts in the first grid column right of the output anchors that the grid's clearance
-leaves free of the source box, and ends in the last one left of the input anchors.
+leaves free of the source box, and ends in the last one left of the input anchors. A link layout
+gives a track (``LayoutResult.tracks``) comes down that track and turns once, level with its
+input, into a straight run to that last column; when that cannot be routed it ends as any other.
 
 Every routed link is checked as drawn (:func:`cwc.canvas.reroutes.paths_between`) under both
 renderers at the default cap of 20 and at an unlimited cap (``0.25 d`` on every segment). A route
@@ -55,7 +58,7 @@ from cwc.canvas.model import Canvas, Link, id_order
 from cwc.canvas.reroutes import REROUTE_CAP, own_directions, segment_controls
 from cwc.layout.types import LayoutResult
 from cwc.prompt.slots import DefLookup
-from cwc.route.grid import EAST, STEPS, Cell, Grid, Starts
+from cwc.route.grid import EAST, NORTH, SOUTH, STEPS, Cell, Grid, Starts
 
 __all__ = ["Channel", "RouteResult", "route"]
 
@@ -113,7 +116,7 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
     drawn = [(link, e) for link, e in drawn if e]
     links = [link for link, _ in drawn]
     ends = {link.id: e for link, e in drawn}
-    plain = {link.id for link in links if _crossing(link, (), ends[link.id], boxes)}
+    plain = {link.id for link in links if _crossing(link, (), ends[link.id], boxes)} | set(result.forced)
     chains: dict[int, list[Point]] = {}
     dummy = 0
     for link in links:
@@ -128,9 +131,10 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
     unresolved: list[int] = []
     runs: dict[tuple[object, Cell, Cell], None] = {}  # a run once, however many links of its output take it
     owners = sorted(((key, envelope(node, facts[key])) for key, node in nodes.items()), key=lambda kv: id_order(kv[0]))
-    grids = [Grid.build(owners, CLEARANCES[0])]
+    frames = [group.bounding for group in canvas.groups] if result.fence_frames else []
+    grids = [Grid.build(owners, CLEARANCES[0], frames=frames)]
     # one track table: a track taken is taken at any clearance
-    grids.extend(Grid.build(owners, c, grids[0].used) for c in CLEARANCES[1:])
+    grids.extend(Grid.build(owners, c, grids[0].used, frames) for c in CLEARANCES[1:])
     # per output: each point and heading on a routed path, to that path, the point's index, its reroutes and its corners
     trees: dict[object, dict[tuple[Cell, int], tuple[list[Cell], int, list[Point], list[int]]]] = {}
     # per grid and output: the tree's points and headings as search states, and how many of the tree's entries that covers
@@ -151,11 +155,13 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
                 if count < len(tree):
                     states.add(grid.states(itertools.islice(tree, count, None)))
                     coded[(g, net)] = (len(tree), states)
-            for lazy in (states, None) if tree else (None,):
-                found = grid.search(own, goal, net, lazy)
+            aims = [*_track_aim(result.tracks.get(link.id), goal, grid), (goal, (EAST,), [])]
+            for (aim, arrive, tail), lazy in itertools.product(aims, (states, None) if tree else (None,)):
+                found = grid.search(own, aim, net, lazy, arrive)
                 if found is None:
                     continue
                 cells, heading = found
+                cells = cells + tail
                 skip, new, fresh = 0, cells, 1
                 if (cells[0], heading) != (start, EAST):
                     trunk, k, trunk_points, trunk_corners = tree[(cells[0], heading)]
@@ -338,6 +344,20 @@ def _goal(ends: Ends, grid: Grid) -> Cell:
     so the point left of the goal must be free as well."""
     x = min(e[1][0] for e in ends.values())
     return _clear(math.floor((x - grid.clearance) / GRID), _rows(ends)[1], grid, -1)
+
+
+def _track_aim(track: float | None, goal: Cell, grid: Grid) -> list[tuple[Cell, tuple[int, ...], list[Cell]]]:
+    """For a link layout gave a track (``LayoutResult.tracks``): the point on the track level
+    with ``goal``, reached heading up or down, and the straight run from there to ``goal``, so
+    the route turns once into its input. Nothing when the track does not lie left of the goal or
+    a point of that run is blocked; the route then ends as any other."""
+    if track is None:
+        return []
+    i = round(track / GRID)
+    run = [(k, goal[1]) for k in range(i + 1, goal[0] + 1)]
+    if not run or not all(grid.free(cell) for cell in [(i, goal[1]), *run]):
+        return []
+    return [((i, goal[1]), (SOUTH, NORTH), run)]
 
 
 def _clear(i: int, j: int, grid: Grid, approach: int = 0) -> Cell:

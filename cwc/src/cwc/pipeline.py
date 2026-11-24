@@ -49,7 +49,7 @@ def preset_guide() -> dict[str, tuple[str, str]]:
     links. Numbers come from the presets document and the layout constants. A test keeps the
     names here and in presets.json the same, and measures the geometry described."""
     presets = load_presets()
-    bento, tower = presets["bento"], presets["tower-preview"]
+    bento, tower, stack = presets["bento"], presets["tower-preview"], presets["stack"]
     preview = tower.preview
     assert preview is not None  # the presets document gives tower-preview its preview
     preview_w = snap_up(round(preview.share * SCREEN_W, 6))
@@ -86,6 +86,14 @@ def preset_guide() -> dict[str, tuple[str, str]]:
             "the other in the first column, then prompts, sampling, post-processing and output; control "
             "branches and optional modules in a second row.",
             "a graph meant to be followed in order, like a tutorial",
+        ),
+        "stack": (
+            "Every group a box read top to bottom, Controls first: in a box the main chain runs down the "
+            "middle, the nodes that feed it stand to its left and the previews of its stages to its right. "
+            "The boxes stack in columns, and a column higher than "
+            f"{stack.wrap_ratio:g} times the canvas's width wraps into a new column on its right. An optional "
+            "module is one box.",
+            "a staged graph read top to bottom like an architecture diagram, with a preview per stage",
         ),
         AUTO: (
             f"Picks a preset from the graph's counts, the first rule that holds: at most {AUTO_SMALL_NODES} "

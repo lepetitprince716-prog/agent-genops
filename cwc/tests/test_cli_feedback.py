@@ -487,6 +487,8 @@ class PresetDescriptionTest(Folder):
         self.assertGreaterEqual((output[3], output[4]), (width, preview.min_height))
         # bento: the wrap ratio
         self.assertIn(f"wider than {presets['bento'].wrap_ratio:g} times its height", text["bento"])
+        # stack: the wrap ratio, along y
+        self.assertIn(f"higher than {presets['stack'].wrap_ratio:g} times the canvas's width", text["stack"])
         # stepped: step titles, the models and Controls groups one above the other
         self.assertIn("Step 1, Step 2", text["stepped"])
         stepped = self.groups("stepped")

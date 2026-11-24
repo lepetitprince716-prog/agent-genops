@@ -175,7 +175,15 @@ class LayoutResult:
     them into reroutes. ``cockpit``: the indices in the written ``groups`` array of the cockpit's
     own groups, ascending: one index, one per part when C1 split the cockpit (``01a``, ``01b``),
     empty without a cockpit. It is what ``check_geometry(cockpit=...)`` takes; a group nested in
-    the cockpit is not listed, the checks find it by containment.
+    the cockpit is not listed, the checks find it by containment. ``forced``: links routing
+    sends through the grid even when their plain spline crosses no box: a ``y`` preset's links
+    between columns, which would otherwise cross the gap between columns as long diagonals.
+    Empty for an ``x`` preset. ``tracks``: link id to the canvas x of the upright track in a
+    ``y`` preset's corridor that the link comes down before it turns, once, into its input; the
+    links of one output into one column share a track. Empty for an ``x`` preset.
+    ``fence_frames``: routing keeps its upright runs a grid step or more off the left and right
+    sides of every group frame (:mod:`cwc.route.grid`); set by a ``y`` preset, whose buses run
+    beside and between the frames of its columns. False for an ``x`` preset.
     """
 
     preset: str
@@ -188,3 +196,6 @@ class LayoutResult:
     membership: Mapping[str, int | None]
     waypoints: Mapping[int, tuple[Point, ...]] = field(default_factory=dict)
     cockpit: tuple[int, ...] = ()
+    forced: tuple[int, ...] = ()
+    tracks: Mapping[int, float] = field(default_factory=dict)
+    fence_frames: bool = False

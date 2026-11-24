@@ -17,7 +17,7 @@ def band0(name):
 
 class BundledPresetsTest(unittest.TestCase):
     def test_all_five_load(self):
-        self.assertEqual(set(load_presets()), {"bento", "swimlanes", "cockpit-split", "tower-preview", "stepped"})
+        self.assertEqual(set(load_presets()), {"bento", "swimlanes", "cockpit-split", "tower-preview", "stepped", "stack"})
         self.assertEqual(DEFAULT, "bento")
 
     def test_every_zone_has_one_home(self):
