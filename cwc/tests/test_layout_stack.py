@@ -458,6 +458,31 @@ def _uprights(canvas) -> list[tuple[int, float, float, float]]:
     return found
 
 
+def _crowded_tracks(canvas, result, defs) -> list[tuple]:
+    """Each run down a link's track that is not ``TRACK`` clear left of the Z leg line in front of
+    the spine node it feeds, that is not right of the left lane of the box that node stands in,
+    or that passes through a node."""
+    nodes = canvas.node_map()
+    env = {key: envelope(n, box_facts(n, defs.get(n.type))) for key, n in nodes.items()}
+    frames = [group.bounding for group in canvas.groups]
+    home = {key: min((f for f in frames if f.contains_rect(box)), key=lambda f: f.w * f.h, default=None) for key, box in env.items()}
+    fed = {link.id: str(link.target_id) for link in canvas.links}
+    found = []
+    for link, x, top, bottom in _uprights(canvas):
+        if result.tracks.get(link) != x:
+            continue
+        spine = env[fed[link]]
+        if x > spine.x - stack.LEG - TRACK:
+            found.append((link, x, "at the Z leg", spine.x))
+        lane = [box.right for key, box in env.items() if home[key] == home[fed[link]] and box.right <= spine.x - stack.LEG]
+        if lane and x <= max(lane):
+            found.append((link, x, "in the left lane", max(lane)))
+        for key, box in env.items():
+            if box.x < x < box.right and top < box.bottom and box.y < bottom:
+                found.append((link, x, "through", key))
+    return found
+
+
 def _uprights_on_sides(canvas) -> list[tuple]:
     """Each upright reroute segment closer than ``GRID`` to the left or right side of a frame
     whose height it overlaps."""
@@ -475,7 +500,8 @@ def _uprights_on_sides(canvas) -> list[tuple]:
 
 class Buses(unittest.TestCase):
     """Under ``stack``: the links into a spine node from another column turn once from their
-    track into the input, and no upright run stands on a frame's side."""
+    track into the input, a track keeps clear of the Z leg line and of every node, and no upright
+    run stands on a frame's side."""
 
     @classmethod
     def setUpClass(cls):
@@ -496,6 +522,25 @@ class Buses(unittest.TestCase):
                 self.assertEqual(_uprights_on_sides(canvas), [])
                 uprights += len(_uprights(canvas))
         self.assertGreater(uprights, 100)
+
+    def test_a_track_keeps_off_the_z_leg_the_left_lane_and_every_node(self):
+        # a column with no left lane keeps its tracks in the gap left of it, one with a left lane
+        # in the corridor between the lane and the spine, which _corridor widens per track;
+        # either way a track stands TRACK clear left of the Z leg line in front of the spine node
+        # it feeds, right of that box's left lane, and goes through no node
+        runs = 0
+        for name, (canvas, result, defs) in self.canvases.items():
+            with self.subTest(case=name):
+                self.assertEqual(_crowded_tracks(canvas, result, defs), [])
+                runs += sum(1 for link, x, _, _ in _uprights(canvas) if result.tracks.get(link) == x)
+        self.assertGreater(runs, 100)
+
+    def test_a_node_moved_under_a_track_is_found(self):
+        canvas, result, defs = copy.deepcopy(self.canvases["two_pass"])
+        link, x, top, bottom = next(u for u in _uprights(canvas) if result.tracks.get(u[0]) == u[1])
+        moved = next(n for n in canvas.nodes if str(n.id) != str(next(k.target_id for k in canvas.links if k.id == link)))
+        moved.set_pos(x - 40, (top + bottom) / 2)
+        self.assertIn((link, x, "through", str(moved.id)), _crowded_tracks(canvas, result, defs))
 
     def test_a_frame_side_moved_onto_an_upright_is_found(self):
         canvas = copy.deepcopy(self.canvases["two_pass"][0])

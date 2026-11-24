@@ -13,7 +13,9 @@ each side.
 3. the check finds a title moved under a Z leg and one moved under a track.
 
 Only these two constructions of the preset are checked; a link routing places through the grid
-on its own may still cross a title.
+on its own may still cross a title. The widest title in these cases is about 310 px; a longer one
+can still reach a Z's right leg, or a track in the corridor beside a left lane, since neither
+moves for a title.
 """
 
 from __future__ import annotations
