@@ -87,6 +87,7 @@ class Code(str, Enum):
     N4 = "N4"
     N5 = "N5"
     N6 = "N6"
+    N7 = "N7"
     # Bypass closure and optional-group purity.
     B1 = "B1"
     B2 = "B2"
@@ -146,6 +147,7 @@ TITLES: dict[Code, str] = {
     Code.N4: "legacy Reroute node or redundant pass-through node",
     Code.N5: "bypassed or muted node outside an optional module",
     Code.N6: "empty group or stray note",
+    Code.N7: "stage handoff between two samplers has no preview",
     Code.B1: "factory state leaves a required input of an active node unconnected",
     Code.B2: "upstream node used only by an optional module is not marked optional",
     Code.B3: "optional group mixes bypassed and active nodes, or sits inside a non-optional group",
