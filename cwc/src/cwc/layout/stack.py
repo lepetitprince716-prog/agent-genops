@@ -20,19 +20,31 @@ and stacks its children under them, each laid out the same way on its own.
 
 In a column every top-level box has the same left edge and width, and every lane the same x and
 width, its expanded nodes widened to it (width up only), so the spines of the column form one
-line. In front of the spine a column keeps a corridor for the links that come in from other
-columns: ``CORRIDOR_BASE`` plus ``TRACK`` for every distinct output they come from (one output
-feeding several nodes needs one upright track, its links branching off it), at least
-``CORRIDOR_MIN`` and at most ``CORRIDOR_MAX``; with a left lane, the gap between it and the spine
-is the wider of that and ``LANE_GAP``. A column takes as many boxes, in reading order, as keeps it at most ``wrap_ratio`` times
-the width of the whole canvas high and G5 within its limit (:func:`place_stack`).
+line. The links that come into the spines of a column from other columns each come down an
+upright track (one output feeding several nodes needs one track, its links branching off it),
+and a track never runs inside a frame's top-left corner, where the frontend writes the group
+title over 100 to 300 px:
+
+- a column with no left lane keeps its tracks in the gap to its left, ``TRACK`` apart, the gap
+  ``COLUMN_GAP`` plus ``TRACK`` per track (the first column moves right from ``x0`` by
+  ``TRACK`` per track), and in front of the spine only ``CORRIDOR_MIN``, a box margin and a
+  Z's left leg;
+- a column with a left lane keeps them in a corridor between the left lane and the spine, since
+  a run from the gap would meet the left lane: ``CORRIDOR_BASE`` plus ``TRACK`` for every
+  distinct output feeding the column, at least ``CORRIDOR_MIN`` and at most ``CORRIDOR_MAX``,
+  the gap between the left lane and the spine the wider of that and ``LANE_GAP``.
+
+A column takes as many boxes, in reading order, as keeps it at most ``wrap_ratio`` times the
+width of the whole canvas high and G5 within its limit (:func:`place_stack`).
 
 A link between two spine nodes next to each other in a column, inside a box or from the last
 spine node of one box to the first of the box below, runs out of the right side and into the
-left side of nodes stacked along y; it gets four waypoints, a Z: right of the spine, down to the
-middle of the gap, left of the spine, down to the input. A link between two columns is listed
-in ``LayoutResult.forced``, so routing takes it through the grid (:func:`finish`); one that
-enters a spine node has a track in the column's corridor (``LayoutResult.tracks``), shared by
+left side of nodes stacked along y; it gets four waypoints, a Z: right of the spine, down to its
+cross leg, left of the spine, down to the input. Inside a box the cross leg runs in the middle
+of the gap between the two nodes; from one box to the next it runs under the lower box's title
+band, so the left leg comes down under the title instead of through it. A link between two
+columns is listed in ``LayoutResult.forced``, so routing takes it through the grid
+(:func:`finish`); one that enters a spine node has a track (``LayoutResult.tracks``), shared by
 the links of its output, which it comes down before it turns into its input.
 """
 
@@ -90,10 +102,10 @@ SPINE_GAP = 80  # between two spine envelopes: room for a Z's cross leg
 LEG = 40  # a Z's upright legs stand this far right and left of the spine lane
 GROUP_GAP = 80  # between two boxes of a column
 COLUMN_GAP = 120  # between two columns
-# a column's corridor in front of the spine: this, plus TRACK per output feeding in; a Z's left leg
-# and a TRACK between the outermost track and the frame's side, which routing keeps clear
+# a corridor between a left lane and the spine: this, plus TRACK per output feeding in; a Z's left
+# leg and a TRACK between the outermost track and the left lane
 CORRIDOR_BASE = LEG + TRACK
-CORRIDOR_MIN = PAD + LEG + PAD  # with no link from another column: a box margin and a Z's left leg
+CORRIDOR_MIN = PAD + LEG + PAD  # in front of a spine with no track there: a box margin and a Z's left leg
 CORRIDOR_MAX = 400
 
 
@@ -120,7 +132,7 @@ class Lanes:
 @dataclass(frozen=True)
 class Widths:
     """The lane widths a box is drawn with (0 for an empty lane), the box width and the column's
-    corridor in front of the spine (:func:`_corridor`)."""
+    corridor in front of the spine (:func:`_corridor` with a left lane, else ``CORRIDOR_MIN``)."""
 
     left: float
     spine: float
@@ -139,6 +151,13 @@ class Widths:
     @property
     def right_x(self) -> float:
         return self.spine_x + self.spine + LANE_GAP
+
+    @property
+    def track_base(self) -> float:
+        """Where the tracks start, relative to the box's left edge: the k-th track (from 0)
+        stands ``TRACK * (k + 1)`` left of it. With a left lane, a Z's left leg in front of the
+        spine; without one, the box's left edge, so the tracks stand in the gap to its left."""
+        return self.spine_x - LEG if self.left else 0.0
 
 
 @dataclass(frozen=True)
@@ -455,9 +474,17 @@ def place_stack(
         columns = []
         all_widths = []
         x = x0
+        gap = 0.0
         high = 0.0
         for run in runs:
-            widths = _widths(run, *_lane_widths(graph, run), _corridor(graph, run, sources))
+            left, spine, right = _lane_widths(graph, run)
+            if left:
+                widths = _widths(run, left, spine, right, _corridor(graph, run, sources))
+            else:
+                widths = _widths(run, left, spine, right)
+                outside = _spine_feeds(graph, run, sources)
+                gap += TRACK * outside
+            x += gap
             y = 0.0
             column = []
             for box in run:
@@ -468,9 +495,10 @@ def place_stack(
             high = max(high, y - GROUP_GAP)
             columns.append(tuple(column))
             all_widths.append(widths)
-            x += widths.box + COLUMN_GAP
+            x += widths.box
+            gap = COLUMN_GAP
         placed = Placed(parts=parts, bands=rects, items=[], band_of=[])
-        return Stacked(placed, tuple(columns), tuple(all_widths)), high, x - COLUMN_GAP - x0
+        return Stacked(placed, tuple(columns), tuple(all_widths)), high, x - x0
 
     chosen: int | None = None
     tall: int | None = None
@@ -490,21 +518,36 @@ def place_stack(
     return stacked
 
 
-def _corridor(graph: Graph, column: Sequence[Lanes], sources: Mapping[int, tuple[str, int]]) -> float:
-    """The corridor of ``column`` (the module docstring): one track per distinct output outside
-    the column that feeds a node in it."""
+def _members(column: Sequence[Lanes]) -> set[str]:
     inside: set[str] = set()
     for box in column:
         inside.update(box.left, box.spine, box.right)
         for part, _ in box.children:
             inside.update(_all_nodes(part))
+    return inside
+
+
+def _corridor(graph: Graph, column: Sequence[Lanes], sources: Mapping[int, tuple[str, int]]) -> float:
+    """The corridor of ``column`` between its left lane and its spine (the module docstring):
+    one track per distinct output outside the column that feeds a node in it."""
+    inside = _members(column)
     feeding = {sources[link] for link, origin, target in graph.edges if target in inside and origin not in inside}
     return float(min(CORRIDOR_MAX, max(CORRIDOR_MIN, CORRIDOR_BASE + TRACK * len(feeding))))
 
 
+def _spine_feeds(graph: Graph, column: Sequence[Lanes], sources: Mapping[int, tuple[str, int]]) -> int:
+    """How many tracks :func:`_tracks` gives ``column``: the distinct outputs outside it that feed
+    a spine node of it."""
+    inside = _members(column)
+    spine = {key for box in column for key in box.spine}
+    return len({sources[link] for link, origin, target in graph.edges if target in spine and origin not in inside})
+
+
 def finish(canvas: Canvas, graph: Graph, result: LayoutResult, stacked: Stacked, drawn: Mapping[str, Drawn]) -> LayoutResult:
-    """``result`` with the Z waypoints of the links between spine nodes next to each other and
-    the links between columns as ``forced``, read from the canvas as ``_write`` left it."""
+    """``result`` with the Z waypoints of the links between spine nodes next to each other, the
+    links between columns as ``forced`` and the tracks, read from the canvas as ``_write`` left
+    it. A Z from one box to the next crosses under the lower box's title band, between it and
+    the first spine node there."""
     nodes = canvas.node_map()
     curves = canvas_splines(canvas, dict(graph.facts), Renderer.CLASSIC)
     env = {key: envelope(node, graph.facts[key]) for key, node in nodes.items()}
@@ -542,8 +585,9 @@ def finish(canvas: Canvas, graph: Graph, result: LayoutResult, stacked: Stacked,
                 continue
             widths = stacked.widths[c]
             left, right = ux + widths.spine_x, ux + widths.spine_x + widths.spine
+            under_title = (ly + TITLE_BAND + env[lower.spine[0]].y) / 2
             for link in links.get((upper.spine[-1], lower.spine[0]), ()):
-                z(link, right, left, (uy + upper.height + ly) / 2)
+                z(link, right, left, under_title)
     forced = tuple(
         sorted(
             link
@@ -557,9 +601,9 @@ def finish(canvas: Canvas, graph: Graph, result: LayoutResult, stacked: Stacked,
 
 def _tracks(canvas: Canvas, graph: Graph, stacked: Stacked, column_of: Mapping[str, int], curves: Mapping) -> dict[int, float]:
     """Each link from outside a column into a spine node of it, to the upright track it comes
-    down in the column's corridor: one track per output, ``TRACK`` apart from ``LEG`` left of
-    the spine leftwards, the output whose first input stands highest nearest the spine, so the
-    routes into a column nest without crossing each other's turns."""
+    down: one track per output, ``TRACK`` apart leftwards from :attr:`Widths.track_base`, the
+    output whose first input stands highest nearest the spine, so the routes into a column nest
+    without crossing each other's turns."""
     output = {link.id: (str(link.origin_id), link.origin_slot) for link in canvas.links}
     tracks: dict[int, float] = {}
     for c, column in enumerate(stacked.columns):
@@ -571,10 +615,10 @@ def _tracks(canvas: Canvas, graph: Graph, stacked: Stacked, column_of: Mapping[s
             if target in spine and column_of.get(origin) != c and link in curves:
                 entering.setdefault(output[link], []).append(link)
         order = sorted(entering, key=lambda out: (min(curves[link].p3[1] for link in entering[out]), _id_key(out[0]), out[1]))
-        spine_x = column[0][1] + stacked.widths[c].spine_x
+        base = column[0][1] + stacked.widths[c].track_base
         for k, out in enumerate(order):
             for link in entering[out]:
-                tracks[link] = _grid(spine_x - LEG - TRACK * (k + 1))
+                tracks[link] = _grid(base - TRACK * (k + 1))
     return tracks
 
 

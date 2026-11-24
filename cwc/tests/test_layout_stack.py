@@ -146,7 +146,7 @@ class TwoPass(unittest.TestCase):
         labels = sorted(self.out.layout.labels.values())
         self.assertEqual(labels, ["01", "02a", "02b", "03", "04", "05", "06", "07"])
 
-    def test_corridor_holds_one_track_per_output_feeding_in(self):
+    def test_gap_left_of_a_column_holds_one_track_per_output_coming_in(self):
         feeding: dict[int, set[tuple[str, int]]] = {}
         for link in self.links.values():
             o, t = self.column[str(link.origin_id)], self.column[str(link.target_id)]
@@ -155,9 +155,30 @@ class TwoPass(unittest.TestCase):
         # the base and upscale passes take the prompts, the latent, the model and the VAE; the
         # A/B module those and the two decoded images it compares
         self.assertEqual({c: len(s) for c, s in feeding.items()}, {1: 5, 2: 7})
-        for column, spine in ((1, "base_sampler"), (2, "ab_base_sampler")):
-            want = min(stack.CORRIDOR_MAX, max(stack.CORRIDOR_MIN, stack.CORRIDOR_BASE + TRACK * len(feeding[column])))
-            self.assertEqual(self.env[spine].x - self.frame[spine].x, want)
+        tracks = self.out.layout.tracks
+        lefts = sorted({frame.x for frame in self.frames})
+        # every output feeding a spine node comes down a track; the A/B module's second decoded
+        # image feeds only its comparer, in the right lane
+        for column, count in ((1, 5), (2, 6)):
+            with self.subTest(column=column):
+                outputs: dict[tuple[str, int], set[float]] = {}
+                for link in self.links.values():
+                    if link.id in tracks and self.column[str(link.target_id)] == column:
+                        self.assertNotEqual(self.column[str(link.origin_id)], column)
+                        outputs.setdefault((str(link.origin_id), link.origin_slot), set()).add(tracks[link.id])
+                # one track per output, its links branching off it, no two outputs on one track
+                self.assertEqual(len(outputs), count)
+                self.assertTrue(all(len(xs) == 1 for xs in outputs.values()), outputs)
+                xs = sorted(x for found in outputs.values() for x in found)
+                self.assertEqual(len(set(xs)), count)
+                # TRACK apart in the gap left of the column, COLUMN_GAP clear of the column before
+                # it, so none runs through a frame's top-left corner, where the title is
+                left = lefts[column]
+                self.assertEqual(xs, [left - TRACK * k for k in range(count, 0, -1)])
+                self.assertEqual(xs[0] - max(f.right for f in self.frames if f.right < left), stack.COLUMN_GAP)
+        # with no left lane, nothing comes down in front of a spine but a Z's left leg
+        for spine in ("base_sampler", "ab_base_sampler"):
+            self.assertEqual(self.env[spine].x - self.frame[spine].x, stack.CORRIDOR_MIN)
 
     def test_forced_are_the_links_between_columns(self):
         between = {
