@@ -17,11 +17,9 @@ node) holding ``rect.classic``, ``rect.vue``, ``text.title``, ``circle.slot`` an
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 from typing import Any
-from xml.sax.saxutils import escape
 
 from cwc.canvas.envelope import BoxFacts, Point, Renderer, box_facts, classic_box, slot_anchors, title_text, vue_box
 from cwc.canvas.geometry import TITLE_HEIGHT, Rect, bounding
@@ -29,6 +27,10 @@ from cwc.canvas.links import Spline
 from cwc.canvas.model import Canvas, Node, NodeMode, id_order
 from cwc.canvas.reroutes import LinkPath, Reroutes, SegmentKey, link_paths
 from cwc.prompt.slots import DefLookup
+from cwc.render.markup import attr as _attr
+from cwc.render.markup import num as _n
+from cwc.render.markup import pair as _p
+from cwc.render.markup import text as _text
 
 FIRST_SCREEN = Rect(0, 0, 1600, 900)
 MARGIN = 40
@@ -51,10 +53,6 @@ DASH = "6 4"
 FONT = "sans-serif"
 
 _COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20})$")
-# What XML 1.0 refuses in text: C0 controls other than tab, newline and carriage return, lone
-# surrogates and the two non-characters at the end of the basic plane.
-_NOT_XML = re.compile("[^\u0009\u000a\u000d -퟿-�\U00010000-\U0010ffff]")
-_ENTITIES = {'"': "&quot;", "'": "&apos;"}
 
 
 @dataclass(frozen=True)
@@ -79,7 +77,7 @@ def render(canvas: Canvas, defs: DefLookup) -> Rendering:
     nodes = sorted(canvas.nodes, key=lambda node: id_order(node.key))
     facts = {node.key: box_facts(node, defs.get(node.type)) for node in nodes}
     reroutes = Reroutes.read(canvas)
-    shapes = _link_shapes(link_paths(canvas, facts, Renderer.CLASSIC))
+    shapes = link_shapes(link_paths(canvas, facts, Renderer.CLASSIC))
 
     extent: list[Rect] = [FIRST_SCREEN]
     groups = canvas.groups
@@ -132,7 +130,7 @@ def render(canvas: Canvas, defs: DefLookup) -> Rendering:
 # --- links ----------------------------------------------------------------------------
 
 
-def _link_shapes(paths: dict[int, LinkPath]) -> list[tuple[int, list[Spline], bool]]:
+def link_shapes(paths: dict[int, LinkPath]) -> list[tuple[int, list[Spline], bool]]:
     """Each drawable link as ``(id, segments, rerouted)``: the segments it draws itself, in order. A
     reroute's segment belongs to the first link that reaches it, as in the frontend; a link id listed
     twice is one link."""
@@ -207,35 +205,9 @@ def _rect(cls: str, rect: Rect, style: str) -> str:
     return f'<rect class="{cls}" x="{_n(rect.x)}" y="{_n(rect.y)}" width="{_n(rect.w)}" height="{_n(rect.h)}" {style}/>'
 
 
-# --- numbers and text -----------------------------------------------------------------
+# --- numbers ---------------------------------------------------------------------------
 
 
 def _points_rect(points: list[Point]) -> Rect:
     xs, ys = [p[0] for p in points], [p[1] for p in points]
     return Rect(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
-
-
-def _n(value: float) -> str:
-    """A number with at most two decimals and no trailing zeros, ``-0`` written ``0``."""
-    if not math.isfinite(value):
-        raise ValueError(f"cannot draw a non-finite coordinate: {value}")
-    text = f"{value:.2f}".rstrip("0").rstrip(".")
-    return "0" if text in ("-0", "") else text
-
-
-def _p(point: Point) -> str:
-    return f"{_n(point[0])} {_n(point[1])}"
-
-
-def _clean(text: str) -> str:
-    return _NOT_XML.sub("", text)
-
-
-def _text(text: str) -> str:
-    """Element text: characters XML cannot hold dropped, ``& < > " '`` escaped."""
-    return escape(_clean(text), _ENTITIES)
-
-
-def _attr(text: str) -> str:
-    """Attribute value: as :func:`_text`, with white space written as spaces."""
-    return _text(re.sub(r"\s", " ", text))

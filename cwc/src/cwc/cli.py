@@ -21,7 +21,9 @@ from cwc.nodedefs.registry import NodeDefs, read_source
 from cwc.nodedefs.types import NodeDef
 from cwc.layout.presets import load_presets
 from cwc.pipeline import AUTO, Compiled, compile_document, preset_guide
+from cwc.render.command import SKINS
 from cwc.render.command import command as render_command
+from cwc.render.skin import Theme
 from cwc.report import Code, CwcError, ExitCode, Mode, Report, Severity, sort_findings
 from cwc.resources import read_bytes
 
@@ -85,6 +87,8 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument("graph", metavar="GRAPH.ui.json", help="canvas workflow (UI JSON, or a PNG carrying one)")
     render.add_argument("-o", "--output", required=True, metavar="OUT.svg", help="SVG file to write")
     render.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    render.add_argument("--skin", choices=SKINS, default=SKINS[0], help="debug: boxes, slots and splines as the frontend draws them; diagram: a figure with the notes in extra.cwc")
+    render.add_argument("--theme", choices=[theme.value for theme in Theme], help="colours of the diagram skin (default light)")
     render.add_argument("--json", action="store_true", help="print the summary as JSON")
     render.set_defaults(run=render_command)
     return parser

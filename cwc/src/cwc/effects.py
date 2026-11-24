@@ -6,15 +6,16 @@ the part of it that another key of the same node explains into warnings.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from cwc.annotate.infer import author_group
 from cwc.annotate.types import AUTHOR_GROUP_PREFIX, Annotations, Zone
 from cwc.canvas.model import Canvas, id_order
 from cwc.normalize.types import Authoring, NodeIntent, Role
+from cwc.render.notes import read_notes
 from cwc.report import Code, Finding, Severity
 
-EFFECT_KEYS = ("title", "ui_group", "ui_role", "ui_optional", "ui_seed", "ui_order")
+EFFECT_KEYS = ("title", "ui_group", "ui_role", "ui_optional", "ui_seed", "ui_order", "ui_note")
 
 
 def _group_applies(intent: NodeIntent, canvas_id: str, plan: Annotations, intents: dict[str, NodeIntent]) -> bool:
@@ -31,15 +32,21 @@ def _group_applies(intent: NodeIntent, canvas_id: str, plan: Annotations, intent
 
 
 def _took_effect(
-    key: str, intent: NodeIntent, canvas_id: str, plan: Annotations, titles: dict[str, str | None], intents: dict[str, NodeIntent]
+    key: str,
+    intent: NodeIntent,
+    canvas_id: str,
+    plan: Annotations,
+    titles: dict[str, str | None],
+    intents: dict[str, NodeIntent],
+    notes: Mapping[str, str],
 ) -> bool | None:
     """Whether the ``_meta`` key ``key`` changed the canvas for this node; None when not set.
 
     Each answer reads the compiled result, not the intent: ``title`` the node's title,
     ``ui_group`` the group the node ended up in (or the optional module the id names),
     ``ui_role`` the node's role in the plan, ``ui_optional`` the bypass, ``ui_order`` membership
-    of the Controls group (the only place it sorts by). ``ui_seed`` is written into the widget
-    whenever normalize accepted it.
+    of the Controls group (the only place it sorts by), ``ui_note`` the canvas's ``extra.cwc``
+    notes. ``ui_seed`` is written into the widget whenever normalize accepted it.
     """
     note = plan.nodes[canvas_id]
     if key == "title":
@@ -58,6 +65,8 @@ def _took_effect(
         return None if intent.ui_order is None else note.cockpit is not None
     if key == "ui_seed":
         return None if intent.ui_seed is None else True
+    if key == "ui_note":
+        return None if intent.ui_note is None else notes.get(canvas_id) == intent.ui_note
     raise ValueError(key)
 
 
@@ -67,12 +76,13 @@ def authoring_effects(authoring: Authoring, plan: Annotations, canvas: Canvas) -
     (``no_effect_on``). The keys without any effect yet are E8's, not listed here."""
     author = {prompt_id: author_id for author_id, prompt_id in authoring.ids.items()}
     titles = {key: node.title for key, node in canvas.node_map().items()}
+    notes = read_notes(canvas).notes
     out: list[dict[str, Any]] = []
     for key in EFFECT_KEYS:
         changed: list[str] = []
         missed: list[str] = []
         for prompt_id, intent in authoring.intents.items():
-            effect = _took_effect(key, intent, prompt_id, plan, titles, authoring.intents)
+            effect = _took_effect(key, intent, prompt_id, plan, titles, authoring.intents, notes)
             if effect is not None:
                 (changed if effect else missed).append(author[prompt_id])
         if changed or missed:

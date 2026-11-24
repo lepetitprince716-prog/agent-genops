@@ -23,6 +23,7 @@ from cwc.layout.types import LayoutResult
 from cwc.nodedefs.registry import NodeDefs
 from cwc.normalize import normalize
 from cwc.normalize.types import Authoring
+from cwc.render.notes import collect_notes, write_notes
 from cwc.report import Code, CwcError, ExitCode, Finding, Mode, Report, Severity
 from cwc.route import RouteResult, route
 from cwc.verify import verify_compile
@@ -144,6 +145,7 @@ def compile_document(
             )
         raise CwcError(ExitCode.INPUT_ERROR, [_preset_error(message)]) from None
     routes = route(canvas, laid, defs)
+    write_notes(canvas, collect_notes(authoring, plan, laid, canvas))
     report = verify_compile(canvas, authoring, defs)
     geometry = check_geometry(
         canvas, defs, mode=Mode.COMPILE, membership=laid.membership, preset=chosen, cockpit=laid.cockpit

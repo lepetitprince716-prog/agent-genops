@@ -10,17 +10,25 @@ from cwc import TOOL_NAME
 from cwc.emit.canonical import json_bytes, write_atomic
 from cwc.ingest import load_canvas, read_file
 from cwc.nodedefs.registry import NodeDefs, read_source
+from cwc.render.skin import Theme, render_diagram
 from cwc.render.svg import render
 from cwc.report import CwcError, ExitCode
 
+SKINS = ("debug", "diagram")
+
 
 def command(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
+    if args.skin == "debug" and args.theme is not None:
+        return _fail(args, out, err, ExitCode.USAGE, "--theme applies to --skin diagram only")
     try:
         canvas = load_canvas(read_file(args.graph, "canvas file"))
         defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
     except CwcError as exc:
         return _fail(args, out, err, exc.exit_code, "; ".join(finding.message for finding in exc.findings))
-    rendering = render(canvas, defs)
+    if args.skin == "diagram":
+        rendering = render_diagram(canvas, defs, Theme(args.theme or Theme.LIGHT.value))
+    else:
+        rendering = render(canvas, defs)
     target = Path(args.output)
     try:
         write_atomic(target, rendering.svg.encode("utf-8"))

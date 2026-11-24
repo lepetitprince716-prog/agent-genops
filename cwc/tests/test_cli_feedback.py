@@ -170,14 +170,10 @@ class NoEffectKeyTest(Folder):
     # PLAIN, not the fixture graph: the fixture sets some of these keys itself
 
     def test_each_key_is_named_in_the_one_info_and_the_run_stays_ok(self):
-        doc = with_meta(PLAIN, "decode", ui_group="finish")
         cases = {
             ("_meta.ui_locked", "sampler"): with_meta(PLAIN, "sampler", ui_locked=["cfg"]),
             ("_meta.ui_expose", "pos"): with_meta(PLAIN, "pos", ui_expose=["text"]),
-            ("_meta.ui_note", "sampler"): with_meta(PLAIN, "sampler", ui_note="hello"),
-            ("_workflow.title", None): {**PLAIN, "_workflow": {"format": 1, "title": "My graph"}},
             ("_workflow.locale", None): {**PLAIN, "_workflow": {"format": 1, "locale": "de"}},
-            ("_workflow.groups.finish.note", None): {**doc, "_workflow": {"format": 1, "groups": {"finish": {"note": "n"}}}},
         }
         for (key, node), graph in cases.items():
             with self.subTest(key=key):
@@ -205,16 +201,17 @@ class NoEffectKeyTest(Folder):
         self.assertTrue(info["message"].endswith("`cwc guide` says what each key does"), info["message"])
         self.assertEqual(
             sorted((entry["key"], tuple(entry.get("nodes", ()))) for entry in info["data"]["keys"]),
-            [("_meta.ui_expose", ("pos", "neg")), ("_meta.ui_locked", ("sampler",)), ("_meta.ui_note", ("sampler",)), ("_workflow.title", ())],
+            [("_meta.ui_expose", ("pos", "neg")), ("_meta.ui_locked", ("sampler",))],
         )
-        for text in ("_meta.ui_expose (nodes 'pos', 'neg')", "_meta.ui_note (node 'sampler')", "_workflow.title"):
-            self.assertIn(text, info["message"])
+        self.assertIn("_meta.ui_expose (nodes 'pos', 'neg')", info["message"])
+        for text in ("ui_note", "_workflow.title"):  # written into extra.cwc for the diagram skin
+            self.assertNotIn(text, info["message"])
         self.assertEqual(sorted(info["nodes"]), ["neg", "pos", "sampler"])
         self.assertEqual(report["findings"][-1]["title"], "authoring key is accepted but has no effect yet")
         self.assertNotIn("E7", [f["code"] for f in report["findings"]])
 
     def test_json_lists_the_info_and_keeps_ok(self):
-        code, out, _, _, _ = self.compile(with_meta(PLAIN, "sampler", ui_note="hello"), "--json")
+        code, out, _, _, _ = self.compile(with_meta(PLAIN, "sampler", ui_locked=True), "--json")
         summary = json.loads(out)
         self.assertEqual((code, summary["ok"], summary["exit_code"]), (ExitCode.OK, True, 0))
         self.assertEqual(summary["findings"]["info"], 1)
