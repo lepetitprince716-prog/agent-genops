@@ -1,14 +1,22 @@
 """Routing keeps its runs off the rectangles layout declares (``LayoutResult.keepout``).
 
 1. a link whose plain spline crosses a keepout rectangle and has a way around it is routed
-   around it, and is drawn clear of it under both renderers;
+   around it, and is drawn clear of it under both renderers; a keepout blocks the grid as a node
+   box there does, so the route around it is the route around such a box;
 2. a link that has to be routed (it crosses a box) and whose only way is through a keepout
-   rectangle takes the route it takes with no keepout declared, clear of every box at the
-   default and at an unlimited reroute spline cap, and is not left unresolved;
-3. a link routed only for a keepout rectangle that has no way around it keeps its plain spline,
-   or the dummy chain layout gave it, and is not counted unresolved.
+   rectangle is routed through a grid without the keepout, clear of every box at the default and
+   at an unlimited reroute spline cap, and is not left unresolved. With no other output in its
+   way that is the route it takes with no keepout declared. The grids with and without the
+   keepout share one track table, so such a route does not run on a grid line another output
+   took to go around a keepout, and its channels are named in the grid it was routed in;
+3. a link routed only for a keepout rectangle that has no way around it, or whose every way
+   still meets it as drawn, keeps its plain spline, or the dummy chain layout gave it, and is not
+   counted unresolved. That holds for a dummy chain clear of every box even when the link's plain
+   spline crosses one, and for a link that leaves its output along another link's route through
+   the keepout;
+4. a dummy chain that crosses a box is routed, and is left unresolved when no route clears it.
 
-Each canvas is three nodes and one link, so the routes are easy to read when a case fails.
+Each canvas is three to five nodes, so the routes are easy to read when a case fails.
 """
 
 import math
@@ -21,7 +29,8 @@ from tests.test_route_anchor_cells import _canvas, _node
 from cwc.canvas.envelope import Renderer, box_facts, classic_box, vue_box
 from cwc.canvas.geometry import Rect
 from cwc.canvas.links import SEGMENTS, crosses
-from cwc.canvas.reroutes import link_paths
+from cwc.canvas.model import Canvas
+from cwc.canvas.reroutes import Reroutes, link_paths
 from cwc.layout.types import LayoutResult
 from cwc.route import route
 
@@ -31,11 +40,82 @@ def _route(canvas, keepout=(), waypoints=None):
     return route(canvas, result, DEFS)
 
 
-def _drawn(canvas, cap=20.0):
-    """Each renderer to link 1 as drawn through its reroutes at ``cap``."""
+def _drawn(canvas, cap=20.0, link=1):
+    """Each renderer to ``link`` as drawn through its reroutes at ``cap``."""
     nodes = canvas.node_map()
     facts = {key: box_facts(node, DEFS.get(node.type)) for key, node in nodes.items()}
-    return {renderer: link_paths(canvas, facts, renderer, cap)[1].points(SEGMENTS) for renderer in Renderer}
+    return {renderer: link_paths(canvas, facts, renderer, cap)[link].points(SEGMENTS) for renderer in Renderer}
+
+
+def _chain(canvas, link=1):
+    """The reroutes ``link`` passes through, output side first."""
+    table = Reroutes.read(canvas)
+    return [tuple(table.points[r]) for r in table.chain(link)]
+
+
+def _common_runs(a, b):
+    """The stretches of grid line two reroute chains both run along: a horizontal or vertical
+    segment of one overlapping one of the other by more than a point."""
+    found = []
+    for p, q in zip(a, a[1:]):
+        for r, t in zip(b, b[1:]):
+            for axis in (0, 1):
+                along, across = 1 - axis, axis
+                if p[across] == q[across] == r[across] == t[across]:
+                    lo = max(min(p[along], q[along]), min(r[along], t[along]))
+                    hi = min(max(p[along], q[along]), max(r[along], t[along]))
+                    if hi > lo:
+                        found.append(((p, q), (r, t)))
+    return found
+
+
+def _two_outputs(ay):
+    """Output B (node 2, link 1) has to be routed around an obstacle; output A (node 1, link 2)
+    runs a straight line above it at ``ay``, from left of B's source to right of B's target."""
+    a_src = _node(1, "SourceA", (-200, ay), (300, 60))
+    b_src = _node(2, "SourceB", (0, 100), (300, 60))
+    b_dst = _node(3, "TargetB", (1200, 100), (300, 60))
+    obstacle = _node(4, "Obstacle", (520, 40), (300, 180))
+    a_dst = _node(5, "TargetA", (1600, ay), (300, 60))
+    a_src["outputs"] = [{"name": "o", "type": "X", "links": [2]}]
+    b_src["outputs"] = [{"name": "o", "type": "X", "links": [1]}]
+    b_dst["inputs"] = [{"name": "i", "type": "X", "link": 1}]
+    a_dst["inputs"] = [{"name": "i", "type": "X", "link": 2}]
+    return Canvas(
+        {
+            "last_node_id": 5,
+            "last_link_id": 2,
+            "nodes": [a_src, b_src, b_dst, obstacle, a_dst],
+            "links": [[1, 2, 0, 3, 0, "X"], [2, 1, 0, 5, 0, "X"]],
+            "groups": [],
+            "config": {},
+            "extra": {},
+            "version": 0.4,
+        }
+    )
+
+
+def _one_output_two_inputs():
+    """One output feeding a target behind an obstacle (link 1) and a target far below (link 2)."""
+    source = _node(1, "Source", (0, 100), (300, 60))
+    obstacle = _node(2, "Obstacle", (520, 90), (300, 80))
+    near = _node(3, "Target1", (1200, 100), (300, 60))
+    below = _node(4, "Target2", (1200, 700), (300, 60))
+    source["outputs"] = [{"name": "o", "type": "X", "links": [1, 2]}]
+    near["inputs"] = [{"name": "i", "type": "X", "link": 1}]
+    below["inputs"] = [{"name": "i", "type": "X", "link": 2}]
+    return Canvas(
+        {
+            "last_node_id": 4,
+            "last_link_id": 2,
+            "nodes": [source, obstacle, near, below],
+            "links": [[1, 1, 0, 3, 0, "X"], [2, 1, 0, 4, 0, "X"]],
+            "groups": [],
+            "config": {},
+            "extra": {},
+            "version": 0.4,
+        }
+    )
 
 
 def _boxes_crossed(canvas):
@@ -109,6 +189,54 @@ class KeepoutTest(unittest.TestCase):
         result = _route(canvas, [BEFORE_TARGET], {1: chain})
         self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((1,), 1, ()))
         self.assertEqual([tuple(r["pos"]) for r in canvas.raw["extra"]["reroutes"]], [(600, 120), (900, 120)])
+
+    def test_a_dummy_chain_clear_of_the_boxes_is_kept_when_the_plain_spline_crosses_one(self):
+        chain = ((400.0, 300.0), (900.0, 300.0))  # under the obstacle
+        plain = blocked_line()
+        self.assertEqual(_route(plain, (), {1: chain}).dummy, 1)
+        canvas = blocked_line()
+        result = _route(canvas, [BEFORE_TARGET], {1: chain})
+        self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((1,), 1, ()))
+        self.assertEqual(canvas.raw["extra"], plain.raw["extra"])
+
+    def test_a_link_that_leaves_along_a_route_through_the_keepout_keeps_its_spline(self):
+        start = Rect(305, 60, 60, 140)  # over every grid point right of the output
+        plain = _one_output_two_inputs()
+        self.assertEqual(_route(plain).rerouted, (1,))
+        self.assertTrue(all(crosses(path, start) for path in _drawn(plain, link=2).values()))
+        canvas = _one_output_two_inputs()
+        result = _route(canvas, [start])
+        self.assertEqual((result.rerouted, result.unresolved), ((1,), ()))
+        self.assertEqual(_chain(canvas, 2), [])
+
+    def test_a_fallback_route_keeps_off_a_track_taken_for_a_keepout(self):
+        across_a = Rect(700, -30, 80, 80)  # across output A's straight line
+        far = Rect(5000, 5000, 40, 20)  # widens the grids' bounds, so their edge codes change
+        for keepout in ([BEFORE_TARGET, across_a], [BEFORE_TARGET, across_a, far]):
+            with self.subTest(keepout=len(keepout)):
+                plain = _two_outputs(-20)
+                self.assertEqual(_route(plain).rerouted, (1,))
+                canvas = _two_outputs(-20)
+                result = _route(canvas, keepout)
+                self.assertEqual((result.rerouted, result.unresolved), ((1, 2), ()))
+                a, b = _chain(canvas, 2), _chain(canvas, 1)
+                # B with no keepout declared would run along A's route around its keepout
+                self.assertNotEqual(_common_runs(_chain(plain, 1), a), [])
+                self.assertEqual(_common_runs(b, a), [])
+                for renderer, path in _drawn(canvas, link=2).items():
+                    self.assertFalse(crosses(path, across_a), renderer.value)
+
+    def test_a_fallback_route_is_named_in_the_grid_without_the_keepout(self):
+        # inside the boxes' bounds: a keepout reaching past them widens the bounds both grids
+        # share, and with them the strips along the bounds
+        goal = Rect(1060, 60, 120, 140)  # over every grid point a route could enter the target from
+        plain = blocked_line()
+        before = _route(plain)
+        self.assertTrue(all(crosses(path, goal) for path in _drawn(plain).values()))
+        canvas = blocked_line()
+        result = _route(canvas, [goal])
+        self.assertEqual(canvas.raw["extra"], plain.raw["extra"])
+        self.assertEqual(result.channels, before.channels)
 
 
 if __name__ == "__main__":

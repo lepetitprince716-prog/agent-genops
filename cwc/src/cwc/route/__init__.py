@@ -37,14 +37,20 @@ group titles' text). Routing then treats each as it treats a box, with three dif
 
 - a plain spline or a dummy chain that crosses one, drawn at the default cap, is routed through
   a grid in which the keepout blocks like a box, and keeps its spline or its chain when no route
-  clears it there: the keepout never costs a link the shape it would have had without it;
+  clears it there: the keepout never costs a link the shape it would have had without it. A
+  dummy chain clear of every box is such a chain even when the link's plain spline crosses a box;
 - a link routed for a box that finds no route clear of the keepout is routed again through a
-  grid without it, which is the route it would have had with no keepout declared;
-- the keepout is held to the default cap only (:func:`_crossing`), and a link that still meets
-  it is not unresolved.
+  grid without it;
+- the keepout is held to the default cap only (:func:`_crossing`), along the whole link, the
+  stretch a branch shares with its trunk included; a link that still meets it is not unresolved.
 
 The grids with and without the keepout share their bounds and their track table, so a track one
-output takes in either is taken in both.
+output takes in either is taken in both. A link routed again without the keepout takes the route
+that grid finds around the tracks taken so far. That is the route it would have had with no
+keepout declared unless an output routed earlier went around a keepout on a track that route
+needs; it then takes a track beside it, since two outputs on one grid line read as one wire,
+which is worse than a line across a title. Its runs are named and counted in the grid without the
+keepout. A keepout reaching past the boxes widens the bounds, and so the strips along them.
 
 Links of one output share reroutes as a bus tree: two links share a reroute while their points up
 to it and the direction to their next point are the same, so sharing never changes how either
@@ -99,9 +105,9 @@ class Channel:
 @dataclass(frozen=True)
 class RouteResult:
     """``rerouted``: the links written with reroutes, by id. ``dummy``: how many of them took
-    their dummy chain. ``unresolved``: links whose plain spline crosses a box and that no route
-    cleared; they keep the plain spline. ``channels``: by id. ``shared_edges``: grid edges two
-    outputs run along, for want of a free track."""
+    their dummy chain. ``unresolved``: links whose plain spline, or whose dummy chain, crosses a
+    box and that no route cleared; they keep the plain spline. ``channels``: by id.
+    ``shared_edges``: grid edges two outputs run along, for want of a free track."""
 
     rerouted: tuple[int, ...]
     dummy: int
@@ -148,11 +154,13 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
                 continue
             if walls and not _crossing(link, snapped, ends[link.id], boxes):
                 kept[link.id] = snapped
+                needed.discard(link.id)  # the chain clears every box: it is routed only for the keepout
             else:
                 needed.add(link.id)
             plain.add(link.id)
     unresolved: list[int] = []
-    runs: dict[tuple[object, Cell, Cell], None] = {}  # a run once, however many links of its output take it
+    # a run once, however many links of its output take it, with the grid its channel is named in
+    runs: dict[tuple[object, Cell, Cell], Grid] = {}
     owners = sorted(((key, envelope(node, facts[key])) for key, node in nodes.items()), key=lambda kv: id_order(kv[0]))
     frames = [group.bounding for group in canvas.groups] if result.fence_frames else []
     grids = [Grid.build(owners + keepout, CLEARANCES[0], frames=frames)]
@@ -211,7 +219,9 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
                 continue
             grid.claim(new, net)
             chains[link.id] = points
-            runs.update(dict.fromkeys((net, a, b) for a, b in _runs(path, corners)))
+            namer = grids[0] if g < len(CLEARANCES) else grids[len(CLEARANCES)]
+            for a, b in _runs(path, corners):
+                runs.setdefault((net, a, b), namer)
             for k in range(fresh, len(path)):
                 step = (path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1])
                 tree.setdefault((path[k], STEPS.index(step)), (path, k, points, corners))
@@ -228,7 +238,7 @@ def route(canvas: Canvas, result: LayoutResult, defs: DefLookup) -> RouteResult:
         rerouted=tuple(sorted(chains)),
         dummy=dummy,
         unresolved=tuple(sorted(unresolved)),
-        channels=_channels(runs, grids[0], result),
+        channels=_channels(runs, result),
         shared_edges=grids[0].shared_edges(),
     )
 
@@ -315,7 +325,8 @@ def _crossing(
     """Whether ``link`` drawn through reroutes at ``points`` crosses a node box that is not one of
     its ends, under either renderer, at the default and at an unlimited reroute spline cap, or a
     rectangle of ``walls`` (the keepout) under either renderer at the default cap. The first
-    ``skip`` segments are known to be clear.
+    ``skip`` segments are known to be clear of the boxes; they are still checked against the
+    keepout, since a branch may share them with a trunk routed through a grid without it.
 
     The keepout is held to the default cap only: a curve the frontend draws at its default
     setting stays off it, while a Z or a route whose turns bulge into it at an unlimited cap is
@@ -329,16 +340,21 @@ def _crossing(
     for renderer in Renderer:
         p0, p3 = ends[renderer]
         way = [p0, *chain, p3]
-        first = max(skip, 1)
+        begin = 0 if walls is not None else skip
+        first = max(begin, 1)
         directions = own_directions(way, first)
         index = boxes[renderer]
         last = len(way) - 2
-        for i in range(skip, last + 1):
+        for i in range(begin, last + 1):
             a, b = way[i], way[i + 1]
             leaving = directions[i - first] if i else None
             entering = None if i == last else directions[i + 1 - first]
             c1, c2 = segment_controls(a, b, leaving, entering, REROUTE_CAP)
-            if index.hit(a, c1, c2, b, own) or (walls is not None and walls.hit(a, c1, c2, b, own)):
+            if walls is not None and walls.hit(a, c1, c2, b, own):
+                return True
+            if i < skip:
+                continue
+            if index.hit(a, c1, c2, b, own):
                 return True
             if chain:
                 d1, d2 = segment_controls(a, b, leaving, entering, math.inf)
@@ -467,12 +483,13 @@ def _runs(path: list[Cell], corners: list[int]) -> list[tuple[Cell, Cell]]:
     return [(path[a], path[b]) for a, b in zip(verts, verts[1:]) if b > a]
 
 
-def _channels(runs: Iterable[tuple[object, Cell, Cell]], grid: Grid, result: LayoutResult) -> tuple[Channel, ...]:
-    """The channels the runs lie in. A channel needs as many tracks as the most outputs whose
-    runs overlap at one place along it."""
+def _channels(runs: dict[tuple[object, Cell, Cell], Grid], result: LayoutResult) -> tuple[Channel, ...]:
+    """The channels the runs lie in, each run named and counted in the grid given for it: the
+    first-clearance grid of the kind that routed it, with or without the keepout. A channel needs
+    as many tracks as the most outputs whose runs overlap at one place along it."""
     spans: dict[str, list[tuple[int, int, object]]] = {}
     free: dict[str, int] = {}
-    for net, a, b in runs:
+    for (net, a, b), grid in runs.items():
         horizontal = a[1] == b[1]
         mid = ((a[0] + b[0]) // 2, (a[1] + b[1]) // 2)
         x, y = mid[0] * GRID, mid[1] * GRID
