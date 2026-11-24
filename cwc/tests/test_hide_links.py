@@ -8,11 +8,12 @@
    compiled with hiding off, byte for byte, reroutes included;
 3. the key has the frontend's shape: link ids as decimal strings in ascending order, each to
    ``{"hidden": true}`` or ``{"hidden": true, "label": <text>}``;
-4. labels: a type whose hidden links leave two or more outputs labels each of its links with the
-   source node's header as the frontend writes it: its title, else the definition's display name
-   (which may be the class name itself), else the class name; a node feeding two or more outputs
-   of the type adds the output's name; a type with one output writes no label, so the frontend
-   stacks its links into one badge;
+4. labels: a type whose hidden links leave two or more outputs names each output by its node's
+   header as the frontend writes it: its title, else the definition's display name (which may be
+   the class name itself), else the class name; a node feeding two or more outputs of the type
+   adds the output's name; a link carries its output's name as its label only when no other output
+   of the type has the same name; a type with one output writes no label, so the frontend stacks
+   its links into one badge;
 5. the ``x`` presets write no ``extra.linkPresentation``, also when hiding is asked for;
 6. the preset decides the default (``stack``: resources, the rest: none) and ``compile_document``
    and ``cwc compile --hide-links`` override it.
@@ -40,7 +41,7 @@ from cwc.report import ExitCode
 from cwc.resources import read_json
 from cwc.route.presentation import KEY, mark_hidden
 
-RESOURCES = {"MODEL", "CLIP", "VAE", "CONDITIONING"}  # what the packet of this feature names
+RESOURCES = {"MODEL", "CLIP", "VAE", "CONDITIONING"}  # written out, not imported, so no expectation comes from the module under test
 X_PRESETS = ("bento", "swimlanes", "cockpit-split", "tower-preview", "stepped")
 STACK_FIXTURE = support.FIXTURES / "layout" / "stack_two_pass.json"
 STACK_OBJECT_INFO = support.FIXTURES / "layout" / "stack_two_pass.object_info.json"
@@ -131,6 +132,18 @@ class StackHidesResourceLinksBetweenColumns(unittest.TestCase):
         self.assertEqual(labels["CONDITIONING"], {"Positive prompt", "Negative prompt"})
         self.assertTrue(all(nodes[str(links[int(k)].origin_id)].title is None for k, v in out.canvas.extra[KEY].items() if links[int(k)].type == "CLIP"))
 
+    def test_no_label_names_two_sources(self):
+        # seed_11, controlnet and lora_chain_ROROR each have two untitled prompts of one class
+        for name, out in self.compiled.items():
+            with self.subTest(case=name):
+                links = out.canvas.link_map()
+                sources_of = {}
+                for key, value in out.canvas.extra[KEY].items():
+                    if "label" in value:
+                        link = links[int(key)]
+                        sources_of.setdefault((link.type, value["label"]), set()).add((link.origin_id, link.origin_slot))
+                self.assertEqual({k: sorted(v) for k, v in sources_of.items() if len(v) > 1}, {})
+
 
 def _canvas(nodes, links):
     return Canvas(
@@ -196,6 +209,35 @@ class LabelRule(unittest.TestCase):
             canvas.extra[KEY],
             {"1": {"hidden": True, "label": "UnknownPackLoader: base"}, "2": {"hidden": True, "label": "UnknownPackLoader: tuned"}},
         )
+
+    def test_outputs_that_share_a_name_stay_unlabelled(self):
+        # two untitled prompts both read "CLIP Text Encode (Prompt)": a label would not tell them apart
+        a = (2, "CLIPTextEncode", None, [("CONDITIONING", "CONDITIONING")])
+        b = (3, "CLIPTextEncode", None, [("CONDITIONING", "CONDITIONING")])
+        c = (4, "CLIPTextEncode", "Style prompt", [("CONDITIONING", "CONDITIONING")])
+        canvas = _canvas(
+            [a, b, c, (5, "KSampler", None, []), (6, "KSampler", None, [])],
+            [(1, 2, 0, 5, 1, "CONDITIONING"), (2, 3, 0, 5, 2, "CONDITIONING"), (3, 4, 0, 6, 1, "CONDITIONING")],
+        )
+        mark_hidden(canvas, (1, 2, 3), HideLinks.RESOURCES, DEFS)
+        self.assertEqual(DEFS.get("CLIPTextEncode").display_name, "CLIP Text Encode (Prompt)")
+        self.assertEqual(canvas.extra[KEY], {"1": {"hidden": True}, "2": {"hidden": True}, "3": {"hidden": True, "label": "Style prompt"}})
+
+    def test_three_outputs_of_one_node_and_an_empty_display_name(self):
+        # a bundled definition with three CONDITIONING outputs and no display name: the class names
+        # the node, as in the frontend's header, and each output adds its own name
+        nodedef = DEFS.get("WanPhantomSubjectToVideo")
+        self.assertEqual(nodedef.display_name, "")
+        outs = [(o.name, o.type) for o in nodedef.outputs]
+        cond = [i for i, (_, t) in enumerate(outs) if t == "CONDITIONING"]
+        self.assertEqual(len(cond), 3)
+        canvas = _canvas(
+            [(1, "WanPhantomSubjectToVideo", None, outs), (2, "KSampler", None, []), (3, "KSampler", None, []), (4, "KSampler", None, [])],
+            [(10 + n, 1, slot, 2 + n, 1, "CONDITIONING") for n, slot in enumerate(cond)],
+        )
+        mark_hidden(canvas, (10, 11, 12), HideLinks.RESOURCES, DEFS)
+        labels = [value.get("label") for value in canvas.extra[KEY].values()]
+        self.assertEqual(labels, [f"WanPhantomSubjectToVideo: {outs[slot][0]}" for slot in cond])
 
     def test_a_display_name_that_is_the_class_name_is_still_the_header(self):
         # EasyCache's definition names it by its class, and so does the frontend's header; the

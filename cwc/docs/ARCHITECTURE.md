@@ -291,16 +291,18 @@ How compile and tidy place nodes and groups, and how the checks read the result.
   `--hide-links` / `compile_document(hide_links=)` override it. Under `resources` the links of
   `LayoutResult.forced` (only `stack` lists any) whose type is MODEL, CLIP, VAE or CONDITIONING are
   written `{"hidden": true}` in `extra.linkPresentation`, the frontend's own key: it draws a hidden
-  link as a tag at each end, stacks tags of one output, and leaves out a reroute that only hidden
-  links pass through. The link keeps its entry in `links`, its route and its reroutes, takes its
+  link as a tag at each end, stacks the unlabelled tags of one output (a labelled link always keeps
+  its own tag), and leaves out a reroute that only hidden links pass through. The link keeps its entry in `links`, its route and its reroutes, takes its
   track like any other and does not change the queued prompt, so a frontend that does not know the
   key draws the route. Labels, per type: all hidden links of the type leave one output (node and
-  slot): no `label`, so the frontend's own stacked tag reads `VAE x2`; two or more outputs: every
-  link of the type has a `label`, the source node's header as the frontend titles it: the node's
-  `title` (an empty title is none), else the definition's `display_name` (ComfyUI fills it with the
-  class name when the node pack names the node nothing else, and the frontend's default title is
-  `display_name || name`), else the class name for a node with no definition; when one node leaves
-  two or more of the type's outputs, the label is `<name>: <output name>`. Other types and links
+  slot): no `label`, so the frontend's own stacked tag reads `VAE x2`; two or more outputs: each
+  output is named by its node's header as the frontend titles it: the node's `title` (an empty
+  title is none), else the definition's `display_name` (ComfyUI fills it with the class name when
+  the node pack names the node nothing else, and the frontend's default title is
+  `display_name || name`), else the class name for a node with no definition, and
+  `<name>: <output name>` when one node leaves two or more of the type's outputs; a link has that
+  name as its `label` only when no other output of the type has the same name, so two untitled
+  prompts of one class stay unlabelled. Other types and links
   inside a column stay drawn. `tests/test_hide_links_frontend.py` loads these canvases in a real
   frontend and compares the queued prompt with and without the key.
 - A lower-band group fed by one sub-column of a main-row item and feeding a later sub-column of

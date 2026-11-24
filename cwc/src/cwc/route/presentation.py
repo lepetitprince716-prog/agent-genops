@@ -1,8 +1,8 @@
 """Link presentation: ``extra.linkPresentation``, the frontend's own way to hide a link.
 
-A link marked ``{"hidden": true}`` is drawn as a small tag at each end instead of a curve; hidden
-links that leave the same output (or carry the same ``label``) are stacked into one tag, and a
-reroute that only hidden links pass through is not drawn. The link stays in ``links``, so the
+A link marked ``{"hidden": true}`` is drawn as a small tag at each end instead of a curve; the
+unlabelled hidden links that leave one output are stacked into one tag, a labelled one always keeps
+a tag of its own, and a reroute that only hidden links pass through is not drawn. The link stays in ``links``, so the
 workflow and the API prompt it queues do not change. A frontend that does not know the key draws
 every such link as the route that was written for it.
 
@@ -12,15 +12,17 @@ prompt to a far column, and a curve per consumer hides what the picture is about
 column and the main flow (latents, images) stay drawn.
 
 Labels: tags of one type that all start at one output need no text, the stacked tag already
-reads ``VAE x2``. When a type's hidden links start at two or more outputs each of its links gets
-a ``label`` naming its source the way the frontend titles that node: its title, else its
-definition's display name (the class name when the definition gives no other), else its class
-name. When one node feeds two or more outputs of the type the label is ``<name>: <output name>``,
-so its tags tell apart.
+reads ``VAE x2``. When a type's hidden links start at two or more outputs, each output is named
+the way the frontend titles its node: its title, else its definition's display name (the class
+name when the definition gives no other), else its class name, and ``<name>: <output name>``
+when one node feeds two or more outputs of the type. A link is labelled with its output's name
+only when no other output of the type has the same name: a label two sources share tells them
+apart no better than the type the frontend shows without one.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Iterable
 
 from cwc.canvas.model import Canvas, Link, Node
@@ -56,12 +58,17 @@ def _labels(links: list[Link], nodes: dict[str, Node], defs: NodeDefs) -> dict[i
         slots_of: dict[Any, set[int]] = {}
         for node_id, slot in sources:
             slots_of.setdefault(node_id, set()).add(slot)
+        named: dict[tuple[Any, int], str] = {}
         for link in of_kind:
             node = nodes.get(str(link.origin_id))
             name = _node_name(node, link, defs)
             if len(slots_of[link.origin_id]) > 1:
-                out[link.id] = f"{name}: {_output_name(node, link)}"
-            else:
+                name = f"{name}: {_output_name(node, link)}"
+            named[(link.origin_id, link.origin_slot)] = name
+        sharing = Counter(named.values())
+        for link in of_kind:
+            name = named[(link.origin_id, link.origin_slot)]
+            if sharing[name] == 1:
                 out[link.id] = name
     return out
 
