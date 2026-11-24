@@ -161,7 +161,7 @@ def compile_document(
             )
         raise CwcError(ExitCode.INPUT_ERROR, [_preset_error(message)]) from None
     routes = route(canvas, laid, defs)
-    mark_hidden(canvas, laid.forced, hide_links or chosen.hide_links, defs)
+    mark_hidden(canvas, laid.forced, chosen.hide_links if hide_links is None else hide_links, defs)
     write_notes(canvas, collect_notes(authoring, plan, laid, canvas))
     report = verify_compile(canvas, authoring, defs)
     geometry = check_geometry(

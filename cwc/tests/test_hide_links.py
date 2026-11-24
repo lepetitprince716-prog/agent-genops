@@ -9,8 +9,10 @@
 3. the key has the frontend's shape: link ids as decimal strings in ascending order, each to
    ``{"hidden": true}`` or ``{"hidden": true, "label": <text>}``;
 4. labels: a type whose hidden links leave two or more outputs labels each of its links with the
-   source node's title, else the definition's display name, else the output's name; a type with
-   one output writes no label, so the frontend stacks its links into one badge;
+   source node's header as the frontend writes it: its title, else the definition's display name
+   (which may be the class name itself), else the class name; a node feeding two or more outputs
+   of the type adds the output's name; a type with one output writes no label, so the frontend
+   stacks its links into one badge;
 5. the ``x`` presets write no ``extra.linkPresentation``, also when hiding is asked for;
 6. the preset decides the default (``stack``: resources, the rest: none) and ``compile_document``
    and ``cwc compile --hide-links`` override it.
@@ -179,7 +181,7 @@ class LabelRule(unittest.TestCase):
             canvas.extra[KEY], {"1": {"hidden": True, "label": "Pose: positive"}, "2": {"hidden": True, "label": "Pose: negative"}}
         )
 
-    def test_two_outputs_of_one_node_without_a_title_use_the_display_name_then_the_output_name(self):
+    def test_two_outputs_of_one_node_without_a_title_use_the_display_name_or_the_class(self):
         apply = (2, "ControlNetApplyAdvanced", None, [("positive", "CONDITIONING"), ("negative", "CONDITIONING")])
         canvas = _canvas([apply, (3, "KSampler", None, [])], [(1, 2, 0, 3, 1, "CONDITIONING"), (2, 2, 1, 3, 2, "CONDITIONING")])
         mark_hidden(canvas, (1, 2), HideLinks.RESOURCES, DEFS)
@@ -187,11 +189,22 @@ class LabelRule(unittest.TestCase):
             canvas.extra[KEY],
             {"1": {"hidden": True, "label": "Apply ControlNet: positive"}, "2": {"hidden": True, "label": "Apply ControlNet: negative"}},
         )
-        # a node that fell back to its output names says them once, with no prefix
         bare = (4, "UnknownPackLoader", None, [("base", "MODEL"), ("tuned", "MODEL")])
         canvas = _canvas([bare, (3, "KSampler", None, [])], [(1, 4, 0, 3, 0, "MODEL"), (2, 4, 1, 3, 1, "MODEL")])
         mark_hidden(canvas, (1, 2), HideLinks.RESOURCES, DEFS)
-        self.assertEqual(canvas.extra[KEY], {"1": {"hidden": True, "label": "base"}, "2": {"hidden": True, "label": "tuned"}})
+        self.assertEqual(
+            canvas.extra[KEY],
+            {"1": {"hidden": True, "label": "UnknownPackLoader: base"}, "2": {"hidden": True, "label": "UnknownPackLoader: tuned"}},
+        )
+
+    def test_a_display_name_that_is_the_class_name_is_still_the_header(self):
+        # EasyCache's definition names it by its class, and so does the frontend's header; the
+        # output's name would label both MODEL sources "MODEL" and tell nothing apart
+        self.assertEqual(DEFS.get("EasyCache").display_name, "EasyCache")
+        cache = (2, "EasyCache", None, [("MODEL", "MODEL")])
+        canvas = _canvas([CKPT, cache, (3, "KSampler", None, []), (4, "KSampler", None, [])], [(1, 1, 0, 3, 0, "MODEL"), (2, 2, 0, 4, 0, "MODEL")])
+        mark_hidden(canvas, (1, 2), HideLinks.RESOURCES, DEFS)
+        self.assertEqual(canvas.extra[KEY], {"1": {"hidden": True, "label": "Load Checkpoint"}, "2": {"hidden": True, "label": "EasyCache"}})
 
     def test_a_type_labels_independently_of_the_others(self):
         # CLIP has two sources, VAE one: only CLIP is labelled, though both come from the same nodes
@@ -203,12 +216,14 @@ class LabelRule(unittest.TestCase):
             {"1": {"hidden": True, "label": "Load Checkpoint"}, "2": {"hidden": True, "label": "Style LoRA"}, "3": {"hidden": True}},
         )
 
-    def test_no_title_and_no_definition_takes_the_output_name_never_the_class(self):
+    def test_no_title_and_no_definition_takes_the_class_as_the_header_does(self):
         a = (1, "UnknownPackLoader", None, [("base model", "MODEL")])
         b = (2, "OtherPackLoader", "", [("tuned", "MODEL")])  # an empty title counts as none
         canvas = _canvas([a, b, (3, "KSampler", None, []), (4, "KSampler", None, [])], [(1, 1, 0, 3, 0, "MODEL"), (2, 2, 0, 4, 0, "MODEL")])
         mark_hidden(canvas, (1, 2), HideLinks.RESOURCES, DEFS)
-        self.assertEqual(canvas.extra[KEY], {"1": {"hidden": True, "label": "base model"}, "2": {"hidden": True, "label": "tuned"}})
+        self.assertEqual(
+            canvas.extra[KEY], {"1": {"hidden": True, "label": "UnknownPackLoader"}, "2": {"hidden": True, "label": "OtherPackLoader"}}
+        )
 
     def test_only_listed_resource_links_are_hidden_and_none_hides_nothing(self):
         canvas = _canvas([CKPT, (2, "EmptyLatentImage", None, [("LATENT", "LATENT")]), (3, "KSampler", None, [])],

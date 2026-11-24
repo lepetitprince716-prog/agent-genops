@@ -13,9 +13,10 @@ column and the main flow (latents, images) stay drawn.
 
 Labels: tags of one type that all start at one output need no text, the stacked tag already
 reads ``VAE x2``. When a type's hidden links start at two or more outputs each of its links gets
-a ``label`` naming its source: the node's title, else its definition's display name, else the
-output's name; when one node feeds two or more outputs of the type, ``<name>: <output name>`` so
-its tags tell apart.
+a ``label`` naming its source the way the frontend titles that node: its title, else its
+definition's display name (the class name when the definition gives no other), else its class
+name. When one node feeds two or more outputs of the type the label is ``<name>: <output name>``,
+so its tags tell apart.
 """
 
 from __future__ import annotations
@@ -57,27 +58,24 @@ def _labels(links: list[Link], nodes: dict[str, Node], defs: NodeDefs) -> dict[i
             slots_of.setdefault(node_id, set()).add(slot)
         for link in of_kind:
             node = nodes.get(str(link.origin_id))
-            output = _output_name(node, link)
-            name = _node_name(node, defs)
-            if name is None:
-                out[link.id] = output
-            elif len(slots_of[link.origin_id]) > 1:
-                out[link.id] = f"{name}: {output}"
+            name = _node_name(node, link, defs)
+            if len(slots_of[link.origin_id]) > 1:
+                out[link.id] = f"{name}: {_output_name(node, link)}"
             else:
                 out[link.id] = name
     return out
 
 
-def _node_name(node: Node | None, defs: NodeDefs) -> str | None:
-    """The title, else the definition's display name; ``None`` when neither says more than the class."""
+def _node_name(node: Node | None, link: Link, defs: NodeDefs) -> str:
+    """The source node's header as the frontend writes it: title, else display name, else class."""
     if node is None:
-        return None
+        return str(link.type)
     if node.title:
         return node.title
     nodedef = defs.get(node.type)
-    if nodedef is not None and nodedef.display_name and nodedef.display_name != node.type:
+    if nodedef is not None and nodedef.display_name:
         return nodedef.display_name
-    return None
+    return node.type
 
 
 def _output_name(node: Node | None, link: Link) -> str:

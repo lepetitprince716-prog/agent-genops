@@ -296,10 +296,11 @@ How compile and tidy place nodes and groups, and how the checks read the result.
   track like any other and does not change the queued prompt, so a frontend that does not know the
   key draws the route. Labels, per type: all hidden links of the type leave one output (node and
   slot): no `label`, so the frontend's own stacked tag reads `VAE x2`; two or more outputs: every
-  link of the type has a `label`, the source node's `title` (an empty title is none), else the
-  definition's `display_name` (when it is more than the class name), else the output's `name`
-  (the class name is never used); when one node leaves two or more of the type's outputs, the label
-  is `<name>: <output name>`, unless the name already is the output's name. Other types and links
+  link of the type has a `label`, the source node's header as the frontend titles it: the node's
+  `title` (an empty title is none), else the definition's `display_name` (ComfyUI fills it with the
+  class name when the node pack names the node nothing else, and the frontend's default title is
+  `display_name || name`), else the class name for a node with no definition; when one node leaves
+  two or more of the type's outputs, the label is `<name>: <output name>`. Other types and links
   inside a column stay drawn. `tests/test_hide_links_frontend.py` loads these canvases in a real
   frontend and compares the queued prompt with and without the key.
 - A lower-band group fed by one sub-column of a main-row item and feeding a later sub-column of
