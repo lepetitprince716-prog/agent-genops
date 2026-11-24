@@ -26,13 +26,14 @@ from tests import support  # noqa: F401
 from tests.graphs import DEFS
 from tests.test_route_anchor_cells import _canvas, _node
 
-from cwc.canvas.envelope import Renderer, box_facts, classic_box, vue_box
+from cwc.canvas.envelope import Renderer, box_facts, classic_box, envelope, vue_box
 from cwc.canvas.geometry import Rect
 from cwc.canvas.links import SEGMENTS, crosses
 from cwc.canvas.model import Canvas
 from cwc.canvas.reroutes import Reroutes, link_paths
 from cwc.layout.types import LayoutResult
 from cwc.route import route
+from cwc.route.grid import Grid
 
 
 def _route(canvas, keepout=(), waypoints=None):
@@ -190,6 +191,46 @@ class KeepoutTest(unittest.TestCase):
         self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((1,), 1, ()))
         self.assertEqual([tuple(r["pos"]) for r in canvas.raw["extra"]["reroutes"]], [(600, 120), (900, 120)])
 
+
+    def test_a_keepout_blocks_the_grid_as_a_box_there_does(self):
+        wall = _node(2, "Wall", (600, 90), (200, 40))
+        boxed = _canvas(_node(1, "Source", (0, 100), (300, 60)), wall, _node(3, "Target", (1200, 100), (300, 60)))
+        self.assertEqual(_route(boxed).rerouted, (1,))
+        rect = envelope(boxed.node_map()["2"], box_facts(boxed.node_map()["2"], DEFS.get("T")))
+        canvas = open_line()
+        self.assertTrue(all(crosses(path, rect) for path in _drawn(canvas).values()))
+        result = _route(canvas, [rect])
+        self.assertEqual(result.rerouted, (1,))
+        self.assertEqual(canvas.raw["extra"]["reroutes"], boxed.raw["extra"]["reroutes"])
+
+    def test_a_keepout_over_a_node_changes_nothing(self):
+        plain = blocked_line()
+        before = _route(plain)
+        canvas = blocked_line()
+        obstacle = canvas.node_map()["2"]
+        result = _route(canvas, [envelope(obstacle, box_facts(obstacle, DEFS.get("T")))])
+        self.assertEqual(canvas.raw["extra"], plain.raw["extra"])
+        self.assertEqual(result, before)
+
+    def test_a_link_whose_every_route_meets_the_keepout_as_drawn_keeps_its_spline(self):
+        # the keepout covers the end of the input's approach but none of the grid points a route
+        # can reach the input from, so the search finds routes the drawn curve still takes into it
+        end = Rect(1160, 95, 40, 20)
+        canvas = open_line()
+        self.assertTrue(any(crosses(path, end) for path in _drawn(canvas).values()))
+        result = _route(canvas, [end])
+        self.assertEqual((result.rerouted, result.unresolved), ((), ()))
+        self.assertNotIn("reroutes", canvas.raw.get("extra", {}))
+
+    def test_a_dummy_chain_through_a_keepout_is_routed_around_it(self):
+        chain = ((600.0, 120.0), (900.0, 120.0))
+        canvas = open_line()
+        result = _route(canvas, [ACROSS], {1: chain})
+        self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((1,), 0, ()))
+        for renderer, path in _drawn(canvas).items():
+            self.assertFalse(crosses(path, ACROSS), renderer.value)
+        self.assertEqual(_boxes_crossed(canvas), [])
+
     def test_a_dummy_chain_clear_of_the_boxes_is_kept_when_the_plain_spline_crosses_one(self):
         chain = ((400.0, 300.0), (900.0, 300.0))  # under the obstacle
         plain = blocked_line()
@@ -198,6 +239,17 @@ class KeepoutTest(unittest.TestCase):
         result = _route(canvas, [BEFORE_TARGET], {1: chain})
         self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((1,), 1, ()))
         self.assertEqual(canvas.raw["extra"], plain.raw["extra"])
+
+    def test_a_dummy_chain_across_a_box_with_no_route_is_unresolved(self):
+        # the target's box leaves no free grid point right of the source: nothing can be routed
+        canvas = _canvas(
+            _node(1, "Source", (0, 100), (300, 60)),
+            _node(2, "Aside", (0, 400), (300, 60)),
+            _node(3, "Target", (320, 100), (300, 60)),
+        )
+        self.assertEqual(_route(canvas).rerouted, ())
+        result = _route(canvas, (), {1: ((150.0, 420.0), (250.0, 440.0))})
+        self.assertEqual((result.rerouted, result.dummy, result.unresolved), ((), 0, (1,)))
 
     def test_a_link_that_leaves_along_a_route_through_the_keepout_keeps_its_spline(self):
         start = Rect(305, 60, 60, 140)  # over every grid point right of the output
@@ -237,6 +289,20 @@ class KeepoutTest(unittest.TestCase):
         result = _route(canvas, [goal])
         self.assertEqual(canvas.raw["extra"], plain.raw["extra"])
         self.assertEqual(result.channels, before.channels)
+
+
+class SharedGridTest(unittest.TestCase):
+    def test_grids_with_and_without_the_keepout_share_bounds_and_tracks(self):
+        box = ("1", Rect(0, 0, 300, 60))
+        far = Rect(5000, 5000, 40, 20)
+        holding = Grid.build([box, ("keepout:0", far)], 10.0)
+        without = Grid.build([box], 10.0, holding.used, extent=[far])
+        self.assertEqual((without.lo, without.hi), (holding.lo, holding.hi))
+        path = [(20, 10), (21, 10), (22, 10)]
+        holding.claim(path, "a")
+        without.claim(path, "b")
+        self.assertEqual(holding.shared_edges(), 2)
+        self.assertEqual(without.shared_edges(), 2)
 
 
 if __name__ == "__main__":

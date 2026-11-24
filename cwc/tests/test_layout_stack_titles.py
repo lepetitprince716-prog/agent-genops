@@ -13,7 +13,9 @@ compiler, so a wrong rectangle in the compiler does not pass for a right one.
 3. every link, as the polyline of its reroutes and as drawn under either renderer, meets no
    title text;
 4. the check finds a title moved under a Z leg, one moved under a track and one moved under a
-   routed run.
+   routed run;
+5. layout declares exactly these title rectangles as the rectangles routing keeps off
+   (``LayoutResult.keepout``), one per group, in group order.
 
 The widest title in these cases is about 310 px; a longer one can still reach a Z's right leg, or
 a track in the corridor beside a left lane, since neither moves for a title.
@@ -141,6 +143,11 @@ class Titles(unittest.TestCase):
             with self.subTest(case=name):
                 self.assertEqual(link_hits(canvas, defs), [])
         self.assertGreater(routed, 100)
+
+    def test_layout_keeps_routing_off_each_title(self):
+        for name, (canvas, result, _) in self.canvases.items():
+            with self.subTest(case=name):
+                self.assertEqual(result.keepout, tuple(rect for _, rect in title_rects(canvas)))
 
     def test_a_title_under_a_z_leg_is_found(self):
         canvas, result, defs = copy.deepcopy(self.canvases["landscape"])
