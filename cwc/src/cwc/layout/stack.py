@@ -58,6 +58,7 @@ from cwc.canvas.envelope import VUE_MIN_WIDTH, Renderer, envelope, readable_widt
 from cwc.canvas.geometry import Rect, snap_up
 from cwc.canvas.links import canvas_splines
 from cwc.canvas.model import Canvas
+from cwc.canvas.titles import title_rect
 from cwc.layout.inner import (
     NODE_GAP,
     PAD,
@@ -545,9 +546,9 @@ def _spine_feeds(graph: Graph, column: Sequence[Lanes], sources: Mapping[int, tu
 
 def finish(canvas: Canvas, graph: Graph, result: LayoutResult, stacked: Stacked, drawn: Mapping[str, Drawn]) -> LayoutResult:
     """``result`` with the Z waypoints of the links between spine nodes next to each other, the
-    links between columns as ``forced`` and the tracks, read from the canvas as ``_write`` left
-    it. A Z from one box to the next crosses under the lower box's title band, between it and
-    the first spine node there."""
+    links between columns as ``forced``, the tracks, and the title text of every group as
+    ``keepout``, read from the canvas as ``_write`` left it. A Z from one box to the next crosses
+    under the lower box's title band, between it and the first spine node there."""
     nodes = canvas.node_map()
     curves = canvas_splines(canvas, dict(graph.facts), Renderer.CLASSIC)
     env = {key: envelope(node, graph.facts[key]) for key, node in nodes.items()}
@@ -596,7 +597,8 @@ def finish(canvas: Canvas, graph: Graph, result: LayoutResult, stacked: Stacked,
         )
     )
     tracks = _tracks(canvas, graph, stacked, column_of, curves)
-    return replace(result, waypoints=waypoints, forced=forced, tracks=tracks, fence_frames=True)
+    keepout = tuple(title_rect(group) for group in canvas.groups)
+    return replace(result, waypoints=waypoints, forced=forced, tracks=tracks, fence_frames=True, keepout=keepout)
 
 
 def _tracks(canvas: Canvas, graph: Graph, stacked: Stacked, column_of: Mapping[str, int], curves: Mapping) -> dict[int, float]:
