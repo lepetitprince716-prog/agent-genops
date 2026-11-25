@@ -12,12 +12,13 @@
 <p align="center">
   <b>English</b> · <a href="README.zh-CN.md">中文</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
+  <a href="#quickstart-zero-custom-node-comfyui-starter-pack-v010">Starter Pack</a> · <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="workflows/">Workflows</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-1f2328"></a>
   <a href="README.zh-CN.md"><img alt="Docs in English and Chinese" src="https://img.shields.io/badge/docs-EN%20%7C%20%E4%B8%AD%E6%96%87-e8590c"></a>
+  <a href="https://github.com/lepetitprince716-prog/agent-genops/releases/tag/v0.1.0"><img alt="Starter Pack: v0.1.0 (Zero Custom Nodes)" src="https://img.shields.io/badge/starter%20pack-v0.1.0%20(.zip)-2563eb"></a>
   <img alt="Status: field notes, October 2026" src="https://img.shields.io/badge/status-field%20notes%2C%202026--10-0f766e">
 </p>
 
@@ -29,6 +30,23 @@ This is a working method, not a library. It comes from one real setup, a laptop 
 agents and two consumer GPUs that render, and it keeps the numbers, dates and incidents that
 shaped each rule. The [skill](skills/agent-genops/) in this repo lets an agent load the same
 method.
+
+## Quickstart: Zero-Custom-Node ComfyUI Starter Pack (`v0.1.0`)
+
+Want ready-to-drag ComfyUI `>= 0.42` workflows, a zero-dependency sweep script, and a drop-in coding-agent skill without cloning the full monorepo?
+
+- **Direct Download (`~568 KB`)**: **[`agent-comfyui-starter-v0.1.0.zip`](https://github.com/lepetitprince716-prog/agent-genops/releases/download/v0.1.0/agent-comfyui-starter-v0.1.0.zip)** · [Release Notes (`v0.1.0`)](https://github.com/lepetitprince716-prog/agent-genops/releases/tag/v0.1.0)
+- **Inside the Starter Pack** (`100%` core ComfyUI nodes, Python 3.10+ stdlib only):
+  1. `workflows/compiled/*.ui.json` & `*.api.json` — Drag-and-drop canvases compiled with [`cwc`](https://github.com/lepetitprince716-prog/comfyui-workflow-compiler) (`01-moss-fast12-hires-20s` 2-pass 1.5x HiRes + `02-moss-style-lora-ab` optional `Ctrl+B` style toggle) plus vector `.svg` previews.
+  2. `comfy_sweep.py` — Zero-`pip` CLI (`probe`, `smoke`, `sweep`, and pure-Python PNG 2D Laplacian `metrics` contact sheet).
+  3. `skills/comfyui-zero-node-pilot/SKILL.md` — Compact Agent Skill for Claude Code, Cursor, Codex, Antigravity, and OpenCode.
+- **Companion Open Weights & Standard SDXL Graphs**: Free SFW LoRAs and workflows at **[civitai.com/user/lepetitprince716355](https://civitai.com/user/lepetitprince716355)** (`#3063613` Fast-12 OPD, `#3061816` IceBrush), plus minimal SDXL baselines in [`workflows/`](workflows/).
+
+```bash
+unzip agent-comfyui-starter-v0.1.0.zip && cd agent-comfyui-starter
+python3 comfy_sweep.py probe --url http://127.0.0.1:8188
+python3 comfy_sweep.py smoke workflows/compiled/01-moss-fast12-hires-20s.api.json
+```
 
 ## Five ideas behind the 24 rules
 

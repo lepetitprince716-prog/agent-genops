@@ -12,18 +12,36 @@
 <p align="center">
   <a href="README.md">English</a> · <b>中文</b>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="#仓库里有什么">文档</a> · <a href="#使用-skill">Skill</a> · <a href="templates/">模板</a> · <a href="tools/">工具</a>
+  <a href="#一键上手零插件-comfyui-入门工作流包-v010">入门包下载</a> · <a href="#仓库里有什么">文档</a> · <a href="#使用-skill">Skill</a> · <a href="workflows/">标准工作流</a> · <a href="templates/">模板</a> · <a href="tools/">工具</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-1f2328"></a>
   <a href="README.md"><img alt="Docs in English and Chinese" src="https://img.shields.io/badge/docs-EN%20%7C%20%E4%B8%AD%E6%96%87-e8590c"></a>
+  <a href="https://github.com/lepetitprince716-prog/agent-genops/releases/tag/v0.1.0"><img alt="Starter Pack: v0.1.0 (零插件入门包)" src="https://img.shields.io/badge/starter%20pack-v0.1.0%20(.zip)-2563eb"></a>
   <img alt="Status: field notes, October 2026" src="https://img.shields.io/badge/status-field%20notes%2C%202026--10-0f766e">
 </p>
 
 这是我用编码 agent 跑、调、部署本地图像和视频模型的方法。agent 负责规划、派工、验收和记录；ComfyUI 和云服务（NovelAI、Midjourney、Civitai、GPT Image）只负责出图。
 
 它是一套工作方法，不是一个库。内容来自一套真实的环境：一台笔记本跑 agent，两张消费级显卡出图。每条规则背后的数字、日期和事故都留着。仓库里的 [skill](skills/agent-genops/) 可以让 agent 直接加载这套方法。
+
+## 一键上手：零插件 ComfyUI 入门工作流包 (`v0.1.0`)
+
+想直接拖进 ComfyUI（`>= 0.42`，无需安装任何第三方自定义节点）开箱跑图，或者让你的编码 Agent 自动扫参测锐度？无需克隆整仓，直接下载独立打包的 Starter Pack：
+
+- **一键直连下载（`~568 KB`）**：**[`agent-comfyui-starter-v0.1.0.zip`](https://github.com/lepetitprince716-prog/agent-genops/releases/download/v0.1.0/agent-comfyui-starter-v0.1.0.zip)** · [发行说明 (`Releases v0.1.0`)](https://github.com/lepetitprince716-prog/agent-genops/releases/tag/v0.1.0)
+- **压缩包内置清单**（`100%` ComfyUI 原生内置节点，Python 3.10+ 纯标准库零 `pip` 依赖）：
+  1. `workflows/compiled/*.ui.json` 与 `*.api.json` —— 由工作流编译器 [`cwc`](https://github.com/lepetitprince716-prog/comfyui-workflow-compiler) 编译生成的原生分组画布（含 `01-moss-fast12-hires-20s` 12 步 + 8 步二阶高清修复，以及 `02-moss-style-lora-ab` 支持 `Ctrl+B` 旁路对比的画风槽位）与 `.svg` 离线预览图，直接拖入 ComfyUI 网页即可打开。
+  2. `comfy_sweep.py` —— 单文件零依赖自动化评测工具（含 `probe` 探活、`smoke` 单种测速、`sweep` 锁定种子网格扫参、以及 `metrics` 纯标准库 PNG 二维拉普拉斯锐度计算与带编号对比表生成）。
+  3. `skills/comfyui-zero-node-pilot/SKILL.md` —— 适配 Claude Code / Cursor / Codex / Antigravity / OpenCode 的零插件工作流驾驶技能。
+- **配套免费开源权重与基础工作流**：免费 SFW 模型与工作流主页 **[civitai.com/user/lepetitprince716355](https://civitai.com/user/lepetitprince716355)**（站内编号 `#3063613` Fast-12 OPD 加速、`#3061816` IceBrush 画风），仓库内 [`workflows/`](workflows/) 另附最小 SDXL 标准画布。
+
+```bash
+unzip agent-comfyui-starter-v0.1.0.zip && cd agent-comfyui-starter
+python3 comfy_sweep.py probe --url http://127.0.0.1:8188
+python3 comfy_sweep.py smoke workflows/compiled/01-moss-fast12-hires-20s.api.json
+```
 
 ## 24 条规则背后的五个想法
 
