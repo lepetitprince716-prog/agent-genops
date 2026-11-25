@@ -12,7 +12,7 @@
 <p align="center">
   <b>English</b> · <a href="README.zh-CN.md">中文</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="#quickstart-zero-custom-node-comfyui-starter-pack-v010">Starter Pack</a> · <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="workflows/">Workflows</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
+  <a href="#quickstart-zero-custom-node-comfyui-starter-pack-v010">Starter Pack</a> · <a href="docs/INDEX.md">Index</a> · <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="workflows/">Workflows</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
 </p>
 
 <p align="center">
@@ -188,7 +188,8 @@ After installing:
    `~/.config/agent-genops/LOCAL.md` and fill in what plays each role on your machine. The file
    stays on your machine.
 3. Optional: copy the files in [templates/agents/](templates/agents/) to `~/.claude/agents/` for
-   the subagent tiers the skill dispatches to. The plugin does not install them.
+   the subagent tiers the skill dispatches to. The plugin does not install them. For other agents,
+   [templates/agents/README.md](templates/agents/README.md) says how to set up each role.
 4. Try it: "Use agent-genops to plan one smoke render on my ComfyUI at http://127.0.0.1:8188."
 
 <details>
@@ -229,8 +230,8 @@ linking and check that the agent lists the skill.
 | Parallel lanes on other vendors' models | herdr workers (Cursor Composer, DeepSeek) |
 
 Work that is one chain of steps stays in the root session. See [Dispatch](docs/en/03-dispatch.md).
-The tier names are the subagent definitions in [templates/agents/](templates/agents/); with
-another agent, map them to your cheapest, default and strongest model.
+The tier names are the worker roles in [templates/agents/](templates/agents/); its README maps
+each role to a small, mid or large model for any agent.
 
 ## Reference setup
 

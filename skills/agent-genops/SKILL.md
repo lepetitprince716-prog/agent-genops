@@ -110,8 +110,9 @@ of the root's context. Give each job to the lowest tier whose failure you can st
 
 The tier names match the subagent definitions in the repo's `templates/agents/`. This plugin has
 no `agents/` directory, so installing it does not install them: copy them to your agent directory
-(Claude Code: `~/.claude/agents/`), or map each tier to your agent's cheapest, default and
-strongest model. Terminal-multiplexer workers are optional; without one, run the lane in the root.
+(Claude Code: `~/.claude/agents/`). For other agents, `templates/agents/README.md` gives each
+role a small, mid or large model, an effort and an access level. Terminal-multiplexer workers
+are optional; without one, run the lane in the root.
 
 Every packet states: objective, owned paths, context paths, non-goals, allowed commands,
 acceptance checks, and where to write a short result. Workers never delegate further.

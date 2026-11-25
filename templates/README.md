@@ -17,11 +17,11 @@ Copy a template, fill the angle-bracket placeholders, delete what does not apply
 | [incident-rule.md](incident-rule.md) | Turning something that went wrong into a rule | [Lessons](../docs/en/13-lessons.md) |
 | [LOCAL.example.md](LOCAL.example.md) | Telling the skill what plays each role on your machine; copy it to `~/.config/agent-genops/LOCAL.md` | [Use the skill](../README.md#use-the-skill) |
 | [fleet.example.yaml](fleet.example.yaml) | Describing your machines and ComfyUI instances in detail; LOCAL.md points to it | [Environment](../docs/en/02-environment.md) |
-| [agents/](agents/) | Claude Code subagent definitions for the tier ladder | [Dispatch](../docs/en/03-dispatch.md) |
+| [agents/](agents/) | The seven worker roles of the tier ladder, ready for Claude Code and usable in any agent | [Dispatch](../docs/en/03-dispatch.md) |
 
-The subagent definitions go in `~/.claude/agents/` (or `.claude/agents/` in a project). The plugin
-does not install them. Check the `model` field against the models your account can use before
-copying them.
+In Claude Code the role files go in `~/.claude/agents/` (or `.claude/agents/` in a project). The
+plugin does not install them. For other agents, [agents/README.md](agents/README.md) gives each
+role a model size, an effort and an access level.
 
 ---
 
@@ -42,6 +42,6 @@ copying them.
 | [incident-rule.md](incident-rule.md) | 把一次出错变成一条规则 | [教训](../docs/zh/13-lessons.md) |
 | [LOCAL.example.md](LOCAL.example.md) | 告诉 skill 你的机器上由什么来担任各个角色；复制到 `~/.config/agent-genops/LOCAL.md` | [使用 skill](../README.zh-CN.md#使用-skill) |
 | [fleet.example.yaml](fleet.example.yaml) | 详细描述你的机器和 ComfyUI 实例；LOCAL.md 会指向它 | [环境](../docs/zh/02-environment.md) |
-| [agents/](agents/) | 按分档写好的 Claude Code subagent 定义 | [派工](../docs/zh/03-dispatch.md) |
+| [agents/](agents/) | 分档用的七个 worker 角色，Claude Code 可直接用，其他 agent 照表配置 | [派工](../docs/zh/03-dispatch.md) |
 
-subagent 定义放进 `~/.claude/agents/`（或项目里的 `.claude/agents/`），插件不会自动安装它们。复制之前，先确认 `model` 字段写的模型你的账号能用。
+用 Claude Code 时，角色文件放进 `~/.claude/agents/`（或项目里的 `.claude/agents/`），插件不会自动安装它们。用别的 agent 时，按 [agents/README.md](agents/README.md) 给每个角色配模型大小、推理强度和权限。
