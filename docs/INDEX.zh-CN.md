@@ -2,9 +2,9 @@
 
 [English README](../README.md) · [中文 README](../README.zh-CN.md)
 
-这个仓库记录的是一套做法：让编码 agent 在一台控制机上规划、派工、核验和记账，ComfyUI 机器和云服务只负责出图。做法本身写成了说明书和一个 agent skill，旁边放着可直接复制的模板和标准工作流、三个各自独立的命令行工具，以及一套不让隐私和密钥进公开历史的护栏。
+Agents plan, dispatch, verify and record. ComfyUI and cloud services only render.
 
-整个仓库可以分成五块来看。
+agent 管事，后端只出图。仓库分五块：
 
 | 板块 | 解决什么问题 | 在哪里 | 从哪个文件读起 |
 |---|---|---|---|
@@ -63,7 +63,7 @@ skill 会先读机器上的 `~/.config/agent-genops/LOCAL.md`，模板是 [templ
 
 ## 可复制的材料
 
-[templates/](../templates/README.md) 放的是复制后填空就能用的文件：任务包、交接、记忆条目、出图单 `run-order.json`、smoke 核对表、模型卡、A/B 记录、提示词规则本、事故转规则、`LOCAL.example.md` 和 `fleet.example.yaml`。`templates/agents/` 是七个 Claude Code subagent 定义（Haiku、Sonnet、Sonnet max、Opus medium、Opus high、计划审阅、事实核查），对应派工那篇的分档；插件不会自动装它们，要自己复制到 `~/.claude/agents/`。
+[templates/](../templates/README.md) 放的是复制后填空就能用的文件：任务包、交接、记忆条目、出图单 `run-order.json`、smoke 核对表、模型卡、A/B 记录、提示词规则本、事故转规则、`LOCAL.example.md` 和 `fleet.example.yaml`。`templates/agents/` 是七个 Claude Code subagent 定义（Haiku、Sonnet、Sonnet max、Opus medium、Opus high、计划审阅、事实核查），对应派工那篇的分档；插件不会自动装它们，要自己复制到 `~/.claude/agents/`。这七个文件目前只有 Claude Code 格式，写死了 Claude 的 model id 和工具名；派工篇里用到的 Cursor、DeepSeek 等外部 worker 没有对应模板。
 
 [workflows/](../workflows/README.md) 是三张最小的 SDXL 工作流：文生图、高清修复、带两个可选 LoRA。每个目录里有手写的输入图、`cwc compile` 生成的画布 `*.ui.json` 和 API 版 `*.api.json`，以及一份写明模型来源、许可和测试情况的 README。这里的每个文件都要过 `tools/workflow_policy.py` 的白名单检查。
 
