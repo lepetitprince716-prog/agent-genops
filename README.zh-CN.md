@@ -12,7 +12,7 @@
 <p align="center">
   <a href="README.md">English</a> · <b>中文</b>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="#一键上手零插件-comfyui-入门工作流包-v010">入门包下载</a> · <a href="#仓库里有什么">文档</a> · <a href="#使用-skill">Skill</a> · <a href="workflows/">标准工作流</a> · <a href="templates/">模板</a> · <a href="tools/">工具</a>
+  <a href="#一键上手零插件-comfyui-入门工作流包-v010">入门包下载</a> · <a href="docs/INDEX.zh-CN.md">索引</a> · <a href="#仓库里有什么">文档</a> · <a href="#使用-skill">Skill</a> · <a href="workflows/">标准工作流</a> · <a href="templates/">模板</a> · <a href="tools/">工具</a>
 </p>
 
 <p align="center">

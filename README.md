@@ -12,7 +12,7 @@
 <p align="center">
   <b>English</b> · <a href="README.zh-CN.md">中文</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="#quickstart-zero-custom-node-comfyui-starter-pack-v010">Starter Pack</a> · <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="workflows/">Workflows</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
+  <a href="#quickstart-zero-custom-node-comfyui-starter-pack-v010">Starter Pack</a> · <a href="docs/INDEX.md">Index</a> · <a href="#what-is-inside">Docs</a> · <a href="#use-the-skill">Skill</a> · <a href="workflows/">Workflows</a> · <a href="templates/">Templates</a> · <a href="tools/">Tools</a>
 </p>
 
 <p align="center">
