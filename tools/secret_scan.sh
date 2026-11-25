@@ -2,7 +2,8 @@
 # Second secret scan, next to tools/privacy_scan.py: wraps Betterleaks.
 #
 #   sh tools/secret_scan.sh staged           the index, as the next commit would contain it
-#   sh tools/secret_scan.sh unstaged         working-tree diff relative to the index
+#   sh tools/secret_scan.sh unstaged         working-tree diff relative to the index, then every
+#                                            changed file as in the files mode
 #   sh tools/secret_scan.sh message FILE     one commit message file
 #   sh tools/secret_scan.sh history          every object any ref reaches: every commit diff
 #                                            (merge commits against their first parent), all
@@ -204,7 +205,7 @@ scan() {
 # empty ignore file so bare ":rule:line" fingerprints can never apply.
 #
 # KINDS:
-#   binary staged | unstaged | log REV-ARGS... | file PATH
+#   binary staged | log REV-ARGS... | file PATH
 #   objects history | rev OBJECT | range SPEC
 #   symlink PATH
 #   message PATH
@@ -570,13 +571,8 @@ unmapped_findings = []
 
 if kind == "binary":
     sub, *rest = args
-    if sub in ("staged", "unstaged"):
-        cmd = ["diff", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
-        if sub == "staged":
-            cmd.append("--cached")
-            top = None
-        else:
-            top = git_top(required=True)
+    if sub == "staged":
+        cmd = ["diff", "--cached", "--numstat", "-z", *diff_opts, "--ignore-submodules=all", "--diff-filter=ACMT"]
         chunks = []
         path_map = {}
         idx = 0
@@ -584,18 +580,7 @@ if kind == "binary":
             if not record:
                 continue
             path_bytes, is_binary = marked(record)
-            if sub == "staged":
-                data = run_git(["cat-file", "blob", b":0:" + path_bytes]).stdout
-            else:
-                local = os.path.join(top, os.fsdecode(path_bytes))
-                try:
-                    if os.path.islink(local):
-                        data = os.fsencode(os.readlink(local))
-                    else:
-                        with open(local, "rb") as handle:
-                            data = handle.read()
-                except OSError as error:
-                    fail(f"a changed file that git lists cannot be read ({error.strerror})")
+            data = run_git(["cat-file", "blob", b":0:" + path_bytes]).stdout
             if is_binary or needs_binary_pass(data):
                 idx += 1
                 path_map[idx] = decode_path(path_bytes)
@@ -897,7 +882,44 @@ case "$mode" in
     ;;
   unstaged)
     scan "unstaged changes" git --pre-commit .
-    scan_secondary "content Betterleaks skips as binary" binary unstaged
+    # Betterleaks diffs against a copy of the index whose mtime is the copy time, so git (stat
+    # compared in whole seconds) misses a same-size rewrite made in the second the file was staged.
+    # The index here still marks such an entry racy and git lists the file, so every listed file
+    # also goes through the files mode, one Betterleaks run per file with its own path.
+    top=$(g rev-parse --show-toplevel)
+    python3 -I -B -c '
+import os, subprocess, sys
+
+script, top = sys.argv[1:]
+
+def fail(why):
+    sys.stderr.write(f"secret_scan: changed working-tree files: {why}; nothing was passed as clean\n")
+    sys.exit(1)
+
+listing = subprocess.run(
+    ["git", "--no-replace-objects", "diff", "--numstat", "-z", "--no-renames", "--no-relative",
+     "--no-textconv", "--no-ext-diff", "--ignore-submodules=all", "--diff-filter=ACMT"],
+    stdout=subprocess.PIPE,
+)
+if listing.returncode != 0:
+    fail(f"git diff exited {listing.returncode}")
+paths = []
+for record in listing.stdout.split(b"\0"):
+    if not record:
+        continue
+    fields = record.split(b"\t", 2)
+    if len(fields) != 3:
+        fail("git diff --numstat output did not parse")
+    path = os.path.join(top, os.fsdecode(fields[2]))
+    if not (os.path.islink(path) or os.path.isfile(path)):
+        fail("a changed file that git lists cannot be read")
+    paths.append(path)
+rc = 0
+for start in range(0, len(paths), 200):
+    batch = subprocess.run(["sh", script, "files", *paths[start : start + 200]])
+    rc = rc or batch.returncode
+sys.exit(rc)
+' "$here/$(basename "$0")" "$top"
     ;;
   message)
     scan_secondary "commit message" message "$2"

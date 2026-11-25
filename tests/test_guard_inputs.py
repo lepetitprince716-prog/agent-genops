@@ -749,7 +749,7 @@ class ImageAndBinaryTests(unittest.TestCase):
         env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
         scanned = self.repo.run("sh", "tools/secret_scan.sh", "unstaged", env=env)
         self.assertEqual(scanned.returncode, 1, combined(scanned))
-        self.assertIn("secret_scan: binary content:", combined(scanned))
+        self.assertIn("secret_scan: changed working-tree files:", combined(scanned))
         self.assertIn("nothing was passed as clean", combined(scanned))
 
     def test_real_images_stay_clean(self) -> None:
