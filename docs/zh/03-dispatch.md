@@ -39,7 +39,7 @@
 | plan-reviewer | Opus 5.5 / medium，只读 | 草案计划的独立评审：漏项、没核实的假设、难点，带 `file:line` | 写代码、改文件 |
 | fact-checker | Sonnet 5.5，只读 | 提交或写总结之前，核对「代码做了什么」「测试过没过」「库支不支持」这类说法 | 自己下结论 |
 
-现成的定义在 [`templates/agents/`](../../templates/agents/)。
+现成的定义在 [`templates/agents/`](../../templates/agents/)。用 Claude Code 以外的 agent 时，看那里的 [README](../../templates/agents/README.md)，每个角色配多大的模型都写在表里。
 
 5. **Haiku 的结果，主会话用之前一律核对；每个 Haiku 任务包的上下文控制在约 200K token 以内。**
    理由：Haiku 在 200K 附近会压缩上下文，API 计费下超过 100K 的提示价格是五倍（2026-10-09）。2026-10-19，一个 Haiku subagent 复制约 20,000 个 base64 字符，连续三次都只复制了 1,643 个。现在这种载荷由主会话自己分块推送，每块校验哈希。

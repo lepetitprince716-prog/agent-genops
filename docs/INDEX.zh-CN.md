@@ -65,7 +65,7 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 
 [templates/](../templates/README.md) 里是复制后填空即用的表单：任务包、交接、记忆条目、出图单、smoke 核对、模型卡、A/B 记录、提示词规则本、事故转规则、`LOCAL.example.md`、`fleet.example.yaml`。
 
-`templates/agents/` 是派工分档对应的七个 subagent：Haiku、Sonnet、Sonnet max、Opus medium、Opus high、计划审阅、事实核查。它们是 Claude Code 格式，插件不会自动安装，复制到 `~/.claude/agents/` 即可。用其他 agent 时，把各档对应到你自己最便宜、默认、最强的模型。
+`templates/agents/` 是派工分档对应的七个 worker 角色，从 `haiku-worker` 到 `fact-checker`。每个文件上面是 Claude Code 的 front matter，下面是哪家 agent 都能用的正文指令。用 Claude Code 时复制到 `~/.claude/agents/`，插件不会自动安装；用别的 agent 时，按[那里的 README](../templates/agents/README.md) 给每个角色配模型大小、推理强度和权限。
 
 [workflows/](../workflows/README.md) 是三张最小的 SDXL 工作流：文生图、高清修复、双可选 LoRA。每个目录含手写输入图、`cwc compile` 生成的画布 `*.ui.json` 与 API 版 `*.api.json`，以及写明模型来源、许可和测试情况的 README。每个文件都要过 `tools/workflow_policy.py` 的白名单。
 
@@ -109,7 +109,7 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 |---|---|
 | 弄懂这套方法 | [理念](zh/00-philosophy.md)，再按 [README 的环境表](../README.zh-CN.md#仓库里有什么)往下读 |
 | 让自己的 agent 用上 | [README · 使用 skill](../README.zh-CN.md#使用-skill)，然后填 `LOCAL.md` |
-| 配分档 subagent | `templates/agents/`，配合[派工](zh/03-dispatch.md) |
+| 配分档 worker | [templates/agents/](../templates/agents/README.md)，配合[派工](zh/03-dispatch.md) |
 | 直接拖进 ComfyUI 出图 | `workflows/` 里的 `*.ui.json` |
 | 把 API 图变成整齐画布 | [cwc 教程](../cwc/showcase/README.md) |
 | 排查远程 Windows 机器 | [rdbg](../rdbg/README.md)，配合[调试](zh/05-debugging.md) |

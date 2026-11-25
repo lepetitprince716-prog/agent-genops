@@ -162,7 +162,7 @@ skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一
 
 1. 安装提示需要的话运行 `/reload-plugins`，或者开一个新会话。然后问 agent 它有哪些 skill，列表里应该有 `agent-genops`。
 2. 把 [templates/LOCAL.example.md](templates/LOCAL.example.md) 复制到 `~/.config/agent-genops/LOCAL.md`，填上你的机器上由什么担任各个角色。这个文件只留在你的机器上。
-3. 可选：把 [templates/agents/](templates/agents/) 里的文件复制到 `~/.claude/agents/`，skill 派工用的几档 subagent 就有了。插件不会自动安装它们。
+3. 可选：把 [templates/agents/](templates/agents/) 里的文件复制到 `~/.claude/agents/`，skill 派工用的几档 subagent 就有了。插件不会自动安装它们。用别的 agent 时，按 [templates/agents/README.md](templates/agents/README.md) 给每个角色建 worker。
 4. 试一句：「用 agent-genops 给我 http://127.0.0.1:8188 上的 ComfyUI 规划一次 smoke 出图。」
 
 <details>
@@ -200,7 +200,7 @@ ln -s ~/agent-genops/skills/agent-genops ~/.claude/skills/agent-genops
 | 提交前核对关于代码、测试、库的说法 | fact checker |
 | 用其他厂商模型跑并行任务 | herdr worker（Cursor Composer、DeepSeek） |
 
-一条线做到底的活留在主会话里。详见[派工](docs/zh/03-dispatch.md)。这些档位名对应 [templates/agents/](templates/agents/) 里的 subagent 定义；用别的 agent 时，换成你手上最便宜、默认和最强的模型。
+一条线做到底的活留在主会话里。详见[派工](docs/zh/03-dispatch.md)。这些档位名对应 [templates/agents/](templates/agents/) 里的 worker 角色，那里的 README 写了每个角色在任何 agent 里该配小、中还是大模型。
 
 ## 参考环境
 

@@ -29,8 +29,8 @@ model and effort, use exactly that; if no definition exists, copy a sibling defi
 | Review a draft plan before leaving plan mode | plan-reviewer |
 | Verify claims before a commit or a user-facing summary | fact-checker |
 
-The tier names are the agent files in the repo's `templates/agents/`. With another agent, map them
-to your cheapest, default and strongest model.
+The tier names are the agent files in the repo's `templates/agents/`. With another agent, its
+README gives each role a small, mid or large model, an effort and an access level.
 
 Never:
 - Haiku: coding chains, design, debugging, security-adjacent work, web research.

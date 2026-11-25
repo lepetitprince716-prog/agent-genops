@@ -63,7 +63,7 @@ Docs and skill references cover the same ground. When one side changes, check th
 
 [templates/](../templates/README.md) holds forms to copy and fill in: task packet, handoff, memory entry, run order, smoke check, model card, A/B write-up, prompt rulebook, incident rule, `LOCAL.example.md` and `fleet.example.yaml`.
 
-`templates/agents/` holds the seven subagents behind the dispatch tiers: Haiku, Sonnet, Sonnet max, Opus medium, Opus high, plan reviewer and fact checker. They are in Claude Code's format and the plugin does not install them; copy them to `~/.claude/agents/`. With another agent, map each tier to your cheapest, default and strongest model.
+`templates/agents/` holds the seven worker roles behind the dispatch tiers, from `haiku-worker` to `fact-checker`. Each file is Claude Code front matter over plain instructions that any agent can use. In Claude Code, copy them to `~/.claude/agents/`; the plugin does not install them. For other agents, [its README](../templates/agents/README.md) gives each role a model size, an effort and an access level.
 
 [workflows/](../workflows/README.md) holds three minimal SDXL workflows: text to image, hires fix, and two optional LoRAs. Each folder has the hand-written input graph, the canvas `*.ui.json` and API prompt `*.api.json` that `cwc compile` produced, and a README with the model source, licence and what was tested. Every file passes the `tools/workflow_policy.py` allowlist.
 
@@ -107,7 +107,7 @@ The guard covers every folder and runs on every commit and push.
 |---|---|
 | Understand the method | [Philosophy](en/00-philosophy.md), then the [setup table in the README](../README.md#what-is-inside) |
 | Give your agent the method | [README · Use the skill](../README.md#use-the-skill), then fill in `LOCAL.md` |
-| Set up tiered subagents | `templates/agents/`, with [Dispatch](en/03-dispatch.md) |
+| Set up tiered workers | [templates/agents/](../templates/agents/README.md), with [Dispatch](en/03-dispatch.md) |
 | Drag a workflow into ComfyUI | `*.ui.json` in `workflows/` |
 | Turn an API graph into a clean canvas | [cwc tutorial](../cwc/showcase/README.md) |
 | Debug a remote Windows box | [rdbg](../rdbg/README.md), with [Debugging](en/05-debugging.md) |

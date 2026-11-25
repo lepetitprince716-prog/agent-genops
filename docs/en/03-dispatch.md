@@ -48,7 +48,9 @@ definition matches, add one (copy a sibling, change name and effort) and wait fo
 | plan-reviewer | Opus 5.5 / medium, read-only | independent review of a draft plan: gaps, unverified assumptions, hard points, with `file:line` | writing code or editing files |
 | fact-checker | Sonnet 5.5, read-only | claims about what code does, what tests passed, what a library supports, before a commit or a summary | making claims of its own |
 
-Ready-made definitions are in [`templates/agents/`](../../templates/agents/).
+Ready-made definitions are in [`templates/agents/`](../../templates/agents/). Its
+[README](../../templates/agents/README.md) maps each role to a model size for agents other than
+Claude Code.
 
 5. **Haiku output is always verified by the root before use, and each Haiku packet stays under about 200K tokens of context.**
    Why: Haiku compacts near 200K, and prompts over 100K cost five times as much on API billing
