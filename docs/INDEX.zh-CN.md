@@ -2,9 +2,11 @@
 
 [English README](../README.md) · [中文 README](../README.zh-CN.md)
 
-Agents plan, dispatch, verify and record. ComfyUI and cloud services only render.
+Agent runs, ComfyUI generates, you enjoy.
 
-agent 管事，后端只出图。仓库分五块：
+躺好收菜。
+
+仓库分五块：
 
 | 板块 | 解决什么问题 | 在哪里 | 从哪个文件读起 |
 |---|---|---|---|
