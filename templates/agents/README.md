@@ -33,7 +33,8 @@ For each role, make a worker, subagent or custom mode in your agent:
 2. Use everything under the front matter as its instructions.
 3. Pick the model from the Model column and set the effort if your agent has that setting.
 4. Give it only the access in the Access column. `plan-reviewer` and `fact-checker` must stay
-   read-only.
+   read-only (their `shell` access is only for read-only checks such as running tests or inspecting
+   git, enforced by their instructions).
 
 With two models, the small rung gets the cheaper one and mid and large share the stronger one.
 With one model, keep all seven roles; they still differ in effort, access and instructions. The
@@ -59,18 +60,18 @@ ladder's rule still holds: pick the lowest rung whose failure the root can catch
 
 角色名沿用参考环境的叫法，那里的小、中、大分别是 Claude Haiku、Sonnet、Opus 5.5。skill 和说明书按这些名字派活，换了 agent 也别改名。
 
-## Claude Code
+### 在 Claude Code 中使用
 
 把文件复制到 `~/.claude/agents/`（或项目里的 `.claude/agents/`），开一个新会话。先确认每个 `model` 字段写的模型你的账号能用，不能用就改掉。
 
-## 其他 agent
+### 其他 agent
 
 在你的 agent 里给每个角色建一个 worker、subagent 或自定义模式：
 
 1. 名字用角色名。
 2. front matter 下面的全部正文作为它的指令。
 3. 按「模型」一列挑模型；agent 有推理强度设置的话，也按表设好。
-4. 只给「权限」一列里的权限。`plan-reviewer` 和 `fact-checker` 必须只读。
+4. 只给「权限」一列里的权限。`plan-reviewer` 和 `fact-checker` 必须只读（表里的 `shell` 仅用于跑测试、查 git 等只读核验，由正文指令约束）。
 
 只有两个模型时，小档用便宜的那个，中档和大档共用强的那个。只有一个模型时，七个角色照样都建，它们在推理强度、权限和指令上仍然不同。分档的规矩不变：挑主会话还能兜住失败的最低一档。
 

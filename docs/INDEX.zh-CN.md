@@ -75,11 +75,11 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 
 | 工具 | 做什么 | 语言 | 子命令 | 读起 |
 |---|---|---|---|---|
-| `cwc` | 把 ComfyUI API 图编译成分组、排版、原生 reroute 走线的画布，并验证导出结果与输入等价 | Python，仅标准库 | `compile`、`render`、`guide`、`presets`、`node`、`learn` | [README](../cwc/README.md)、[ARCHITECTURE](../cwc/docs/ARCHITECTURE.md) |
+| `cwc` | 把 ComfyUI API 图编译成分组、排版、原生 reroute 走线的画布，并验证导出结果与输入等价 | Python，仅标准库 | `compile`、`render`、`guide`、`presets`、`node`、`learn` | [README](../cwc/README.zh-CN.md)、[ARCHITECTURE](../cwc/docs/ARCHITECTURE.md) |
 | `rdbg` | 经系统 `ssh` 在 Windows 主机上跑 PowerShell，不受本地引号和命令行长度影响 | Rust | `ps`、`doctor`、`comfy` | [README](../rdbg/README.md) |
 | `artfetch` | 多来源检索插画，按完成度过滤，跨平台去重，整理成 1536 px JPEG 数据集 | Rust | `status`、`resolve`、`probe`、`fetch`、`stage` | [README](../artfetch/README.md) |
 
-`cwc` 的流水线是 normalize、instantiate、annotate、layout、route、verify、emit，每一步对应 `cwc/src/cwc/` 下一个目录。`cwc/tools/oracle/` 用真实 ComfyUI 前端测量节点尺寸和导出结果，作为测试基准；`cwc/showcase/` 有三张教学示例；`cwc/skills/` 是教 agent 写 API 图的 skill。
+`cwc` 的流水线有两条入口：手写输入图走 normalize、instantiate，已有画布或 PNG 走 ingest，汇合后经过 annotate、layout、route、notes、verify、emit，每一步对应 `cwc/src/cwc/` 下一个目录。`cwc/tools/oracle/` 用真实 ComfyUI 前端测量节点尺寸和导出结果，作为测试基准；`cwc/showcase/` 有三张教学示例；`cwc/skills/` 是教 agent 写 API 图的 skill。
 
 ## 护栏
 
@@ -91,7 +91,7 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 | `check` | `./check changed` 平时用，扫改动并按路径选测试；`./check release` 由维护者在推送前跑，只读 |
 | `.githooks/` | pre-commit、commit-msg、pre-push；克隆后运行 `git config core.hooksPath .githooks` 打开 |
 | `tests/` | 护栏自身的测试 |
-| `.github/workflows/` | `privacy.yml` 每次推送都跑；三个工具的 CI 只在各自目录改动时跑；`cwc-sweeps.yml` 手动触发 |
+| `.github/workflows/` | `privacy.yml` 在每次推送和 pull request 都跑；三个工具的 CI 在推送到 `main` 和 pull request 且各自目录改动时跑；`cwc-sweeps.yml` 手动触发 |
 
 `tools/` 里的 `kernel_classes.py` 和 `gemm_probe.py` 是[性能](zh/07-performance.md)篇用到的探针，与护栏无关。
 
@@ -99,7 +99,7 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 
 说明书写给人，skill 写给 agent，讲的是同一套规则。skill 读 `LOCAL.md` 认识这台机器，派工时用 `templates/` 的任务包和 subagent，出图时用 `workflows/` 的标准图。
 
-三个工具各管一个环节：`cwc` 把 agent 写的 API 图变成人看得懂的画布，`workflows/` 就是它的产物；`rdbg` 对付[调试](zh/05-debugging.md)篇里远程 Windows 出图机的 PowerShell 问题；`artfetch` 准备模型上线要用的训练数据。
+三个工具各管一个环节：`cwc` 把 agent 写的 API 图变成人看得懂的画布，`workflows/` 就是它的产物；`rdbg` 对付[调试](zh/05-debugging.md)篇里远程 Windows 出图机的 PowerShell 问题；`artfetch` 准备 LoRA 或风格训练要用的插画数据集。
 
 护栏覆盖所有目录，每次提交和推送都要过一遍。
 
@@ -111,7 +111,7 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 | 让自己的 agent 用上 | [README · 使用 skill](../README.zh-CN.md#使用-skill)，然后填 `LOCAL.md` |
 | 配分档 worker | [templates/agents/](../templates/agents/README.md)，配合[派工](zh/03-dispatch.md) |
 | 直接拖进 ComfyUI 出图 | `workflows/` 里的 `*.ui.json` |
-| 把 API 图变成整齐画布 | [cwc 教程](../cwc/showcase/README.md) |
+| 把 API 图变成整齐画布 | [cwc 教程](../cwc/showcase/README.zh-CN.md) |
 | 排查远程 Windows 机器 | [rdbg](../rdbg/README.md)，配合[调试](zh/05-debugging.md) |
 | 准备训练图 | [artfetch](../artfetch/README.md) |
 | 提交改动 | 打开 hook，运行 `./check changed`，见 [CONTRIBUTING](../CONTRIBUTING.md) |

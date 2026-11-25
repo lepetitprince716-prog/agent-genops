@@ -77,7 +77,7 @@ Since 2026-11-18 the three tools live here as folders of their own, each with it
 | `rdbg` | Runs PowerShell on a Windows host over the system `ssh`, free of local quoting and command-line length limits | Rust | `ps`, `doctor`, `comfy` | [README](../rdbg/README.md) |
 | `artfetch` | Searches illustrations across sources, filters by completion, deduplicates across platforms, stages 1536 px JPEG sets | Rust | `status`, `resolve`, `probe`, `fetch`, `stage` | [README](../artfetch/README.md) |
 
-The `cwc` pipeline is normalize, instantiate, annotate, layout, route, verify, emit, one folder each under `cwc/src/cwc/`. `cwc/tools/oracle/` measures node sizes and exports in a real ComfyUI frontend as the reference for the tests; `cwc/showcase/` has three worked examples; `cwc/skills/` teaches an agent to write API graphs.
+The `cwc` pipeline takes authoring JSON through normalize and instantiate, or an existing canvas/PNG through ingest, then runs annotate, layout, route, notes, verify and emit — one folder each under `cwc/src/cwc/`. `cwc/tools/oracle/` measures node sizes and exports in a real ComfyUI frontend as the reference for the tests; `cwc/showcase/` has three worked examples; `cwc/skills/` teaches an agent to write API graphs.
 
 ## Guard
 
@@ -89,7 +89,7 @@ The `cwc` pipeline is normalize, instantiate, annotate, layout, route, verify, e
 | `check` | `./check changed` while working, scans changes and runs the tests the paths select; `./check release` before publishing, read-only, maintainers only |
 | `.githooks/` | pre-commit, commit-msg, pre-push; turn on with `git config core.hooksPath .githooks` after cloning |
 | `tests/` | Tests for the guard itself |
-| `.github/workflows/` | `privacy.yml` on every push; each tool's CI when its folder changes; `cwc-sweeps.yml` on demand |
+| `.github/workflows/` | `privacy.yml` on every push and pull request; each tool's CI on pushes to `main` and pull requests when its folder changes; `cwc-sweeps.yml` on demand |
 
 `kernel_classes.py` and `gemm_probe.py` in `tools/` are probes from the [Performance](en/07-performance.md) page, unrelated to the guard.
 
@@ -97,7 +97,7 @@ The `cwc` pipeline is normalize, instantiate, annotate, layout, route, verify, e
 
 The docs are for people and the skill is for agents; both carry the same rules. The skill learns the machine from `LOCAL.md`, dispatches with the task packets and subagents in `templates/`, and renders with the graphs in `workflows/`.
 
-Each tool serves one step. `cwc` turns agent-written API graphs into canvases people can read, and `workflows/` is its output. `rdbg` handles the remote Windows render boxes in [Debugging](en/05-debugging.md). `artfetch` prepares training data for model bring-up.
+Each tool serves one step. `cwc` turns agent-written API graphs into canvases people can read, and `workflows/` is its output. `rdbg` handles the remote Windows render boxes in [Debugging](en/05-debugging.md). `artfetch` prepares training datasets for LoRA and style runs.
 
 The guard covers every folder and runs on every commit and push.
 

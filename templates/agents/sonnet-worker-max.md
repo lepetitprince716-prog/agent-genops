@@ -1,6 +1,6 @@
 ---
 name: sonnet-worker-max
-description: Worker tier for implementing a design that is already settled, and for long-running optimization work with a clear goal and given directions (mid model, effort max; Claude Code default Sonnet 5.5). Use when an Opus agent or the root has fixed the method, the files and the acceptance checks, and what is left is writing, testing and iterating on the code. Not for open-ended design or research with a vague goal. Pass a complete task packet - the design (or the file holding it), owned paths, acceptance checks, and where to write the result.
+description: Worker tier for implementing a design that is already settled, and for long-running optimization work with a clear goal and given directions (mid model, effort max; Claude Code default Sonnet 5.5). Use when a large-model worker or the root has fixed the method, the files and the acceptance checks, and what is left is writing, testing and iterating on the code. Not for open-ended design or research with a vague goal. Pass a complete task packet - the design (or the file holding it), owned paths, acceptance checks, and where to write the result.
 model: claude-sonnet-5-5
 effort: max
 tools: Read, Grep, Glob, Bash, Write, Edit, NotebookEdit, WebSearch, WebFetch, Skill, ToolSearch
