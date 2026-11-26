@@ -111,7 +111,7 @@ Your own patterns (names, handles, machine names) live outside the repository in
 | Mode | Scans |
 | --- | --- |
 | `staged` | the index; content git treats as binary (a NUL byte, non-UTF-8 bytes, PNG, or `binary` or `-diff` in any attributes file git reads: `.gitattributes`, `.git/info/attributes`, the user's or the system's), which Betterleaks skips, is read again with raw bytes, printable-byte isolation, and decoded PNG text chunks (`tEXt`/`zTXt`/`iTXt`), giving each finding a stable per-file fingerprint (`path:rule:line`, or `path#png-text:rule:line`); `rev`, `range` and `history` do the same for the blobs their commits add or change with commit-scoped fingerprints (`commit:path:rule:line`), and `files` does the same for named files |
-| `unstaged` | working-tree changes relative to the index, with binary content read again as for `staged` |
+| `unstaged` | working-tree changes relative to the index; every changed file then goes through the `files` mode as well, because Betterleaks diffs against a copy of the index that can miss a same-size rewrite made in the second the file was staged |
 | `message FILE` | one commit message file (inline `betterleaks:allow` works unless `SECRET_SCAN_IGNORE_ALLOW=1`; `.betterleaksignore` is not applied) |
 | `history` | every object any ref reaches: each commit diff (a merge against its first parent), all commit messages (`.git/commit`), every tag object layer by layer (`.git/tag`), and trees or blobs that a ref points at directly (`.git/blob` or tree path) |
 | `rev OBJECT` | one object and what it reaches, as for `privacy_scan.py --rev` |
@@ -307,7 +307,7 @@ CI 在每次推送和每个 pull request 时运行 `--no-private --tracked --his
 | 模式 | 扫描对象 |
 | --- | --- |
 | `staged` | 暂存区；git 当作二进制的内容（含 NUL 字节、非合法 UTF-8 字节、PNG，或 git 读到的任一属性文件里标了 `binary`、`-diff`：`.gitattributes`、`.git/info/attributes`、用户级或系统级的属性文件）Betterleaks 会跳过，这部分会按原始字节、隔离非可打印字节后的视图和解码后的 PNG 文本块（`tEXt`/`zTXt`/`iTXt`）再读一遍，每条命中带稳定的按文件指纹（`路径:规则:行号` 或 `路径#png-text:规则:行号`）；`rev`、`range`、`history` 对各自提交新增或改动的 blob 同样处理并带上提交哈希（`提交:路径:规则:行号`），`files` 对指定文件同样处理 |
-| `unstaged` | 工作区里相对暂存区的改动，二进制内容同 `staged` 再读一遍 |
+| `unstaged` | 工作区里相对暂存区的改动；每个改动文件还会再按 `files` 模式扫一遍，因为 Betterleaks 比对的是暂存区的副本，文件在暂存的同一秒内被改写成同样大小时它会漏掉 |
 | `message FILE` | 一个提交说明文件（除非设了 `SECRET_SCAN_IGNORE_ALLOW=1`，否则认同行 `betterleaks:allow`；不读 `.betterleaksignore`） |
 | `history` | 所有 ref 可达的对象：每个提交的 diff（合并提交对照第一个父提交）、全部提交说明（`.git/commit`）、逐层展开的每个标签对象（`.git/tag`），以及 ref 直接指向的 tree 或 blob（`.git/blob` 或 tree 内路径） |
 | `rev OBJECT` | 一个对象和它能到达的一切，与 `privacy_scan.py --rev` 一致 |
