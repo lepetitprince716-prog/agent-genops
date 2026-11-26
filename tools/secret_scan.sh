@@ -218,9 +218,9 @@ scan_secondary() {
   : >"$out_file"
   rc=0
   python3 -I -B -c '
-import bisect, json, os, struct, subprocess, sys, zlib
+import bisect, json, os, struct, subprocess, sys, tempfile, zlib
 
-config_path, empty_dir, empty_ignore, ignore_path, ignore_allow_flag, out_file, kind, *args = sys.argv[1:]
+config_path, empty_dir, empty_ignore, ignore_path, ignore_allow_flag, out_file, feed_dir, kind, *args = sys.argv[1:]
 ignore_allow = ignore_allow_flag == "1"
 git_cmd = ["git", "--no-replace-objects"]
 diff_opts = ["--no-renames", "--no-relative", "--no-textconv", "--no-ext-diff"]
@@ -235,8 +235,26 @@ def fail(why, code=1):
     sys.stderr.write(f"secret_scan: {prefix}: {why}; nothing was passed as clean\n")
     sys.exit(code)
 
+def run_child(cmd, data=None, **kwargs):
+    # Input goes through an unlinked file, never a pipe: writing a pipe while the child fills
+    # its output pipe deadlocks once the kernel shrinks pipes to PIPE_BUF and poll still
+    # reports a full pipe writable (macOS under pipe-memory pressure).
+    if data is None:
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    feed = None
+    try:
+        feed = tempfile.TemporaryFile(dir=feed_dir)
+        feed.write(data)
+        feed.seek(0)
+    except OSError as error:
+        if feed is not None:
+            feed.close()
+        fail(f"cannot stage the input for {cmd[0]} ({error.strerror})")
+    with feed:
+        return subprocess.run(cmd, stdin=feed, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+
 def run_git(gargs, data=None, allow_fail=False):
-    proc = subprocess.run(git_cmd + gargs, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = run_child(git_cmd + gargs, data)
     if proc.returncode != 0 and not allow_fail:
         fail(f"git {gargs[0]} exited {proc.returncode}")
     return proc
@@ -437,7 +455,7 @@ def run_bl_batch(chunks, allow_inline):
         if not allow_inline:
             cmd.append("--ignore-gitleaks-allow")
         env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE")}
-        proc = subprocess.run(cmd, input=bytes(buf), cwd=empty_dir, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = run_child(cmd, buf, cwd=empty_dir, env=env)
         if proc.returncode not in (0, 1):
             fail(f"betterleaks stdin exited {proc.returncode}")
         if proc.returncode == 0:
@@ -819,7 +837,7 @@ if kept_lines:
     with open(out_file, "w", encoding="utf-8") as fh:
         fh.write("\n".join(kept_lines) + "\n")
     sys.exit(1)
-' "$config" "$work/sec-empty" "$work/sec-empty.ignore" "$ignore_path" "${SECRET_SCAN_IGNORE_ALLOW:-0}" "$out_file" "$@" || rc=$?
+' "$config" "$work/sec-empty" "$work/sec-empty.ignore" "$ignore_path" "${SECRET_SCAN_IGNORE_ALLOW:-0}" "$out_file" "$work" "$@" || rc=$?
   if [ "$rc" -ne 0 ]; then
     if [ -s "$out_file" ]; then
       echo "secret_scan: $label: betterleaks exited $rc" >&2
