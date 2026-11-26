@@ -7,6 +7,7 @@ Copy a template, fill the angle-bracket placeholders, delete what does not apply
 | File | Use it when | Explained in |
 |---|---|---|
 | [task-packet.md](task-packet.md) | Handing a bounded job to a subagent or an external worker | [Dispatch](../docs/en/03-dispatch.md) |
+| [cross-model-review.md](cross-model-review.md) | Running bounded Gate-1 (`Subtract-Before-Add` + invariant falsification) and Gate-2 (`Spec compliance` + `Anti-Gaslighting` test audit) reviews on a second model family | [Dispatch](../docs/en/03-dispatch.md) |
 | [handoff.md](handoff.md) | Ending a session and starting a successor | [Continuity](../docs/en/12-continuity.md) |
 | [memory-entry.md](memory-entry.md) | Recording one fact an agent should remember | [Continuity](../docs/en/12-continuity.md) |
 | [run-order.json](run-order.json) | Writing down a render order before probing and smoking it | [Render discipline](../docs/en/06-render-discipline.md) |
@@ -32,6 +33,7 @@ role a model size, an effort and an access level.
 | 文件 | 什么时候用 | 说明在哪 |
 |---|---|---|
 | [task-packet.md](task-packet.md) | 把一件边界清楚的活交给 subagent 或外部 worker | [派工](../docs/zh/03-dispatch.md) |
+| [cross-model-review.md](cross-model-review.md) | 用第二模型家族做有边界的 Gate-1（`Subtract-Before-Add` 删减与状态不变量证伪）和 Gate-2（规格核对与防凑绿测试审计）只读把关 | [派工](../docs/zh/03-dispatch.md) |
 | [handoff.md](handoff.md) | 结束一个会话、交给接手的会话 | [记忆与交接](../docs/zh/12-continuity.md) |
 | [memory-entry.md](memory-entry.md) | 记下一条 agent 以后要记得的事实 | [记忆与交接](../docs/zh/12-continuity.md) |
 | [run-order.json](run-order.json) | 探测和 smoke 之前，先把出图单写下来 | [出图纪律](../docs/zh/06-render-discipline.md) |

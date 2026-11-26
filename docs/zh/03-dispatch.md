@@ -142,6 +142,8 @@ return: 把 RESULT（≤30 行：状态、路径、退出码、证据、风险�
     理由：仓库主人的决定。分三档：跳过（改一个字符串、一个参数、修一个已经定位的 bug）；轻量（单文件、不加依赖：快搜一次，一行汇报，然后动手）；完整（新模块、新依赖或架构变化）。拿不准就往重里走。
 31. **完整档要给候选打分，写代码前先把对比表拿出来。**
     理由：仓库主人的决定。总分 = 契合度 ×3 + 维护 ×2 + 依赖分量 ×2 + 可读性 ×2 + 成熟度 ×1，满分 50。契合度低于 3 直接淘汰。star 数不算分。许可证有问题一票否决，被否决候选的 GPL/AGPL 源码不读进上下文。
+32. **多文件、内核或运行时改动，用 [`templates/cross-model-review.md`](../../templates/cross-model-review.md) 让第二模型家族做有边界的 Gate-1（`Subtract-Before-Add` 先删后加与状态转移证伪）和 Gate-2（规格核对与防凑绿测试审计）。**
+    理由：开放式评审容易引出主观加戏，限定边界的只读证伪能在写代码前砍掉伪需求。2026-11-25 对照 `ComfyUI 0.46.0` 源码跑 Gate-1 审查，动手前就证伪并砍掉了三项投机 CUDA 方案：按步切 `nvfp4` 到 `INT8` 动态换权重（前段 `E2M1` 轨迹误差会向前积分，加 94 ms 换权开销后总收益不到 8%）、动态显存 DiT 上套 `CUDA Graphs`（上游已有 `malloc_graph` 且宿主间隙约 1%，私有图池在 16 GB 卡上还会跟 `comfy-aimdo` 冲突），以及低于 4MP 的双机序列并行（单次前向 4 到 6 GB 全互换通信，不如零通信的数据并行按种子分片）。
 
 盘点时的安装分档：项目内、可回退的安装直接装，事后说明；全局包给出准确命令然后停下；涉及凭据的，只写变量名和去哪里拿，不猜。
 
@@ -169,6 +171,7 @@ return: 把 RESULT（≤30 行：状态、路径、退出码、证据、风险�
 - 2026-10-08：四个 Haiku 调研 lane 三个跑偏。对应规则 7。
 - 2026-10-15：workflow 的 agent 继承了最强模型，烧掉额度。对应规则 9。
 - 2026-10-19：Haiku worker 连续三次截断 base64 载荷。对应规则 5。
+- 2026-11-25：跨模型 Gate-1 有界评审在写代码前证伪了三项投机 CUDA 方案。对应规则 32。
 - 纯测试 lane（日期没记）：两个同家族评审放过了六处弱断言。对应规则 23。
 
 ## 试过又放弃的
@@ -185,4 +188,4 @@ return: 把 RESULT（≤30 行：状态、路径、退出码、证据、风险�
 - [12-continuity.md](12-continuity.md)：交接、记忆、共享任务库。
 - [06-render-discipline.md](06-render-discipline.md)：runner lane 的批量前先 smoke。
 - [11-safety-and-privacy.md](11-safety-and-privacy.md)：worker 不能绕开的闸门。
-- [`templates/task-packet.md`](../../templates/task-packet.md)、[`templates/agents/`](../../templates/agents/)。
+- [`templates/task-packet.md`](../../templates/task-packet.md)、[`templates/cross-model-review.md`](../../templates/cross-model-review.md)、[`templates/agents/`](../../templates/agents/)。

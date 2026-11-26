@@ -29,7 +29,7 @@ Read when: proposing or testing a speed-up (quantization, attention backend, lau
 1. Copy `templates/ab-test.md`. Fill question, variable, fixed settings, arms, seeds.
 2. Probe the box: empty queue, enough VRAM, owner not gaming.
 3. Warm each arm once; discard.
-4. Run A-B-A (or ABBA). Record sampling time and wall time separately.
+4. Run A-B-A (or ABBA) with `tools/comfy_ab_harness.py --strict-cache` (`--a2-seed-offset 100000` in `aba` mode so `A_2` cannot hit ComfyUI's `0.07 s` sampler cache and asymmetric encoder caching fails closed). Record sampling time and wall time separately.
 5. Compute median, spread, ratio. Compare against measured seed variance.
 6. Quality: pixel difference and composition check, then one review page for the owner.
 7. Write the verdict: adopted / rejected / not resolved, with the owner's quality call.
@@ -74,8 +74,14 @@ Implications: precision reduction is the GEMM lever; attention backends matter m
 | Video few-step distill LoRA, 8 steps | 1.5x, motion stalls | Rejected 2026-10-21 (single seed) |
 | Qwen-Image few-step distill / self-baked mxfp8 | Not built | Rejected on payback |
 | Box B LoRA training: GC off, batch 2, compile, full AdamW | Slower or neutral | Rejected |
+| Unified single-port hot-swap `--cache-ram 4.0 8.0 --reserve-vram 2.5` (Box A, `0.46.0`, 2026-11-25) | 4 model families (`8-13 GiB` each) stay in pinned DDR5 (`53.54 GiB/s` vs `4.39 GiB/s` pageable, `21.9 GiB` free); switch overhead `0.15-0.61 s` vs `14.13 s` bare `--cache-ram` / `23.2-29.5 s` multi-port `/free` | Adopted |
+| Stock `LoraLoaderModelOnly` vs Python BF16 bypass on `MOSS-Image` INT8 (Box A, `0.46.0`, 2026-11-25) | Stock GPU requant switches in `+0.50-0.67 s` (`1.52 s` warm 8-step `1024x1024`, zero leak) vs `2.84 s` (`+165 ms/step`) for BF16 bypass (`1.003-1.117x` sharper) | Stock for speed; bypass for zero-requant fidelity only |
+| Calibrated static `nvfp4` (`CentriQ + ConvRot256 + SVD-64`) & step-split `nvfp4 -> INT8` (2026-11-25) | `0.117` single-layer `relL2` vs `0.0125` INT8; early `E2M1` ODE drift persists into late INT8 steps | Rejected; use 12-step OPD LoRA + 7-step refine (`10.22 -> 6.10 s`) |
+| `FLUX 3 Klein` `16px` ROI crop (`<45%` area, `<=70%` width guard, Box A, `0.46.0`, 2026-11-25) | `6.49 -> 1.77-2.61 s` (`2.48-3.66x`), `0.00` MAE outside ROI, `1.08x` sharpness; beats `refresh_stride=2` KV reuse (`6.56 -> 5.81 s`, `1.13x`) and unrefreshed KV (`0.924` sharpness) | Adopted opt-in (localized edits) |
+| `isnet-anime.onnx` (`1024x1024`, Box A, 2026-11-25) | Ryzen 9800X3D CPU `0.314 s` vs warm CUDA `0.052 s` (`1536 MiB` arena cap; `512 MiB` OOMs at `Conv_83`), `6.27 s` cold cuDNN init | CPU for 1-shot CLI; CUDA for resident daemons |
+| `UMA Box` (`GB10 SM 12.1`, `221-237 GB/s` BW, `0.46.0`, 2026-11-25) | `FP8 e4m3fn` (`185 TFLOPS`, `42`-block `relL2 = 0.0128`) over `NVFP4` (`250 TFLOPS`, `1.35x` compute for `9x` noise); `0` native `sm_121` SASS cubins in `comfy-kitchen 0.2.41` (`1,615` `sm_120f` PTX JIT, persist `~/.nv/ComputeCache`); load via `MAP_SHARED \| PROT_READ` (`tools/safetensors_prot_read.py`) | Adopted |
 
-Box B numbers were measured on 0.27.1 and not re-measured on 0.42.1, except fp16 accumulation and the 2026-10-29 rows. Box A kernel and quantization numbers were measured on 0.33.1.
+Box B numbers were measured on 0.27.1 and not re-measured on 0.42.1, except fp16 accumulation and the 2026-10-29 rows. Box A 2026-09 numbers were measured on 0.33.1; 2026-11-25 Box A and `UMA Box` re-measurements ran on `ComfyUI 0.46.0` (`torch 2.10.0+cu130`, `comfy-kitchen 0.2.41`, `comfy-aimdo 0.6.0`).
 
 ## Quantization checklist
 

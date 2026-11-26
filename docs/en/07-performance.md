@@ -3,9 +3,11 @@ English | [中文](../zh/07-performance.md)
 # Performance: measuring and choosing speed-ups
 
 This page answers: how do I tell whether a speed-up is real, where does render time actually
-go, and which quantization and distillation choices held up on 16 GB consumer cards? Every
-number carries its date, box and ComfyUI version. Numbers from 0.27.1 or 0.33.1 were not
-re-measured on 0.42.1, which both render boxes run since 2026-10-20, unless a re-measure is noted.
+go, and which quantization and distillation choices held up on 16 GB consumer cards and a 128 GB
+unified-memory node? Every number carries its date, box and ComfyUI version. Numbers from 0.27.1
+or 0.33.1 were not re-measured on 0.42.1 (which both render boxes ran from 2026-10-20) unless a
+re-measure is noted; the 2026-11-25 re-measurements ran on `ComfyUI 0.46.0` (`torch 2.10.0+cu130`,
+`comfy-kitchen 0.2.41`, `comfy-aimdo 0.6.0`).
 
 > **TL;DR**
 > - Measure before tuning. On the quality line every intuitive cause (network, model loading, polling) was wrong; detailer resampling was the cost.
@@ -119,8 +121,10 @@ nvfp4 0.071 ms (4.38x, relative error 0.134).
    strength 0.001, never 0.
 4. Seeds: at least 3. Same seeds in every arm.
 5. Warm up each arm once; discard that run.
-6. Run A-B-A (or ABBA) in one time window. Record per-image sampling time and wall time
-   separately.
+6. Run A-B-A (or ABBA) in one time window with [`tools/comfy_ab_harness.py`](../../tools/comfy_ab_harness.py)
+   and `--strict-cache` (`--a2-seed-offset 100000` in `aba` mode so `A_2` never hits ComfyUI's
+   `0.07 s` sampler cache and asymmetric `CLIPTextEncode` caching fails closed). Record per-image
+   sampling time and wall time separately.
 7. Report the median and the spread. If the difference is inside the measured seed variance,
    the verdict is "not resolved".
 8. Quality: compare pixel difference and composition, then put the images in front of me.
@@ -272,6 +276,90 @@ run the same day agreed within 2.4%, with the same kernels and errors.
 - Not tried in a render: the Triton kernel for the three K=3072 layers. Estimated at about 3 s per
   MOSS-Image render on Box B (those layers take 20.4 s); not verified.
 
+## Multi-model resident hot-swapping on one 16 GB card
+
+Box A (`RTX 5080 16 GB`, Ryzen 9800X3D, `48 GB` DDR5 with `47.2 GiB` usable, PCIe Gen5 x16, Windows,
+`ComfyUI 0.46.0`, `torch 2.10.0+cu130`, `comfy-aimdo 0.6.0`, `comfy-kitchen 0.2.41`), measured
+2026-11-25.
+
+Two distinct causes drove legacy `23.2 to 29.5 s` model-switch stalls on Box A:
+
+1. Separate sidecar ports forced callers to send `POST /free` (`unload_models` plus `free_memory`),
+   dropping host RAM caches and re-reading `10 to 13 GiB` from disk on every switch.
+2. In `ComfyUI 0.46.0`, passing bare `--cache-ram` with no numeric bounds sets
+   `ram_inactive_headroom` to `100%` of physical RAM (`47.2 GiB` on Box A). On the first node of a
+   new workflow, `RAMPressureCache` marks inactive `ModelPatcher` objects at `oom_ram_usage = 1e30`
+   and evicts the previous model (`14.13 s` reload) even when `27 GiB` of DDR5 sits free.
+
+Consolidating all model roots into one `ComfyUI 0.46.0` instance with
+`--reserve-vram 2.5 --cache-ram 4.0 8.0 --use-sage-attention --fast fp16_accumulation` keeps four
+`8 to 13 GiB` model families (`MOSS-Image` `12.11 GiB`, `FLUX 3 Klein` `9.75 GiB`,
+`Fibo 2.0 Edit Turbo` `7.83 GiB`, `Qwen-Image 2.1` `13.27 GiB`) resident in `comfy-aimdo` pinned
+DDR5 RAM (`21.9 GiB` still free) and sheds the oldest inactive model only if free system RAM drops
+below `8.0 GiB`.
+
+| Transition or probe (`1152x1680` pipeline) | Bare `--cache-ram` / legacy sidecar | `--cache-ram 4.0 8.0` | Pure switch cost | Peak VRAM | Free DDR5 RAM |
+|---|---:|---:|---:|---:|---:|
+| PCIe Gen5 x16 `2.0 GiB` H2D copy (pageable vs pinned) | `455.8 ms` (`4.39 GiB/s`) | `37.4 ms` (`53.54 GiB/s`) | n/a | n/a | n/a |
+| `MOSS-Image` 2-pass warm (`832x1216 -> 1152x1680`) | `10.06 s` | `10.00 s` | `0.00 s` | `12,632 MiB` | `26.53 GiB` |
+| Switch `FLUX 3 Klein -> MOSS-Image` (2-pass, new seed) | `14.13 s` (`cached=0`, evicted) | `10.45 s` (`cached=10`) | `+0.45 s` | `15,126 MiB` | `23.98 GiB` |
+| Switch `MOSS-Image -> FLUX 3 Klein` (16-step edit) | `10.62 s` (cold) | `7.17 s` (`7.22 s` warm) | `<0.15 s` | `15,304 MiB` | `23.85 GiB` |
+| Switch `MOSS-Image -> FLUX 3 Klein` (8-step edit) | not run | `3.74 s` | `<0.15 s` | `14,958 MiB` | `23.82 GiB` |
+| Switch `MOSS-Image -> Fibo 2.0 Edit Turbo` (4-step edit) | `23.20 s` (multi-port `/free`) | `2.87 s` (`2.60 s` warm) | `+0.27 s` | `15,008 MiB` | `23.44 GiB` |
+| `Qwen-Image 2.1` (16-step edit, warm) | not run | `9.88 s` | n/a | `15,208 MiB` | `22.36 GiB` |
+| Switch `Qwen-Image 2.1 -> MOSS-Image` (all 4 resident) | `29.46 s` (cold) | `10.61 s` (`cached=10`) | `+0.61 s` | `15,057 MiB` | `21.86 GiB` |
+
+## Blackwell rooflines, quantization, and LoRA verdicts (0.46.0)
+
+Measured 2026-11-24/25 across Box A (`RTX 5080`, `SM 12.0`, `396 W` cap, `2842 to 2865 MHz` under
+load, `791.5 GB/s` D2D copy) and `UMA Box` (`NVIDIA GB10`, `SM 12.1`, `128 GB` unified LPDDR5x,
+`221 to 237 GB/s` measured bandwidth, Linux ARM64), on `ComfyUI 0.46.0` (`torch 2.10.0+cu130`,
+`comfy-kitchen 0.2.41`, `comfy-aimdo 0.6.0`).
+
+- **SM 12.0 INT8 roofline (`MOSS-Image` 5B INT8 ConvRot on Box A):** dense INT8 GEMM runs at
+  `355 to 358` of `410 TOPS` (`89%`) and INT8 attention runs at `290` of `302 TOPS` (`96%`). Both
+  sit against the hardware ceiling, leaving no room for custom GEMM or attention kernels at INT8.
+- **Updated INT8 LoRA verdict (supersedes 2026-09-18):** on `0.46.0`, stock `LoraLoaderModelOnly`
+  runs GPU INT8 requantization in `+0.50 to 0.67 s` (`1.52 s` warm 8-step `1024x1024` with cached
+  text encoding, `2.02 s` when switching between two stacked LoRA pairs, zero VRAM leak). A
+  Python-dispatched BF16 low-rank bypass (`relL2 = 0.0015` on `ffn_down` after `situ` and `0.0016`
+  on 3-slice fused `qkv`) removes the `+0.50 s` switch cost (`~0.00 s`) and stays `1.003 to 1.117x`
+  sharper (`-0.31%` saturation shift), but adds `+165 ms/step` (`2.84 s` total, `1.87x` slower warm
+  and `1.41x` slower even on a switch). Use `LoraLoaderModelOnly` for speed; keep the BF16 bypass
+  only when avoiding INT8 requantization saturation or sharpness drift.
+- **Why static 4-bit (`nvfp4`) and step-split `nvfp4 -> INT8` fail:** even with
+  `CentriQ + ConvRot256 + SVD-64` calibration, `nvfp4` gives `0.117` single-layer `relL2` against
+  `0.0125` for INT8 because dynamic `E2M1` activation rounding dominates. Running early steps in
+  `nvfp4` and swapping to `INT8` for late steps also fails: the flow-matching ODE integrates early
+  content and identity error forward, and late `INT8` steps cannot erase it. Only QAT or on-policy
+  distillation held quality: a 12-step on-policy distillation (OPD) LoRA plus a 7-step unguided
+  refine tail cut `MOSS-Image` (`832x1216 -> 1152x1680`) from `10.22 s` (`IQR 0.022 s`) to `6.10 s`
+  (`IQR 0.016 s`, `1.68x`, `13,089 MiB` peak VRAM).
+- **Localized image editing (`FLUX 3 Klein`, `1152x1680`, 8 steps, Box A, `n=6` interleaved `A-B-A`):**
+
+| Edit arm | Control median | Candidate median | Speed-up | Sharpness vs control | Verdict |
+|---|---:|---:|---:|---:|---|
+| `16px`-aligned context-padded ROI crop (`<45%` area, `<=70%` width banner guard) | `6.49 s` | `2.61 s` (`1.77 s` at `768x768`) | `2.48 to 3.66x` | `1.08x` (`0.00` MAE outside ROI) | Adopted opt-in for localized object/sky edits; width guard skips wide bottom text banners |
+| Approximate reference KV reuse (`refresh_stride=2`, BF16) | `6.56 s` | `5.81 s` | `1.13x` | `0.976x` | Conditional: visually clean across 6/6 cells, modest gain |
+| Unrefreshed reference KV reuse (`w2`, BF16) | `6.46 s` | `4.78 s` | `1.35x` | `0.924x` | Rejected: `flow_map` drift climbs `0.131 -> 0.442 relL2`, softening bokeh and cloth folds |
+| Unrefreshed reference KV reuse (`fp8_e4m3fn`) | `6.48 s` | `5.01 s` | `1.29x` | `0.890x` | Rejected: dequant unpack makes it slower and softer than BF16 |
+| Combined ROI crop + KV reuse | `6.48 s` | `2.08 s` | `3.12x` | `0.883x` | Rejected: compounds softening and crop edge artifacts |
+
+- **Auxiliary ONNX segmentation (`isnet-anime.onnx`, `1024x1024` FP32, Box A, `n=6` `A-B-A`):**
+  Ryzen 9800X3D `CPUExecutionProvider` runs in `0.314 s` warm (`0.514 s` cold). `CUDAExecutionProvider`
+  with a `1536 MiB` BFC arena cap runs in `0.052 s` warm (`6.07x`, alpha MAE `0.058 / 255`,
+  `+1.76 GiB` VRAM; a `512 MiB` arena cap OOMs at `Conv_83` requesting `134 MiB` cuDNN workspace),
+  but pays `6.27 s` of cold cuDNN autotune init. One-shot CLI calls belong on CPU; resident daemons
+  belong on GPU.
+- **`UMA Box` (`GB10 SM 12.1`, `221 to 237 GB/s` bandwidth, 2026-11-25):** `FP8 e4m3fn` (`185 TFLOPS`
+  with dynamic activation quantization, `42`-block `relL2 = 0.0128` without Hadamard rotation) is the
+  sweet spot over `NVFP4` (`250 TFLOPS`, only `1.35x` peak compute in exchange for about `9x` single-layer
+  rounding noise). Static `cuobjdump` inspection of `comfy-kitchen 0.2.41` (`aarch64`) found `0`
+  precompiled `sm_121` SASS cubins (`39` modules each for `sm_75/80/89/90a/100/120`), relying on
+  `1,615` forward-compatible `.target sm_120f` PTX 9.0 entry points that JIT-compile onto `SM 12.1`
+  at startup with zero silent Python fallbacks; persist `~/.nv/ComputeCache` across container restarts
+  and load `.safetensors` through `MAP_SHARED | PROT_READ` ([`tools/safetensors_prot_read.py`](../../tools/safetensors_prot_read.py)).
+
 ## Speed-ups that cannot ship as a LoRA
 
 A LoRA carries weight deltas. The 3.8B speed-up came from weight format (mxfp8), an attention
@@ -327,6 +415,9 @@ launch flags. The only LoRA-shaped speed-up is a step-reducing turbo LoRA.
   (same steady state). 2.9 to 3.0 s/it at 1024 px is the card's level.
 - Distributed training across the two Windows boxes: no NCCL, 2.5 GbE link.
 - A cache node on Qwen-Image text-to-image: no effect.
+- Calibrated static `nvfp4` (`CentriQ + ConvRot256 + SVD-64`, `0.117` single-layer `relL2`) and step-split `nvfp4 -> INT8` runtime weight swapping (early `E2M1` trajectory drift integrates forward).
+- Python-dispatched BF16 LoRA bypass as a speed lever on `ComfyUI 0.46.0` (`+165 ms/step`, slower than stock `+0.50 s` GPU INT8 requantization; kept only for zero-requant fidelity).
+- Unrefreshed `FLUX 3 Klein` reference KV reuse (`0.924` sharpness) and `CUDAExecutionProvider` on `isnet-anime.onnx` for one-shot CLI runs (`6.27 s` cold cuDNN init).
 
 ## See also
 
@@ -334,4 +425,4 @@ launch flags. The only LoRA-shaped speed-up is a step-reducing turbo LoRA.
 - [`05-debugging.md`](05-debugging.md): OOM, driver resets, polluted processes.
 - [`06-render-discipline.md`](06-render-discipline.md): smoke timing before a batch.
 - [`templates/ab-test.md`](../../templates/ab-test.md): the write-up template.
-- [`tools/README.md`](../../tools/README.md): the kernel classifier and the GEMM probe used above.
+- [`tools/README.md`](../../tools/README.md): the kernel classifier, GEMM probe, read-only safetensors loader, and ComfyUI A/B harness used above.

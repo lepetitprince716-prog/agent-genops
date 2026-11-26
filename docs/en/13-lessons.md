@@ -24,7 +24,7 @@ Every other page cites its reasons from here.
    Why: the usual cause is a missing tool or an unread doc, not a coding error (policy entry 2026-08-27).
 
 Machine names: Controller (the laptop that runs agents), Box A (main render box, also a
-gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
+gaming PC), Box B (worker box), UMA Box (128 GB unified-memory Linux ARM64 node). See [02-environment.md](02-environment.md).
 
 ## Real cases
 
@@ -38,12 +38,17 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-09-16 — a style probe ran on the quality stack (3.5 min per image), a queue stop killed only leaf processes so a subshell rendered 5 more, and same-seed overwrites destroyed 30 of 48 images (about 40 min GPU, 15 min re-run, about 1 h schedule slip) → smoke one image first, choose the engine by what the step verifies, isolate each render on landing, stop the whole process group.
 - 2026-09-16 — throwaway test renders kept filling both disks (one black-image debug alone left 20+ images on two machines) → clean up test renders when a task ends; tightened on 2026-10-06 to delete by default and keep the lesson, not the images.
 - 2026-09-17 — unremapped 28-block LoRAs on a 52-block Anima base produced scribbles with no error; none of 166 Anima LoRAs on the box were native 52-block → remap block indices before attaching.
-- 2026-09-18 — a LoRA on a partially loaded INT8 ConvRot checkpoint crashed 6 of 6 runs and leaked about 11 GB VRAM that `/free` could not recover → only a service restart frees it; do not attach LoRAs to that format.
+- 2026-09-18 — a LoRA on a partially loaded INT8 ConvRot checkpoint crashed 6 of 6 runs on ComfyUI 0.33.1 and leaked about 11 GB VRAM that `/free` could not recover → only a service restart freed it on 0.33.1; ComfyUI 0.46.0 fixed INT8 ConvRot LoRA attachment (`+0.50 s` GPU requant, zero leak).
 - 2026-09-22 — "release VRAM after every render" reloaded checkpoint and LoRAs on every image of a burst; each free cost a 1.9 s round trip → leases plus an idle reaper replace per-render release.
 - 2026-09-30 — reusing a locally cached output path returned another image's pixels with the new metadata → look up history by prompt; drop local cached-path reuse.
 - 2026-09-30 — an identical rerun on ComfyUI 0.27.1 polled until the 1,800 s timeout and looked like a hang → look up the same prompt in history and fetch the existing file; fail fast on 404.
 - 2026-10-01 — img2img returned black images after a long multi-agent session; a restart fixed it and the cause was not captured → on black images, restart the box before debugging precision.
 - 2026-11-05 — more pictures were wanted for a style set whose first version was already in training → a set handed to training is frozen and its build refuses to run; additions go under a new version name.
+- 2026-11-25 — bare `--cache-ram` on ComfyUI 0.46.0 defaulted inactive headroom to 100% of RAM (`47.2 GiB` on Box A) and evicted resident models on every workflow switch (`14.13 s` reload vs `0.15 to 0.61 s`) → pass explicit bounds `--cache-ram 4.0 8.0` alongside `--reserve-vram 2.5`.
+- 2026-11-25 — a custom KV-reuse wrapper changed per-step tensor shapes inside `comfy-aimdo`'s malloc graph and crashed on step 2 (`aimdo memory compile error`) → call `cleanup_malloc_graph()` on mode or shape transitions.
+- 2026-11-25 — ComfyUI 0.46.0's built-in `LoraLoaderBypassModelOnly` silently dropped 126 tuple-keyed fused `qkv` slices on MOSS-Image INT8 and left FP32 adapters uncast → verify applied slice counts and unpack offset tuples in BF16, or use stock `LoraLoaderModelOnly` (`+0.50 s` GPU requant).
+- 2026-11-25 — installing CPU `onnxruntime` alongside `onnxruntime-gpu` hid `CUDAExecutionProvider`, and a `512 MiB` arena cap OOMed at `Conv_83` on `isnet-anime.onnx` (`6.27 s` cold cuDNN init vs `0.314 s` CPU) → isolate `onnxruntime-gpu`, set a `1,536 MiB` arena cap with CPU fallback, and keep one-shot CLI calls on CPU.
+- 2026-11-25 — `MAP_PRIVATE` checkpoint mmaps on UMA Box added `+4.0 GiB RssAnon` per `4 GiB` CUDA copy while writable `MAP_SHARED` risked silent on-disk `.safetensors` corruption → map checkpoints with `MAP_SHARED | PROT_READ` (`r--s`) and guard tensors against in-place writes.
 
 ### Remote Windows boxes
 
@@ -59,6 +64,7 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-10-13 — "send to recycle bin" over a non-interactive SSH session deleted permanently → move files to a same-disk dated quarantine folder with a restore map.
 - By 2026-10-19 — the agent's Bash tool rewrites `>nul` into `>/dev/null`, a path that does not exist on Windows → write cmd files with the file tool and CRLF; use `>NUL:` in one-liners.
 - 2026-10-19 — Box B's proxy pointed at a local port with no listener, so dependency installs failed → tell the owner; never edit proxy variables in a job environment.
+- 2026-11-25 — Box A's service Scheduled Task launched `powershell.exe` without `-WindowStyle Hidden`, exposing the server to `0xC000013A` console-close exits (`29 s` cold reload) → prepend `-WindowStyle Hidden` in place with `Set-ScheduledTask` instead of unregistering.
 
 ### Agents and dispatch
 
@@ -72,6 +78,7 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-10-08 — three of four Haiku research lanes went off task → research lanes go to Sonnet.
 - 2026-10-15 — a literature re-check Workflow ran every agent on the strongest model and burned quota → every Workflow agent call names a cheaper model.
 - 2026-10-19 — a Haiku subagent copied 1,643 of about 20,000 base64 characters, three times in a row → the root pushes data in chunks with hash checks.
+- 2026-11-25 — bounded cross-model Gate-1 spec review falsified three speculative CUDA items (step-split `nvfp4`-to-`INT8` swap, `CUDA Graphs` on dynamic-VRAM DiTs, sub-4MP two-node sequence parallelism) pre-code → run bounded `Subtract-Before-Add` and statechart falsification before writing kernel or multi-file code.
 
 ### Sessions and context
 
@@ -136,6 +143,7 @@ gaming PC), Box B (worker box). See [02-environment.md](02-environment.md).
 - 2026-09-15 — a 24-cell bare-model matrix wasted human attention → one image per new model, then ask about the LoRA stack.
 - 2026-09-30 — a recorded warm timing of 3.8 s re-measured at 2.1 s → re-measure on the production server, drop cold runs, delete stale numbers.
 - 2026-10-01 — artifacts blamed on a new base model came from two strong style LoRAs stacking (found by same-seed dose and leave-one-out tests) → isolate the style stack before judging a model.
+- 2026-11-25 — the second control bracket `ctl_2` in an `A-B-A` benchmark repeated `ctl_1`'s graph and seed and returned in `0.07 s` from ComfyUI's sampler cache while `ctl_1` paid `1.4 s` uncached text encoding → fail closed on sampler or asymmetric encoder cache hits (`--strict-cache`) and offset `A_2` seeds.
 
 ## Tried and dropped
 

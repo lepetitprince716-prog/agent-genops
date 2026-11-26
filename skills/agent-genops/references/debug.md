@@ -20,7 +20,7 @@ Read when: a graph is rejected, a job hangs, output looks wrong, VRAM misbehaves
 | Old runtime fails after rollback | DB revision | Restore the DB backup |
 | OOM only at VAE decode, quantized model | Load mode in log | Unload models + empty cache before decode |
 | Silent server death, driver reset in event log | `--reserve-vram` value | Set 2.5 |
-| VRAM stuck after `/free`, "Cannot set version_counter for inference tensor" | Was an INT8 ConvRot model partially loaded with a LoRA | Service stop and start |
+| VRAM stuck after `/free`, "Cannot set version_counter for inference tensor" | Was an INT8 ConvRot model partially loaded with a LoRA on 0.33.1 (fixed on 0.46.0, `+0.50 s` GPU requant) | Service stop and start on 0.33.1; upgrade to 0.46.0 |
 | VRAM held, no job; WinError 1455 | Processes by command line | Kill orphans by listening port or command line |
 | Free VRAM looks fine, OOM anyway | Vendor tool total minus server's own | Account for foreground apps |
 | Success with empty outputs, or poll to timeout on rerun | History for the same prompt | Reuse history output or change seed; never add client id |
@@ -35,8 +35,15 @@ Read when: a graph is rejected, a job hangs, output looks wrong, VRAM misbehaves
 | Box "dead" | Queue endpoint; SSH | ComfyUI down != box down |
 | PCIe Gen3 / small BAR | Uptime since sleep or driver update | Reboot, re-measure |
 | SSH exit 255 | Transport only | Other non-zero = ran remotely; do not switch route |
+| `14.13 s` disk reload on every workflow switch despite `20+ GiB` free RAM (0.46.0) | Launch flags: bare `--cache-ram` defaults inactive headroom to `100%` of RAM and evicts inactive `ModelPatcher`s | Pass `--cache-ram 4.0 8.0` alongside `--reserve-vram 2.5` |
+| `RuntimeError: aimdo memory compile error` in `malloc_graph_scope` (0.46.0) | Step allocation shapes changed between capture and reuse steps | Call `comfy.model_prefetch.cleanup_malloc_graph()` on mode/shape transitions |
+| `LoraLoaderBypassModelOnly` weak or missing effect on fused-`qkv` DiT (0.46.0) | Applied slice count (`126` tuple-keyed Q/K/V slices dropped; `dtype=None` leaves FP32 uncast; `linear_input_act("situ")` skips hooks) | Unpack offset tuples in BF16 and intercept `linear_input_act`, or use `LoraLoaderModelOnly` |
+| `CUDAExecutionProvider` missing, or `isnet-anime.onnx` OOMs at `Conv_83` | Both `onnxruntime` and `onnxruntime-gpu` installed in venv; or `gpu_mem_limit` set to `512 MiB` (`134 MiB` cuDNN workspace needed) | Isolate `onnxruntime-gpu`; set `1536 MiB` arena cap + CPU fallback on `sess.run()` OOM |
+| Service Scheduled Task exits `3221225786` (`0xC000013A`) | `Task To Run` lacks `-WindowStyle Hidden` (desktop console window closed) | Prepend `-WindowStyle Hidden` via `Set-ScheduledTask` in place |
+| `UMA Box` `+4 GiB RssAnon` spike on load, or `SIGSEGV` / disk corruption on patch | `/proc/self/maps` mode (`r--p` CoW or `rw-s` writable shared) | Map with `MAP_SHARED \| PROT_READ` (`r--s`) + `ReadOnlyMmapTensor` (`tools/safetensors_prot_read.py`) |
+| `A-B-A` `ctl_2` finishes in `0.07 s`, or `ctl_1` is `~1.4 s` slower than `cand` | `execution_cached` messages on sampler or asymmetric `CLIPTextEncode` | Run `tools/comfy_ab_harness.py --strict-cache --a2-seed-offset 100000` |
 
-Version note: cache/history and object-patch findings are from 0.27.1 / 0.33.1; not re-checked on 0.42.1.
+Version note: cache/history and object-patch findings are from 0.27.1 / 0.33.1; not re-checked on 0.42.1. Rows marked 0.46.0 were measured on 2026-11-25 (`comfy-kitchen 0.2.41`, `comfy-aimdo 0.6.0`).
 
 ## Silent-failure rules
 
