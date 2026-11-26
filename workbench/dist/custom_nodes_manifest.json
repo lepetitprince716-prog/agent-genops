@@ -1,0 +1,92 @@
+[
+  {
+    "pack": "rgthree-comfy",
+    "repo": "https://github.com/rgthree/rgthree-comfy",
+    "role": "Radio Fast Groups Muter/Bypasser, Any Switch, Power Lora Loader, Centralized Image Comparer",
+    "anti_lag_role": "Strips 17 muted engines at graphToPrompt(); replaces scattered previews with 1 comparer"
+  },
+  {
+    "pack": "ComfyUI-Easy-Use",
+    "repo": "https://github.com/yolain/ComfyUI-Easy-Use",
+    "role": "easy cleanGpuUsed VRAM Flush Gate, easy anythingIndexSwitch (lazy), wildcards, promptConcat",
+    "anti_lag_role": "Forces GPU weight eviction between heavy DiT engines and Detailer/Upscaler/Video"
+  },
+  {
+    "pack": "ComfyUI-KJNodes",
+    "repo": "https://github.com/kijai/ComfyUI-KJNodes",
+    "role": "Aspect-safe ImageResizeKJv2 and modern layout helpers",
+    "anti_lag_role": "Replaces legacy multi-node resize chains"
+  },
+  {
+    "pack": "ComfyUI-Impact-Pack",
+    "repo": "https://github.com/ltdrdata/ComfyUI-Impact-Pack",
+    "role": "ToBasicPipe/FromBasicPipe, FaceDetailer, DetailerForEach, BboxDetectorSEGS, UltralyticsDetectorProvider",
+    "anti_lag_role": "Bundles 5 engine streams into 1 BASIC_PIPE wire (-80% cross-canvas link spline math)"
+  },
+  {
+    "pack": "ComfyUI-Lora-Manager",
+    "repo": "https://github.com/willmiao/ComfyUI-Lora-Manager",
+    "role": "Lora Loader (LoraManager), TriggerWord Toggle, Civitai-metadata Save Image (LoraManager)",
+    "anti_lag_role": "Zero manual trigger copy-paste; clean recipe metadata on export"
+  },
+  {
+    "pack": "comfyui_controlnet_aux",
+    "repo": "https://github.com/Fannovel16/comfyui_controlnet_aux",
+    "role": "AIO_Preprocessor, DWPreprocessor, DepthAnythingV2Preprocessor",
+    "anti_lag_role": "Isolated inside S02 Subgraph; bypassed when not using structure control"
+  },
+  {
+    "pack": "ComfyUI_IPAdapter_plus",
+    "repo": "https://github.com/cubiq/ComfyUI_IPAdapter_plus",
+    "role": "IPAdapterAdvanced style & identity transfer",
+    "anti_lag_role": "Scoped cleanly inside SDXL capsule; never leaks into incompatible DiT engines"
+  },
+  {
+    "pack": "ComfyUI_UltimateSDUpscale",
+    "repo": "https://github.com/ssitu/ComfyUI_UltimateSDUpscale",
+    "role": "Tiled 2nd-pass diffusion upscaler inside S04",
+    "anti_lag_role": "Bypassable by default so fast 4x GAN runs immediately"
+  },
+  {
+    "pack": "ComfyUI-Detail-Daemon",
+    "repo": "https://github.com/Jonseed/ComfyUI-Detail-Daemon",
+    "role": "DetailDaemonSamplerNode micro-texture injection on SDXL & Flux",
+    "anti_lag_role": "Zero extra sampling passes"
+  },
+  {
+    "pack": "ComfyUI-TeaCache",
+    "repo": "https://github.com/welltop-cn/ComfyUI-TeaCache",
+    "role": "Step-skip diffusion acceleration for Flux, Anima, HiDream",
+    "anti_lag_role": "1.5x-2.2x faster DiT inference"
+  },
+  {
+    "pack": "ComfyUI_LayerStyle",
+    "repo": "https://github.com/chflame163/ComfyUI_LayerStyle",
+    "role": "ColorBalance, Levels, Brightness & Contrast, FilmPost 35mm Grain/Halation, ChromaticAberration, BiRefNetUltraV2",
+    "anti_lag_role": "All color-grading filters encapsulated inside S05 Subgraph"
+  },
+  {
+    "pack": "ComfyUI-Florence2",
+    "repo": "https://github.com/kijai/ComfyUI-Florence2",
+    "role": "VLM reverse-image-to-prompt captioning inside S01",
+    "anti_lag_role": "Bypassed by default until artist toggles VLM reverse-captioning ON"
+  },
+  {
+    "pack": "ComfyUI-GGUF",
+    "repo": "https://github.com/city96/ComfyUI-GGUF",
+    "role": "UnetLoaderGGUF for Q4/Q6/Q8 Flux.1 & Flux.2 Klein on 8-16GB cards",
+    "anti_lag_role": "Prevents RAM swap thrashing on consumer GPUs"
+  },
+  {
+    "pack": "ComfyUI-Crystools",
+    "repo": "https://github.com/crystian/ComfyUI-Crystools",
+    "role": "Get resolution [Crystools] + live GPU/VRAM telemetry bar",
+    "anti_lag_role": "Real-time bottleneck diagnostics"
+  },
+  {
+    "pack": "ComfyUI-Prompt-Assistant",
+    "repo": "https://github.com/yawiii/ComfyUI-Prompt-Assistant",
+    "role": "PromptAssistantNode LLM prompt expansion inside S01",
+    "anti_lag_role": "Encapsulated inside S01 with optional bypass"
+  }
+]

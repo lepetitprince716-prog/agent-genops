@@ -1,0 +1,164 @@
+{
+  "workflow_name": "OmniStudio Ubisoft All-in-One Super Workbench",
+  "version": 0.4,
+  "root_nodes": 48,
+  "subgraph_count": 24,
+  "engine_capsules": 18,
+  "production_stations": 6,
+  "internal_nodes": 294,
+  "total_real_nodes": 342,
+  "root_links": 160,
+  "total_real_links": 741,
+  "root_groups": 28,
+  "root_dom_reduction_pct": 86.0,
+  "custom_node_packs": 15,
+  "unique_node_types": 93,
+  "engines": [
+    {
+      "id": "e01_sdxl_illustrious",
+      "name": "E01 · SDXL / Illustrious / iLustMix",
+      "internal_nodes": 19,
+      "internal_links": 39
+    },
+    {
+      "id": "e02_noobai_vpred",
+      "name": "E02 · NoobAI / Illustrious V-Pred",
+      "internal_nodes": 12,
+      "internal_links": 25
+    },
+    {
+      "id": "e03_pony_v6",
+      "name": "E03 · Pony V6 XL (Auto Score Prefix)",
+      "internal_nodes": 11,
+      "internal_links": 24
+    },
+    {
+      "id": "e04_anima_dit",
+      "name": "E04 · Anima 2.9B / 3.8B (Cosmos DiT)",
+      "internal_nodes": 13,
+      "internal_links": 25
+    },
+    {
+      "id": "e05_sd15_lcm",
+      "name": "E05 · SD 1.5 Classic / LCM Turbo",
+      "internal_nodes": 11,
+      "internal_links": 24
+    },
+    {
+      "id": "e06_flux1_dev",
+      "name": "E06 · Flux.1 Dev / Schnell (GGUF + TeaCache)",
+      "internal_nodes": 18,
+      "internal_links": 31
+    },
+    {
+      "id": "e07_flux1_kontext",
+      "name": "E07 · Flux.1 Kontext (Reference Edit)",
+      "internal_nodes": 16,
+      "internal_links": 28
+    },
+    {
+      "id": "e08_flux2_klein",
+      "name": "E08 · Flux.2 Klein / Dev (GGUF)",
+      "internal_nodes": 15,
+      "internal_links": 29
+    },
+    {
+      "id": "e09_flux3_kv",
+      "name": "E09 · Flux.3 (KVCache + Layout)",
+      "internal_nodes": 11,
+      "internal_links": 22
+    },
+    {
+      "id": "e10_chroma",
+      "name": "E10 · Chroma (Uncensored Flow DiT)",
+      "internal_nodes": 11,
+      "internal_links": 23
+    },
+    {
+      "id": "e11_moss_image",
+      "name": "E11 · MOSS-Image (INT8 / DMD8 Distilled)",
+      "internal_nodes": 12,
+      "internal_links": 24
+    },
+    {
+      "id": "e12_qwen21",
+      "name": "E12 · Qwen-Image 2.1 (CJK Typography)",
+      "internal_nodes": 10,
+      "internal_links": 22
+    },
+    {
+      "id": "e13_krea2",
+      "name": "E13 · Krea-2 (8-Step Photoreal)",
+      "internal_nodes": 10,
+      "internal_links": 21
+    },
+    {
+      "id": "e14_minimax_h3",
+      "name": "E14 · MiniMax-H3-Image (Split-Sigma 4MP)",
+      "internal_nodes": 17,
+      "internal_links": 31
+    },
+    {
+      "id": "e15_sd35",
+      "name": "E15 · SD 3.5 Large / Medium (TripleCLIP)",
+      "internal_nodes": 11,
+      "internal_links": 23
+    },
+    {
+      "id": "e16_hidream",
+      "name": "E16 · HiDream-I1 / O1 (QuadCLIP)",
+      "internal_nodes": 12,
+      "internal_links": 24
+    },
+    {
+      "id": "e17_lumina2_zimage",
+      "name": "E17 · Lumina-2 / Z-Image / NewBie",
+      "internal_nodes": 11,
+      "internal_links": 23
+    },
+    {
+      "id": "e18_niche_vault",
+      "name": "E18 · Niche Frontier Vault (OmniGen2/Hunyuan/LongCat/PixArt/Ovis/Fibo2/Pan2+)",
+      "internal_nodes": 12,
+      "internal_links": 23
+    }
+  ],
+  "stations": [
+    {
+      "id": "s01_prompt_vlm",
+      "name": "S01 · Prompt, Wildcards & VLM Intelligence Lab",
+      "internal_nodes": 11,
+      "internal_links": 13
+    },
+    {
+      "id": "s02_controlnet_armory",
+      "name": "S02 · ControlNet Union & IPAdapter Armory",
+      "internal_nodes": 7,
+      "internal_links": 12
+    },
+    {
+      "id": "s03_anatomy_segs",
+      "name": "S03 · Anatomy SEGS Surgical Lab (Face/Eyes/Hands/Feet)",
+      "internal_nodes": 12,
+      "internal_links": 41
+    },
+    {
+      "id": "s04_hires_upscale",
+      "name": "S04 · Dual-Track 4x GAN & Tiled HiRes Upscale Forge",
+      "internal_nodes": 6,
+      "internal_links": 14
+    },
+    {
+      "id": "s05_film_darkroom",
+      "name": "S05 · Film, Relight, De-AI Grading & Cutout Darkroom",
+      "internal_nodes": 7,
+      "internal_links": 9
+    },
+    {
+      "id": "s06_video_tail",
+      "name": "S06 · Keyframe-to-Video Tail (Wan 2.2 / LTX-V 2)",
+      "internal_nodes": 19,
+      "internal_links": 31
+    }
+  ]
+}

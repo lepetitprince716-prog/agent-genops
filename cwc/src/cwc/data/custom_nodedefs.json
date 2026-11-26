@@ -1,0 +1,736 @@
+{
+  "format": 1,
+  "packs": [
+    {"id": "rgthree-comfy", "name": "rgthree-comfy", "repo": "https://github.com/rgthree/rgthree-comfy"},
+    {"id": "comfyui-easy-use", "name": "ComfyUI-Easy-Use", "repo": "https://github.com/yolain/ComfyUI-Easy-Use"},
+    {"id": "comfyui-kjnodes", "name": "ComfyUI-KJNodes", "repo": "https://github.com/kijai/ComfyUI-KJNodes"},
+    {"id": "comfyui-impact-pack", "name": "ComfyUI-Impact-Pack", "repo": "https://github.com/ltdrdata/ComfyUI-Impact-Pack"},
+    {"id": "comfyui-lora-manager", "name": "ComfyUI-Lora-Manager", "repo": "https://github.com/willmiao/ComfyUI-Lora-Manager"},
+    {"id": "comfyui_controlnet_aux", "name": "comfyui_controlnet_aux", "repo": "https://github.com/Fannovel16/comfyui_controlnet_aux"},
+    {"id": "comfyui_ipadapter_plus", "name": "ComfyUI_IPAdapter_plus", "repo": "https://github.com/cubiq/ComfyUI_IPAdapter_plus"},
+    {"id": "comfyui_ultimatesdupscale", "name": "ComfyUI_UltimateSDUpscale", "repo": "https://github.com/ssitu/ComfyUI_UltimateSDUpscale"},
+    {"id": "comfyui-detail-daemon", "name": "ComfyUI-Detail-Daemon", "repo": "https://github.com/Jonseed/ComfyUI-Detail-Daemon"},
+    {"id": "comfyui-teacache", "name": "ComfyUI-TeaCache", "repo": "https://github.com/welltop-cn/ComfyUI-TeaCache"},
+    {"id": "comfyui_layerstyle", "name": "ComfyUI_LayerStyle", "repo": "https://github.com/chflame163/ComfyUI_LayerStyle"},
+    {"id": "comfyui-florence2", "name": "ComfyUI-Florence2", "repo": "https://github.com/kijai/ComfyUI-Florence2"},
+    {"id": "comfyui-gguf", "name": "ComfyUI-GGUF", "repo": "https://github.com/city96/ComfyUI-GGUF"},
+    {"id": "comfyui-crystools", "name": "ComfyUI-Crystools", "repo": "https://github.com/crystian/ComfyUI-Crystools"},
+    {"id": "comfyui-prompt-assistant", "name": "ComfyUI-Prompt-Assistant", "repo": "https://github.com/yawiii/ComfyUI-Prompt-Assistant"},
+    {"id": "comfyui-canvas-turbo", "name": "ComfyUI-Canvas-Turbo", "repo": "(first-party: canvas-turbo/ in this repository)"}
+  ],
+  "nodes": {
+    "Any Switch (rgthree)": {
+      "input": {
+        "required": {},
+        "optional": {
+          "any_01": ["*", {}],
+          "any_02": ["*", {}],
+          "any_03": ["*", {}],
+          "any_04": ["*", {}],
+          "any_05": ["*", {}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["*"],
+      "name": "Any Switch (rgthree)",
+      "display_name": "Any Switch (rgthree)",
+      "category": "rgthree",
+      "output_node": false,
+      "python_module": "custom_nodes.rgthree-comfy"
+    },
+    "Power Lora Loader (rgthree)": {
+      "input": {
+        "required": {
+          "model": ["MODEL", {}]
+        },
+        "optional": {
+          "clip": ["CLIP", {}]
+        }
+      },
+      "output": ["MODEL", "CLIP"],
+      "output_is_list": [false, false],
+      "output_name": ["MODEL", "CLIP"],
+      "name": "Power Lora Loader (rgthree)",
+      "display_name": "Power Lora Loader (rgthree)",
+      "category": "rgthree",
+      "output_node": false,
+      "python_module": "custom_nodes.rgthree-comfy"
+    },
+    "Image Comparer (rgthree)": {
+      "input": {
+        "required": {},
+        "optional": {
+          "image_a": ["IMAGE", {}],
+          "image_b": ["IMAGE", {}]
+        }
+      },
+      "output": [],
+      "output_is_list": [],
+      "output_name": [],
+      "name": "Image Comparer (rgthree)",
+      "display_name": "Image Comparer (rgthree)",
+      "category": "rgthree",
+      "output_node": true,
+      "python_module": "custom_nodes.rgthree-comfy"
+    },
+    "Display Any (rgthree)": {
+      "input": {
+        "required": {
+          "source": ["*", {}]
+        }
+      },
+      "output": [],
+      "output_is_list": [],
+      "output_name": [],
+      "name": "Display Any (rgthree)",
+      "display_name": "Display Any (rgthree)",
+      "category": "rgthree",
+      "output_node": true,
+      "python_module": "custom_nodes.rgthree-comfy"
+    },
+    "Context Big (rgthree)": {
+      "input": {
+        "required": {},
+        "optional": {
+          "base_ctx": ["RGTHREE_CONTEXT", {}],
+          "model": ["MODEL", {}],
+          "clip": ["CLIP", {}],
+          "vae": ["VAE", {}],
+          "positive": ["CONDITIONING", {}],
+          "negative": ["CONDITIONING", {}],
+          "latent": ["LATENT", {}],
+          "images": ["IMAGE", {}],
+          "seed": ["INT", {"forceInput": true}],
+          "steps": ["INT", {"forceInput": true}],
+          "cfg": ["FLOAT", {"forceInput": true}]
+        }
+      },
+      "output": ["RGTHREE_CONTEXT", "MODEL", "CLIP", "VAE", "CONDITIONING", "CONDITIONING", "LATENT", "IMAGE", "INT", "INT", "FLOAT"],
+      "output_is_list": [false, false, false, false, false, false, false, false, false, false, false],
+      "output_name": ["CONTEXT", "MODEL", "CLIP", "VAE", "POSITIVE", "NEGATIVE", "LATENT", "IMAGE", "SEED", "STEPS", "CFG"],
+      "name": "Context Big (rgthree)",
+      "display_name": "Context Big (rgthree)",
+      "category": "rgthree",
+      "output_node": false,
+      "python_module": "custom_nodes.rgthree-comfy"
+    },
+    "easy cleanGpuUsed": {
+      "input": {
+        "required": {
+          "anything": ["*", {}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["output"],
+      "name": "easy cleanGpuUsed",
+      "display_name": "Clean VRAM Used",
+      "category": "EasyUse/Logic",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Easy-Use"
+    },
+    "easy anythingIndexSwitch": {
+      "input": {
+        "required": {
+          "index": ["INT", {"default": 0, "min": 0, "max": 9, "step": 1}]
+        },
+        "optional": {
+          "value0": ["*", {}],
+          "value1": ["*", {}],
+          "value2": ["*", {}],
+          "value3": ["*", {}],
+          "value4": ["*", {}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["value"],
+      "name": "easy anythingIndexSwitch",
+      "display_name": "Anything Index Switch",
+      "category": "EasyUse/Logic/Index Switch",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Easy-Use"
+    },
+    "easy promptConcat": {
+      "input": {
+        "required": {
+          "prompt1": ["STRING", {"default": "", "forceInput": true}],
+          "prompt2": ["STRING", {"default": "", "forceInput": true}],
+          "separator": ["STRING", {"default": ", "}]
+        }
+      },
+      "output": ["STRING"],
+      "output_is_list": [false],
+      "output_name": ["prompt"],
+      "name": "easy promptConcat",
+      "display_name": "Prompt Concat",
+      "category": "EasyUse/Prompt",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Easy-Use"
+    },
+    "easy wildcards": {
+      "input": {
+        "required": {
+          "text": ["STRING", {"default": "", "multiline": true}],
+          "Select to add LoRA": [["None"], {"default": "None"}],
+          "Select to add Wildcard": [["None"], {"default": "None"}],
+          "seed": ["INT", {"default": 0, "min": 0, "max": 1125899906842624}],
+          "multiline_mode": ["BOOLEAN", {"default": false}]
+        }
+      },
+      "output": ["STRING", "STRING"],
+      "output_is_list": [false, false],
+      "output_name": ["text", "populated_text"],
+      "name": "easy wildcards",
+      "display_name": "Wildcards",
+      "category": "EasyUse/Prompt",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Easy-Use"
+    },
+    "easy showAnything": {
+      "input": {
+        "required": {},
+        "optional": {
+          "anything": ["*", {}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["output"],
+      "name": "easy showAnything",
+      "display_name": "Show Any",
+      "category": "EasyUse/Logic",
+      "output_node": true,
+      "python_module": "custom_nodes.ComfyUI-Easy-Use"
+    },
+    "ImageResizeKJv2": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "width": ["INT", {"default": 1024, "min": 0, "max": 16384, "step": 1}],
+          "height": ["INT", {"default": 1024, "min": 0, "max": 16384, "step": 1}],
+          "upscale_method": [["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "lanczos"}],
+          "keep_proportion": [["stretch", "resize", "pad", "pad_edge", "crop"], {"default": "resize"}],
+          "pad_color": ["STRING", {"default": "0, 0, 0"}],
+          "crop_position": [["center", "top", "bottom", "left", "right"], {"default": "center"}],
+          "divisible_by": ["INT", {"default": 16, "min": 0, "max": 512, "step": 1}],
+          "device": [["cpu", "gpu"], {"default": "cpu"}]
+        },
+        "optional": {
+          "mask": ["MASK", {}]
+        }
+      },
+      "output": ["IMAGE", "INT", "INT", "MASK"],
+      "output_is_list": [false, false, false, false],
+      "output_name": ["IMAGE", "width", "height", "mask"],
+      "name": "ImageResizeKJv2",
+      "display_name": "Resize Image v2",
+      "category": "KJNodes/image",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-KJNodes"
+    },
+    "ToBasicPipe": {
+      "input": {
+        "required": {
+          "model": ["MODEL", {}],
+          "clip": ["CLIP", {}],
+          "vae": ["VAE", {}],
+          "positive": ["CONDITIONING", {}],
+          "negative": ["CONDITIONING", {}]
+        }
+      },
+      "output": ["BASIC_PIPE"],
+      "output_is_list": [false],
+      "output_name": ["basic_pipe"],
+      "name": "ToBasicPipe",
+      "display_name": "ToBasicPipe",
+      "category": "ImpactPack/Pipe",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Pack"
+    },
+    "FromBasicPipe": {
+      "input": {
+        "required": {
+          "basic_pipe": ["BASIC_PIPE", {}]
+        }
+      },
+      "output": ["MODEL", "CLIP", "VAE", "CONDITIONING", "CONDITIONING"],
+      "output_is_list": [false, false, false, false, false],
+      "output_name": ["model", "clip", "vae", "positive", "negative"],
+      "name": "FromBasicPipe",
+      "display_name": "FromBasicPipe",
+      "category": "ImpactPack/Pipe",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Pack"
+    },
+    "UltralyticsDetectorProvider": {
+      "input": {
+        "required": {
+          "model_name": [["bbox/face_yolov9c.pt", "bbox/Eyeful_v2-Individual.pt", "bbox/hand_yolov9c.pt", "bbox/foot_yolov8s.pt"], {"default": "bbox/face_yolov9c.pt"}]
+        }
+      },
+      "output": ["BBOX_DETECTOR", "SEGM_DETECTOR"],
+      "output_is_list": [false, false],
+      "output_name": ["BBOX_DETECTOR", "SEGM_DETECTOR"],
+      "name": "UltralyticsDetectorProvider",
+      "display_name": "UltralyticsDetectorProvider",
+      "category": "ImpactPack/Detector",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Subpack"
+    },
+    "BboxDetectorSEGS": {
+      "input": {
+        "required": {
+          "bbox_detector": ["BBOX_DETECTOR", {}],
+          "image": ["IMAGE", {}],
+          "threshold": ["FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "dilation": ["INT", {"default": 10, "min": -512, "max": 512, "step": 1}],
+          "crop_factor": ["FLOAT", {"default": 3.0, "min": 1.0, "max": 100.0, "step": 0.1}],
+          "drop_size": ["INT", {"default": 10, "min": 1, "max": 8192, "step": 1}],
+          "labels": ["STRING", {"default": "all"}]
+        }
+      },
+      "output": ["SEGS"],
+      "output_is_list": [false],
+      "output_name": ["SEGS"],
+      "name": "BboxDetectorSEGS",
+      "display_name": "BBOX Detector (SEGS)",
+      "category": "ImpactPack/Detector",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Pack"
+    },
+    "FaceDetailer": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "model": ["MODEL", {}],
+          "clip": ["CLIP", {}],
+          "vae": ["VAE", {}],
+          "guide_size": ["FLOAT", {"default": 512, "min": 64, "max": 2048, "step": 8}],
+          "guide_size_for": ["BOOLEAN", {"default": true}],
+          "max_size": ["FLOAT", {"default": 1024, "min": 64, "max": 4096, "step": 8}],
+          "seed": ["INT", {"default": 0, "min": 0, "max": 18446744073709551615}],
+          "steps": ["INT", {"default": 20, "min": 1, "max": 10000}],
+          "cfg": ["FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0}],
+          "sampler_name": [["euler", "euler_ancestral", "dpmpp_2m", "er_sde"], {"default": "euler_ancestral"}],
+          "scheduler": [["simple", "karras", "sgm_uniform", "beta"], {"default": "karras"}],
+          "positive": ["CONDITIONING", {}],
+          "negative": ["CONDITIONING", {}],
+          "denoise": ["FLOAT", {"default": 0.5, "min": 0.0001, "max": 1.0, "step": 0.01}],
+          "feather": ["INT", {"default": 5, "min": 0, "max": 100, "step": 1}],
+          "noise_mask": ["BOOLEAN", {"default": true}],
+          "force_inpaint": ["BOOLEAN", {"default": true}],
+          "bbox_threshold": ["FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "bbox_dilation": ["INT", {"default": 10, "min": -512, "max": 512, "step": 1}],
+          "bbox_crop_factor": ["FLOAT", {"default": 3.0, "min": 1.0, "max": 10.0, "step": 0.1}],
+          "sam_detection_hint": [["center-1", "horizontal-2", "vertical-2", "rect-4"], {"default": "center-1"}],
+          "sam_dilation": ["INT", {"default": 0, "min": -512, "max": 512, "step": 1}],
+          "sam_threshold": ["FLOAT", {"default": 0.93, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "sam_bbox_expansion": ["INT", {"default": 0, "min": 0, "max": 1000, "step": 1}],
+          "sam_mask_hint_threshold": ["FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "sam_mask_hint_use_negative": [["False", "Small", "Outter"], {"default": "False"}],
+          "drop_size": ["INT", {"default": 10, "min": 1, "max": 8192, "step": 1}],
+          "bbox_detector": ["BBOX_DETECTOR", {}],
+          "wildcard": ["STRING", {"default": "", "multiline": true}],
+          "cycle": ["INT", {"default": 1, "min": 1, "max": 10, "step": 1}]
+        },
+        "optional": {
+          "inpaint_model": ["BOOLEAN", {"default": false}],
+          "noise_mask_feather": ["INT", {"default": 20, "min": 0, "max": 100, "step": 1}],
+          "tiled_encode": ["BOOLEAN", {"default": false}],
+          "tiled_decode": ["BOOLEAN", {"default": false}]
+        }
+      },
+      "output": ["IMAGE", "IMAGE", "IMAGE", "MASK", "DETAILER_PIPE", "IMAGE"],
+      "output_is_list": [false, true, true, false, false, true],
+      "output_name": ["image", "cropped_refined", "cropped_enhanced_alpha", "mask", "detailer_pipe", "cnet_images"],
+      "name": "FaceDetailer",
+      "display_name": "FaceDetailer",
+      "category": "ImpactPack/Simple",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Pack"
+    },
+    "DetailerForEach": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "segs": ["SEGS", {}],
+          "model": ["MODEL", {}],
+          "clip": ["CLIP", {}],
+          "vae": ["VAE", {}],
+          "guide_size": ["FLOAT", {"default": 512, "min": 64, "max": 2048, "step": 8}],
+          "guide_size_for": ["BOOLEAN", {"default": true}],
+          "max_size": ["FLOAT", {"default": 1024, "min": 64, "max": 4096, "step": 8}],
+          "seed": ["INT", {"default": 0, "min": 0, "max": 18446744073709551615}],
+          "steps": ["INT", {"default": 20, "min": 1, "max": 10000}],
+          "cfg": ["FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0}],
+          "sampler_name": [["euler", "euler_ancestral", "dpmpp_2m", "er_sde"], {"default": "euler_ancestral"}],
+          "scheduler": [["simple", "karras", "sgm_uniform", "beta"], {"default": "karras"}],
+          "positive": ["CONDITIONING", {}],
+          "negative": ["CONDITIONING", {}],
+          "denoise": ["FLOAT", {"default": 0.5, "min": 0.0001, "max": 1.0, "step": 0.01}],
+          "feather": ["INT", {"default": 5, "min": 0, "max": 100, "step": 1}],
+          "noise_mask": ["BOOLEAN", {"default": true}],
+          "force_inpaint": ["BOOLEAN", {"default": true}],
+          "wildcard": ["STRING", {"default": "", "multiline": true}],
+          "cycle": ["INT", {"default": 1, "min": 1, "max": 10, "step": 1}]
+        },
+        "optional": {
+          "inpaint_model": ["BOOLEAN", {"default": false}],
+          "noise_mask_feather": ["INT", {"default": 20, "min": 0, "max": 100, "step": 1}],
+          "tiled_encode": ["BOOLEAN", {"default": false}],
+          "tiled_decode": ["BOOLEAN", {"default": false}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["image"],
+      "name": "DetailerForEach",
+      "display_name": "Detailer (SEGS)",
+      "category": "ImpactPack/Detailer",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Impact-Pack"
+    },
+    "Lora Loader (LoraManager)": {
+      "input": {
+        "required": {
+          "model": ["MODEL", {}],
+          "text": ["STRING", {"default": "", "multiline": true}]
+        },
+        "optional": {
+          "clip": ["CLIP", {}]
+        }
+      },
+      "output": ["MODEL", "CLIP", "STRING", "STRING"],
+      "output_is_list": [false, false, false, false],
+      "output_name": ["MODEL", "CLIP", "trigger_words", "loaded_loras"],
+      "name": "Lora Loader (LoraManager)",
+      "display_name": "Lora Loader (LoraManager)",
+      "category": "Lora Manager/loaders",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Lora-Manager"
+    },
+    "Save Image (LoraManager)": {
+      "input": {
+        "required": {
+          "images": ["IMAGE", {}],
+          "filename_prefix": ["STRING", {"default": "ComfyUI"}],
+          "file_format": [["png", "webp", "jpeg"], {"default": "png"}],
+          "lossless_webp": ["BOOLEAN", {"default": false}],
+          "quality": ["INT", {"default": 100, "min": 1, "max": 100}],
+          "embed_workflow": ["BOOLEAN", {"default": true}],
+          "save_with_metadata": ["BOOLEAN", {"default": true}],
+          "add_counter_to_filename": ["BOOLEAN", {"default": true}],
+          "save_as_recipe": ["BOOLEAN", {"default": false}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["images"],
+      "name": "Save Image (LoraManager)",
+      "display_name": "Save Image (LoraManager)",
+      "category": "Lora Manager/utils",
+      "output_node": true,
+      "python_module": "custom_nodes.ComfyUI-Lora-Manager"
+    },
+    "TriggerWord Toggle (LoraManager)": {
+      "input": {
+        "required": {
+          "group_mode": ["BOOLEAN", {"default": true}],
+          "default_active": ["BOOLEAN", {"default": true}],
+          "allow_strength_adjustment": ["BOOLEAN", {"default": false}]
+        },
+        "optional": {
+          "trigger_words": ["STRING", {"forceInput": true}]
+        }
+      },
+      "output": ["STRING"],
+      "output_is_list": [false],
+      "output_name": ["filtered_trigger_words"],
+      "name": "TriggerWord Toggle (LoraManager)",
+      "display_name": "TriggerWord Toggle (LoraManager)",
+      "category": "Lora Manager/utils",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Lora-Manager"
+    },
+    "AIO_Preprocessor": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}]
+        },
+        "optional": {
+          "preprocessor": [["none", "AnyLineArtPreprocessor_aux", "CannyEdgePreprocessor", "DepthAnythingV2Preprocessor", "DWPreprocessor", "HEDPreprocessor"], {"default": "AnyLineArtPreprocessor_aux"}],
+          "resolution": ["INT", {"default": 1024, "min": 64, "max": 2048, "step": 64}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["IMAGE"],
+      "name": "AIO_Preprocessor",
+      "display_name": "AIO Aux Preprocessor",
+      "category": "ControlNet Preprocessors",
+      "output_node": false,
+      "python_module": "custom_nodes.comfyui_controlnet_aux"
+    },
+    "DWPreprocessor": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}]
+        },
+        "optional": {
+          "detect_hand": [["enable", "disable"], {"default": "enable"}],
+          "detect_body": [["enable", "disable"], {"default": "enable"}],
+          "detect_face": [["enable", "disable"], {"default": "enable"}],
+          "resolution": ["INT", {"default": 1024, "min": 64, "max": 2048, "step": 64}],
+          "bbox_detector": [["yolox_l.onnx"], {"default": "yolox_l.onnx"}],
+          "pose_estimator": [["dw-ll_ucoco_384_bs5.torchscript.pt"], {"default": "dw-ll_ucoco_384_bs5.torchscript.pt"}],
+          "scale_stick_for_xinsr_cn": [["disable", "enable"], {"default": "disable"}]
+        }
+      },
+      "output": ["IMAGE", "POSE_KEYPOINT"],
+      "output_is_list": [false, false],
+      "output_name": ["IMAGE", "POSE_KEYPOINT"],
+      "name": "DWPreprocessor",
+      "display_name": "DWPose Estimator",
+      "category": "ControlNet Preprocessors/Faces and Poses Estimators",
+      "output_node": false,
+      "python_module": "custom_nodes.comfyui_controlnet_aux"
+    },
+    "DepthAnythingV2Preprocessor": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}]
+        },
+        "optional": {
+          "ckpt_name": [["depth_anything_v2_vitl.pth", "depth_anything_v2_vitb.pth"], {"default": "depth_anything_v2_vitl.pth"}],
+          "resolution": ["INT", {"default": 1024, "min": 64, "max": 2048, "step": 64}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["IMAGE"],
+      "name": "DepthAnythingV2Preprocessor",
+      "display_name": "Depth Anything V2",
+      "category": "ControlNet Preprocessors/Normal and Depth Estimators",
+      "output_node": false,
+      "python_module": "custom_nodes.comfyui_controlnet_aux"
+    },
+    "IPAdapterAdvanced": {
+      "input": {
+        "required": {
+          "model": ["MODEL", {}],
+          "ipadapter": ["IPADAPTER", {}],
+          "image": ["IMAGE", {}],
+          "weight": ["FLOAT", {"default": 1.0, "min": -1.0, "max": 5.0, "step": 0.05}],
+          "weight_type": [["linear", "ease in", "ease out", "strong style transfer", "composition"], {"default": "linear"}],
+          "combine_embeds": [["concat", "add", "subtract", "average", "norm average"], {"default": "concat"}],
+          "start_at": ["FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}],
+          "end_at": ["FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001}],
+          "embeds_scaling": [["V only", "K+V", "K+V w/ C penalty", "K+mean(V) w/ C penalty"], {"default": "K+V"}]
+        }
+      },
+      "output": ["MODEL"],
+      "output_is_list": [false],
+      "output_name": ["MODEL"],
+      "name": "IPAdapterAdvanced",
+      "display_name": "IPAdapter Advanced",
+      "category": "ipadapter",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI_IPAdapter_plus"
+    },
+    "UltimateSDUpscale": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "model": ["MODEL", {}],
+          "positive": ["CONDITIONING", {}],
+          "negative": ["CONDITIONING", {}],
+          "vae": ["VAE", {}],
+          "upscale_by": ["FLOAT", {"default": 2.0, "min": 0.05, "max": 4.0, "step": 0.05}],
+          "seed": ["INT", {"default": 0, "min": 0, "max": 18446744073709551615}],
+          "steps": ["INT", {"default": 20, "min": 1, "max": 10000}],
+          "cfg": ["FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0}],
+          "sampler_name": [["euler", "euler_ancestral", "dpmpp_2m"], {"default": "euler"}],
+          "scheduler": [["simple", "karras", "sgm_uniform"], {"default": "simple"}],
+          "denoise": ["FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "upscale_model": ["UPSCALE_MODEL", {}],
+          "mode_type": [["Linear", "Chess", "None"], {"default": "Linear"}],
+          "tile_width": ["INT", {"default": 1024, "min": 64, "max": 8192, "step": 8}],
+          "tile_height": ["INT", {"default": 1024, "min": 64, "max": 8192, "step": 8}],
+          "mask_blur": ["INT", {"default": 8, "min": 0, "max": 64, "step": 1}],
+          "tile_padding": ["INT", {"default": 32, "min": 0, "max": 8192, "step": 8}],
+          "seam_fix_mode": [["None", "Band Pass", "Half Tile", "Half Tile + Intersections"], {"default": "None"}],
+          "seam_fix_denoise": ["FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "seam_fix_width": ["INT", {"default": 64, "min": 0, "max": 8192, "step": 8}],
+          "seam_fix_mask_blur": ["INT", {"default": 8, "min": 0, "max": 64, "step": 1}],
+          "seam_fix_padding": ["INT", {"default": 16, "min": 0, "max": 8192, "step": 8}],
+          "force_uniform_tiles": ["BOOLEAN", {"default": true}],
+          "tiled_decode": ["BOOLEAN", {"default": false}],
+          "batch_size": ["INT", {"default": 1, "min": 1, "max": 4096, "step": 1}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["IMAGE"],
+      "name": "UltimateSDUpscale",
+      "display_name": "Ultimate SD Upscale",
+      "category": "image/upscaling",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI_UltimateSDUpscale"
+    },
+    "DetailDaemonSamplerNode": {
+      "input": {
+        "required": {
+          "sampler": ["SAMPLER", {}],
+          "detail_amount": ["FLOAT", {"default": 0.1, "min": -5.0, "max": 5.0, "step": 0.01}],
+          "start": ["FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "end": ["FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "bias": ["FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "exponent": ["FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}],
+          "start_offset": ["FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}],
+          "end_offset": ["FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}],
+          "fade": ["FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}],
+          "smooth": ["BOOLEAN", {"default": true}]
+        }
+      },
+      "output": ["SAMPLER"],
+      "output_is_list": [false],
+      "output_name": ["SAMPLER"],
+      "name": "DetailDaemonSamplerNode",
+      "display_name": "Detail Daemon Sampler",
+      "category": "sampling/custom_sampling/samplers",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Detail-Daemon"
+    },
+    "TeaCache": {
+      "input": {
+        "required": {
+          "model": ["MODEL", {}],
+          "model_type": [["flux", "flux-kontext", "hidream_i1_full", "lumina_2", "wan2.1_i2v_480p_14B"], {"default": "flux"}],
+          "rel_l1_thresh": ["FLOAT", {"default": 0.4, "min": 0.0, "max": 10.0, "step": 0.01}],
+          "start_percent": ["FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "end_percent": ["FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}],
+          "max_skip_steps": ["INT", {"default": 1, "min": 1, "max": 10, "step": 1}],
+          "cache_device": [["main_device", "offload_device"], {"default": "main_device"}]
+        }
+      },
+      "output": ["MODEL"],
+      "output_is_list": [false],
+      "output_name": ["model"],
+      "name": "TeaCache",
+      "display_name": "TeaCache",
+      "category": "TeaCache",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-TeaCache"
+    },
+    "UnetLoaderGGUF": {
+      "input": {
+        "required": {
+          "unet_name": [["flux1-dev-Q6_K.gguf", "flux2-klein-9b-Q6_K.gguf"], {"default": "flux1-dev-Q6_K.gguf"}]
+        }
+      },
+      "output": ["MODEL"],
+      "output_is_list": [false],
+      "output_name": ["MODEL"],
+      "name": "UnetLoaderGGUF",
+      "display_name": "Unet Loader (GGUF)",
+      "category": "bootleg",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-GGUF"
+    },
+    "LayerColor: ColorBalance": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "cyan_red": ["FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}],
+          "magenta_green": ["FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}],
+          "yellow_blue": ["FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["image"],
+      "name": "LayerColor: ColorBalance",
+      "display_name": "LayerColor: ColorBalance",
+      "category": "😺dzNodes/LayerColor",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI_LayerStyle"
+    },
+    "LayerFilter: FilmPost": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}],
+          "grain_power": ["FLOAT", {"default": 0.35, "min": 0.0, "max": 2.0, "step": 0.01}],
+          "grain_scale": ["FLOAT", {"default": 1.2, "min": 0.5, "max": 4.0, "step": 0.1}],
+          "vignette": ["FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01}]
+        }
+      },
+      "output": ["IMAGE"],
+      "output_is_list": [false],
+      "output_name": ["image"],
+      "name": "LayerFilter: FilmPost",
+      "display_name": "LayerFilter: FilmPost",
+      "category": "😺dzNodes/LayerFilter",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI_LayerStyle"
+    },
+    "Get resolution [Crystools]": {
+      "input": {
+        "required": {
+          "image": ["IMAGE", {}]
+        }
+      },
+      "output": ["INT", "INT"],
+      "output_is_list": [false, false],
+      "output_name": ["width", "height"],
+      "name": "Get resolution [Crystools]",
+      "display_name": "Get resolution [Crystools]",
+      "category": "crystools 🪛/Image",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Crystools"
+    },
+    "CanvasTurboVRAMGate": {
+      "input": {
+        "required": {
+          "anything": ["*", {}],
+          "flush_mode": [["soft_cache_clear", "unload_models_and_cache", "passthrough_only"], {"default": "unload_models_and_cache"}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["output"],
+      "name": "CanvasTurboVRAMGate",
+      "display_name": "VRAM Checkpoint Gate [CanvasTurbo]",
+      "category": "CanvasTurbo/Performance",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Canvas-Turbo"
+    },
+    "CanvasTurboLazyBranchSwitch": {
+      "input": {
+        "required": {
+          "index": ["INT", {"default": 0, "min": 0, "max": 7, "step": 1}]
+        },
+        "optional": {
+          "branch_0": ["*", {}],
+          "branch_1": ["*", {}],
+          "branch_2": ["*", {}],
+          "branch_3": ["*", {}],
+          "branch_4": ["*", {}],
+          "branch_5": ["*", {}],
+          "branch_6": ["*", {}],
+          "branch_7": ["*", {}]
+        }
+      },
+      "output": ["*"],
+      "output_is_list": [false],
+      "output_name": ["selected"],
+      "name": "CanvasTurboLazyBranchSwitch",
+      "display_name": "Lazy Branch Switch (8-Way) [CanvasTurbo]",
+      "category": "CanvasTurbo/Performance",
+      "output_node": false,
+      "python_module": "custom_nodes.ComfyUI-Canvas-Turbo"
+    }
+  },
+  "withheld": []
+}

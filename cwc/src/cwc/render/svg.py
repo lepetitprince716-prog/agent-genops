@@ -32,6 +32,7 @@ from cwc.render.markup import attr as _attr
 from cwc.render.markup import num as _n
 from cwc.render.markup import pair as _p
 from cwc.render.markup import text as _text
+from cwc.subgraph import subgraph_definitions
 
 FIRST_SCREEN = Rect(0, 0, 1600, 900)
 MARGIN = 40
@@ -83,6 +84,7 @@ def render_svg(canvas: Canvas, defs: DefLookup, *, show_values: bool = False) ->
 
 def render(canvas: Canvas, defs: DefLookup, *, show_values: bool = False) -> Rendering:
     nodes = sorted(canvas.nodes, key=lambda node: id_order(node.key))
+    subgraphs = subgraph_definitions(canvas)
     facts = {node.key: box_facts(node, defs.get(node.type)) for node in nodes}
     reroutes = Reroutes.read(canvas)
     shapes = link_shapes(link_paths(canvas, facts, Renderer.CLASSIC))
@@ -115,7 +117,7 @@ def render(canvas: Canvas, defs: DefLookup, *, show_values: bool = False) -> Ren
         ),
         "</g>",
         '<g id="nodes">',
-        *(_node(node, facts[node.key], defs, show_values=show_values) for node in nodes),
+        *(_node(node, facts[node.key], defs, subgraphs, show_values=show_values) for node in nodes),
         "</g>",
     ]
     view = (box.x, box.y, box.w, box.h)
@@ -242,22 +244,34 @@ def _wrap_note_lines(raw_text: str, width: float) -> list[tuple[str, bool]]:
     return out
 
 
-def _node(node: Node, facts: BoxFacts, defs: DefLookup, *, show_values: bool = False) -> str:
+def _node(
+    node: Node,
+    facts: BoxFacts,
+    defs: DefLookup,
+    subgraphs: dict[str, dict[str, Any]] | None = None,
+    *,
+    show_values: bool = False,
+) -> str:
     x, y = node.pos
     classic, vue = classic_box(node, facts), vue_box(node, facts)
     nodedef = defs.get(node.type)
+    sg_def = (subgraphs or {}).get(node.type)
     is_note = nodedef is not None and nodedef.behavior is Behavior.NOTE
     classes = ["node"]
+    if sg_def is not None:
+        classes.append("subgraph")
     if is_note:
         classes.append("note")
     if node.collapsed:
         classes.append("collapsed")
-    dim = node.mode == NodeMode.BYPASS
-    if dim:
+    dim = node.mode in (NodeMode.BYPASS, NodeMode.NEVER)
+    if node.mode == NodeMode.BYPASS:
         classes.append("bypassed")
+    elif node.mode == NodeMode.NEVER:
+        classes.append("muted")
     opacity = f' opacity="{BYPASS_OPACITY}"' if dim else ""
     fill = NOTE_FILL if is_note else NODE_FILL
-    stroke = NOTE_STROKE if is_note else CLASSIC_STROKE
+    stroke = "#58a6ff" if sg_def is not None else (NOTE_STROKE if is_note else CLASSIC_STROKE)
     parts = [
         f'<g class="{" ".join(classes)}" id="node-{_attr(node.key)}"{opacity}>',
         f"<title>{_text(f'{node.type} (id {node.key})')}</title>",
@@ -266,6 +280,12 @@ def _node(node: Node, facts: BoxFacts, defs: DefLookup, *, show_values: bool = F
         f'<text class="title" x="{_n(x + 10)}" y="{_n(y - 10)}" font-size="{TITLE_SIZE}" fill="{TEXT}">'
         f"{_text(title_text(node, nodedef))}</text>",
     ]
+    if sg_def is not None and not node.collapsed:
+        inner_count = len(sg_def.get("nodes") or [])
+        parts.append(
+            f'<text class="subgraph-badge" x="{_n(x + 15)}" y="{_n(y + 24)}" '
+            f'font-size="{WIDGET_SIZE}" fill="#79c0ff">[SUBGRAPH · {inner_count} nodes]</text>'
+        )
     inputs, outputs = slot_anchors(node, facts, Renderer.CLASSIC)
     for kind, points in (("in", inputs), ("out", outputs)):
         for point in dict.fromkeys(points):  # a collapsed node anchors every slot at one point

@@ -436,7 +436,7 @@ def is_doc_only_path(rel: str) -> bool:
 
 
 def is_unclassified_executable(root: Path, rel: str) -> bool:
-    if rel.startswith(("cwc/", "rdbg/", "artfetch/")):
+    if rel.startswith(("cwc/", "rdbg/", "artfetch/", "workbench/", "canvas-turbo/")):
         return False
     if is_doc_only_path(rel):
         return False
@@ -467,6 +467,8 @@ def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[
     run_cwc = any(p.startswith("cwc/") for p in changed_paths)
     run_rdbg = any(p.startswith("rdbg/") for p in changed_paths)
     run_artfetch = any(p.startswith("artfetch/") for p in changed_paths)
+    run_workbench = any(p.startswith("workbench/") for p in changed_paths)
+    run_canvas_turbo = any(p.startswith("canvas-turbo/") for p in changed_paths)
     run_policy = any(p.startswith("workflows/") or p in WORKFLOW_POLICY_PATHS for p in changed_paths)
     run_guard = bool(guard_trigger_paths(root, changed_paths))
 
@@ -488,6 +490,14 @@ def select_test_suites(root: Path, changed_paths: list[str]) -> dict[str, tuple[
         "artfetch-tests": (
             run_artfetch,
             "artfetch/ changed" if run_artfetch else "artfetch/ untouched",
+        ),
+        "workbench-tests": (
+            run_workbench,
+            "workbench/ changed" if run_workbench else "workbench/ untouched",
+        ),
+        "canvas-turbo-tests": (
+            run_canvas_turbo,
+            "canvas-turbo/ changed" if run_canvas_turbo else "canvas-turbo/ untouched",
         ),
     }
 
@@ -526,6 +536,8 @@ def run_test_suite(root: Path, suite: str, md_files: list[str]) -> StepResult:
         "cwc-tests": ([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], root / "cwc"),
         "rdbg-tests": (["cargo", "test", "--locked"], root / "rdbg"),
         "artfetch-tests": (["cargo", "test", "--all-targets"], root / "artfetch"),
+        "workbench-tests": ([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], root / "workbench"),
+        "canvas-turbo-tests": ([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], root / "canvas-turbo"),
     }
     cmd, cwd = cmd_map[suite]
     if not cwd.is_dir():
