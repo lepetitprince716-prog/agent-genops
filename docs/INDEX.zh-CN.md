@@ -12,6 +12,7 @@ Agent runs, ComfyUI generates, you enjoy.
 | Skill | 同一套方法的 agent 版，按需加载，可作为 Claude Code 插件安装 | `skills/agent-genops/`、`.claude-plugin/` | [SKILL.md](../skills/agent-genops/SKILL.md) |
 | 模板与工作流 | 任务包、交接、模型卡等表单；分档 subagent；三张标准 SDXL 工作流 | `templates/`、`workflows/` | [templates/README.md](../templates/README.md) |
 | 三个工具 | `cwc` 编译 ComfyUI 画布，`rdbg` 远程跑 PowerShell，`artfetch` 整理训练图 | `cwc/`、`rdbg/`、`artfetch/` | 各自的 README |
+| 伴生节点 | 可直接克隆进 `ComfyUI/custom_nodes/` 的独立自定义节点仓 | 外部独立仓 | [伴生 ComfyUI 节点](#伴生-comfyui-节点) |
 | 护栏 | 隐私扫描、密钥扫描、工作流白名单、发布前核验、git hook、CI | `tools/`、`.githooks/`、`check`、`tests/`、`.github/workflows/` | [PRIVACY.md](../PRIVACY.md)、[AGENTS.md](../AGENTS.md) |
 
 ## 说明书
@@ -81,6 +82,15 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 
 `cwc` 的流水线有两条入口：手写输入图走 normalize、instantiate，已有画布或 PNG 走 ingest，汇合后经过 annotate、layout、route、notes、verify、emit，每一步对应 `cwc/src/cwc/` 下一个目录。`cwc/tools/oracle/` 用真实 ComfyUI 前端测量节点尺寸和导出结果，作为测试基准；`cwc/showcase/` 有三张教学示例；`cwc/skills/` 是教 agent 写 API 图的 skill。
 
+## 伴生 ComfyUI 节点
+
+ComfyUI 自定义节点包保留在各自独立的公开仓库里，不作为子目录塞进本仓，这样仓库根目录直接对应 `ComfyUI/custom_nodes/<pack>/`，也避免把 PyTorch / ComfyUI 依赖带入本仓的 CI。
+
+| 仓库 | 做什么 | Agent / 命令行入口 |
+|---|---|---|
+| [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | 面向 Anima（28-block）的本地盲盒草图模式：多提示词 `micro_batch=4` 合批、单旋钮 `0–100` 混沌度、四类 LoRA 分组合批、独立 32 格全屏渐进预览墙、严格/创意双档高清还原 | `scripts/draft_cli.py`（`deal`、`draft`、`enhance`） |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 通过复用引导与线性外推跳步减少 MOSS-Image 每张图的 DiT 前向次数（含 `fast` + `refine` 预设） | 串接在 MODEL 线上的节点 + API/UI 工作流 |
+
 ## 护栏
 
 | 部件 | 作用 |
@@ -114,6 +124,8 @@ skill 启动时先读本机的 `~/.config/agent-genops/LOCAL.md`，模板是 [LO
 | 把 API 图变成整齐画布 | [cwc 教程](../cwc/showcase/README.zh-CN.md) |
 | 排查远程 Windows 机器 | [rdbg](../rdbg/README.md)，配合[调试](zh/05-debugging.md) |
 | 准备训练图 | [artfetch](../artfetch/README.md) |
+| 在 ComfyUI 里跑 32 格 Anima 盲盒草图 | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) |
+| 给 ComfyUI 的 MOSS-Image 采样提速 | [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) |
 | 提交改动 | 打开 hook，运行 `./check changed`，见 [CONTRIBUTING](../CONTRIBUTING.md) |
 | 发布前核验 | [AGENTS.md](../AGENTS.md) 里的 `./check release` |
 | 查改了什么 | [CHANGELOG](../CHANGELOG.md) |

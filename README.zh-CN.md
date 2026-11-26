@@ -147,6 +147,13 @@ python3 comfy_sweep.py smoke workflows/compiled/01-moss-fast12-hires-20s.api.jso
 | [rdbg/](rdbg/) | `rdbg`，Rust 命令行，通过系统的 `ssh` 在 Windows 主机上运行 PowerShell，不会碰到 shell 引号问题。早期阶段。 | [rdbg/README.md](rdbg/README.md) |
 | [artfetch/](artfetch/) | `artfetch`，Rust 命令行，用于多来源的插画发现、数据集收集、跨平台去重，以及整理成 1536 px 的 JPEG。 | [artfetch/README.md](artfetch/README.md) |
 
+另有两套伴生 ComfyUI 自定义节点包放在各自独立的公开仓库里，方便直接 `git clone` 进 `ComfyUI/custom_nodes/` 使用：
+
+| 仓库 | 是什么 | 安装方式 |
+|---|---|---|
+| [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | 面向 Anima（28-block）的本地盲盒草图模式节点包：真多提示词 `micro_batch=4` 合批、单旋钮 `0–100` 混沌度、四类 LoRA 分组合批、与参数解耦的 32 格全屏渐进预览墙、严格/创意双档高清还原，以及供 agent 调用的无头命令行 `draft_cli.py`。Apache-2.0。 | 直接克隆到 `ComfyUI/custom_nodes/` |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 零依赖的 MOSS-Image 推理加速节点，通过复用引导与按计划跳步减少 DiT 前向次数（含 `fast` + `refine` 预设与双通工作流）。Apache-2.0。 | 直接克隆到 `ComfyUI/custom_nodes/` |
+
 ## 使用 skill
 
 skill 就是一个文件夹 [`skills/agent-genops/`](skills/agent-genops/)：一份 `SKILL.md`，加一个按需打开的 `references/` 目录。
