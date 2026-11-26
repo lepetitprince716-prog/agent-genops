@@ -42,7 +42,7 @@ from cwc.resources import read_json
 from cwc.route.presentation import KEY, mark_hidden
 
 RESOURCES = {"MODEL", "CLIP", "VAE", "CONDITIONING"}  # written out, not imported, so no expectation comes from the module under test
-X_PRESETS = ("bento", "swimlanes", "cockpit-split", "tower-preview", "stepped")
+X_PRESETS = ("bento", "swimlanes", "cockpit-split", "tower-preview", "stepped", "gallery", "square")
 STACK_FIXTURE = support.FIXTURES / "layout" / "stack_two_pass.json"
 STACK_OBJECT_INFO = support.FIXTURES / "layout" / "stack_two_pass.object_info.json"
 

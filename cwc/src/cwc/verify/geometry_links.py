@@ -126,22 +126,31 @@ def check_crossings(view: GeometryView, policy: Policy) -> tuple[list[Finding], 
 
 
 def check_direction(
-    view: GeometryView, policy: Policy, exempt: frozenset[int] = frozenset(), axis: str = "x"
+    view: GeometryView,
+    policy: Policy,
+    exempt: frozenset[int] = frozenset(),
+    axis: str = "x",
+    *,
+    row_wraps: frozenset[int] = frozenset(),
 ) -> tuple[list[Finding], dict[str, Any]]:
     """G5: the share of links drawn against ``axis`` (classic anchors,
-    :func:`cwc.canvas.direction.runs_back`), feedback links and ``exempt`` links (those into the
-    cockpit) left out. One finding when the share is over 5 %."""
-    counted = direction(view.canvas, view.splines[Renderer.CLASSIC], exempt, axis)
+    :func:`cwc.canvas.direction.runs_back`), feedback links, ``exempt`` links (those into the
+    cockpit) and ``row_wraps`` (downward cross-band links in a ``wrap_rows`` preset) left out.
+    One finding when the share is over 5 %."""
+    counted = direction(view.canvas, view.splines[Renderer.CLASSIC], exempt | row_wraps, axis)
     backward, share = list(counted.backward), counted.share
+    drawable = view.splines[Renderer.CLASSIC].keys()
     metrics = {
         "links": len(counted.considered),
         "right_to_left": len(backward),
         "share": round(share, 4),
         "limit": G5_SHARE,
         "feedback_links": len(counted.feedback),
-        "cockpit_links": len(exempt & view.splines[Renderer.CLASSIC].keys()),
+        "cockpit_links": len(exempt & drawable),
         "right_to_left_links": backward,
     }
+    if row_wraps:
+        metrics["row_wrap_links"] = len(row_wraps & drawable)
     drawn = "right to left" if axis == "x" else "against the reading direction"
     findings = []
     if counted.over:

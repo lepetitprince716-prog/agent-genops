@@ -189,10 +189,10 @@ class NoEffectKeyTest(Folder):
                 self.assertIn(" 0 warnings;", err.splitlines()[-1])
 
     def test_several_keys_make_one_line_that_ends_at_the_guide(self):
-        doc = with_meta(PLAIN, "pos", ui_expose=["text"])
+        doc = with_meta(PLAIN, "pos", ui_expose=["text"], ui_note="subject")
         doc = with_meta(doc, "neg", ui_expose=["text"])
-        doc = with_meta(doc, "sampler", ui_note="hello", ui_locked=True)
-        doc["_workflow"] = {"format": 1, "title": "My graph"}
+        doc = with_meta(doc, "sampler", ui_locked=True)
+        doc["_workflow"] = {"format": 1, "title": "Title", "locale": "de"}
         code, _, err, report, infos = self.compile(doc)
         self.assertEqual(code, ExitCode.OK, err)
         [info] = infos
@@ -201,10 +201,11 @@ class NoEffectKeyTest(Folder):
         self.assertTrue(info["message"].endswith("`cwc guide` says what each key does"), info["message"])
         self.assertEqual(
             sorted((entry["key"], tuple(entry.get("nodes", ()))) for entry in info["data"]["keys"]),
-            [("_meta.ui_expose", ("pos", "neg")), ("_meta.ui_locked", ("sampler",))],
+            [("_meta.ui_expose", ("pos", "neg")), ("_meta.ui_locked", ("sampler",)), ("_workflow.locale", ())],
         )
-        self.assertIn("_meta.ui_expose (nodes 'pos', 'neg')", info["message"])
-        for text in ("ui_note", "_workflow.title"):  # written into extra.cwc for the diagram skin
+        for text in ("_meta.ui_expose (nodes 'pos', 'neg')", "_meta.ui_locked (node 'sampler')", "_workflow.locale"):
+            self.assertIn(text, info["message"])
+        for text in ("ui_note", "_workflow.title"):
             self.assertNotIn(text, info["message"])
         self.assertEqual(sorted(info["nodes"]), ["neg", "pos", "sampler"])
         self.assertEqual(report["findings"][-1]["title"], "authoring key is accepted but has no effect yet")
