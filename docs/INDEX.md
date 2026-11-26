@@ -10,6 +10,7 @@ Agent runs, ComfyUI generates, you enjoy.
 | Skill | The same method in a form an agent loads on demand; installs as a Claude Code plugin | `skills/agent-genops/`, `.claude-plugin/` | [SKILL.md](../skills/agent-genops/SKILL.md) |
 | Templates and workflows | Task packet, handoff, model card and other forms; tiered subagents; three standard SDXL workflows | `templates/`, `workflows/` | [templates/README.md](../templates/README.md) |
 | Three tools | `cwc` compiles ComfyUI canvases, `rdbg` runs PowerShell on remote Windows, `artfetch` builds training sets | `cwc/`, `rdbg/`, `artfetch/` | Each folder's README |
+| Companion nodes | Standalone ComfyUI custom node repos that clone directly into `ComfyUI/custom_nodes/` | External repos | [Companion ComfyUI nodes](#companion-comfyui-nodes) |
 | Guard | Privacy scan, secret scan, workflow allowlist, release check, git hooks, CI | `tools/`, `.githooks/`, `check`, `tests/`, `.github/workflows/` | [PRIVACY.md](../PRIVACY.md), [AGENTS.md](../AGENTS.md) |
 
 ## Docs
@@ -79,6 +80,15 @@ Since 2026-11-18 the three tools live here as folders of their own, each with it
 
 The `cwc` pipeline takes authoring JSON through normalize and instantiate, or an existing canvas/PNG through ingest, then runs annotate, layout, route, notes, verify and emit — one folder each under `cwc/src/cwc/`. `cwc/tools/oracle/` measures node sizes and exports in a real ComfyUI frontend as the reference for the tests; `cwc/showcase/` has three worked examples; `cwc/skills/` teaches an agent to write API graphs.
 
+## Companion ComfyUI nodes
+
+ComfyUI custom node packs stay in standalone repositories rather than subfolders here so their repository root maps directly to `ComfyUI/custom_nodes/<pack>/` and keeps PyTorch/ComfyUI dependencies out of this repository's CI.
+
+| Repository | What it does | Agent / CLI hook |
+|---|---|---|
+| [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | Local Midjourney-style Blind-Box Draft Mode for Anima (28-block): multi-prompt `micro_batch=4`, single `0–100` chaos knob, 4-role LoRA co-grouping, decoupled 32-tile fullscreen preview wall, Strict/Creative HD Enhance | `scripts/draft_cli.py` (`deal`, `draft`, `enhance`) |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Cuts MOSS-Image DiT forwards per image via guidance reuse and linear sigma extrapolation (`fast` + `refine` presets) | Drop-in MODEL node + API/UI workflows |
+
 ## Guard
 
 | Part | Job |
@@ -112,6 +122,8 @@ The guard covers every folder and runs on every commit and push.
 | Turn an API graph into a clean canvas | [cwc tutorial](../cwc/showcase/README.md) |
 | Debug a remote Windows box | [rdbg](../rdbg/README.md), with [Debugging](en/05-debugging.md) |
 | Build a training set | [artfetch](../artfetch/README.md) |
+| Run 32-card Anima blind-box drafts in ComfyUI | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) |
+| Speed up MOSS-Image sampling in ComfyUI | [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) |
 | Commit a change | Turn on the hooks and run `./check changed`; see [CONTRIBUTING](../CONTRIBUTING.md) |
 | Check before publishing | `./check release` in [AGENTS.md](../AGENTS.md) |
 | See what changed | [CHANGELOG](../CHANGELOG.md) |

@@ -167,6 +167,13 @@ commands.
 | [rdbg/](rdbg/) | `rdbg`, a Rust command line that runs PowerShell on a Windows host over the system `ssh`, without shell quoting problems. Early. | [rdbg/README.md](rdbg/README.md) |
 | [artfetch/](artfetch/) | `artfetch`, a Rust command line for multi-source illustration discovery, dataset harvesting, cross-platform deduplication and staging as 1536 px JPEGs. | [artfetch/README.md](artfetch/README.md) |
 
+Two companion ComfyUI custom node packs live in standalone repositories so they can be cloned directly into `ComfyUI/custom_nodes/`:
+
+| Repository | What it is | Install / entry |
+|---|---|---|
+| [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | Local Midjourney-style Blind-Box Draft Mode for Anima (28-block): true multi-prompt `micro_batch=4` sampling, one `0–100` chaos knob, 4-role LoRA co-grouping, decoupled 32-tile fullscreen preview wall, Strict/Creative HD Enhance, and headless `draft_cli.py` for agents. Apache-2.0. | `git clone` into `ComfyUI/custom_nodes/` |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Zero-dependency ComfyUI node cutting MOSS-Image DiT forwards by reusing guidance and skipping scheduled steps (`fast` + `refine` presets, two-pass workflow). Apache-2.0. | `git clone` into `ComfyUI/custom_nodes/` |
+
 ## Use the skill
 
 The skill is one folder, [`skills/agent-genops/`](skills/agent-genops/): a `SKILL.md` and a
