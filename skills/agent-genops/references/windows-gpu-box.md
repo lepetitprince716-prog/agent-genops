@@ -61,11 +61,13 @@ Box with CIM-hang history (Box B): plain cmd or one `Win32_Process.Create` call 
 - Tasks created over SSH run only during an interactive logon. Use XML with `LogonType S4U`, encoded UTF-16LE with BOM.
 - One-shot tasks: delete the definition right after the launch is confirmed. At wrap-up, a query by your task prefix must be empty.
 - Server tasks: deleting the definition kills the running instance. Keep it; set the start time in the past.
-- Interactive (`/IT`) windows get closed by a person. Use hidden window style.
+- Interactive (`/IT`) windows get closed by a person, killing the server with Last Run Result `3221225786` (`0xC000013A`, `STATUS_CONTROL_C_EXIT`). Always pass `-WindowStyle Hidden` to `powershell.exe`, and update an existing server task in place via `New-ScheduledTaskAction` + `Set-ScheduledTask -TaskName ... -Action $newAct` instead of unregistering it.
 
-## VRAM and GPU
+## VRAM, RAM cache and GPU
 
 - `--reserve-vram 2.5` on boxes with desktop apps; 1.0 caused silent driver crashes.
+- On `ComfyUI 0.46.0`, pass explicit bounds `--cache-ram 4.0 8.0` alongside `--reserve-vram 2.5` when hosting multiple model families on one port; bare `--cache-ram` defaults inactive headroom to `100%` of system RAM (`47.2 GiB` on Box A) and evicts resident models on every workflow switch (`14.13 s` reload vs `0.15-0.61 s`).
+- In GPU venvs on Windows, never install CPU `onnxruntime` alongside `onnxruntime-gpu`: the CPU wheel overwrites `onnxruntime/capi` and hides `CUDAExecutionProvider`. Cap `isnet-anime.onnx` CUDA BFC arena at `1536 MiB` (`512 MiB` OOMs at `Conv_83`), and keep 1-shot CLI calls on CPU (`0.314 s` on Ryzen 9800X3D vs `6.27 s` cold cuDNN init).
 - Judge free VRAM as vendor tool total minus the server's own use; foreground apps on Box A hold about 2.4 GB.
 - Orphan Python processes from crashed runs hold VRAM and commit memory (WinError 1455). Confirm the command line is not the live server before killing.
 - Do not start GPU work when a neighbour is rendering or the owner said not to.

@@ -182,6 +182,8 @@ Acceptance checklist:
     Why: owner's decision. Score = fit x3 + maintenance x2 + dependency weight x2 + readability x2 +
     maturity x1, out of 50. Fit below 3 eliminates. Stars are not a score. A license problem is a
     veto, and GPL/AGPL source from a vetoed candidate is not read into context.
+32. **On multi-file or kernel/runtime work, run bounded Gate-1 (`Subtract-Before-Add` + statechart falsification) and Gate-2 (`Spec compliance` + `Anti-Gaslighting` test audit) on a second model family via [`templates/cross-model-review.md`](../../templates/cross-model-review.md).**
+    Why: open-ended review prompts invite speculative feature creep, whereas bounded falsification cuts dead work before code is written. On 2026-11-25, an independent Gate-1 review against `ComfyUI 0.46.0` source falsified three speculative CUDA items pre-code: step-split `nvfp4`-to-`INT8` runtime weight swapping (early `E2M1` trajectory drift integrates forward and a 94 ms PCIe swap leaves under 8% gain), `CUDA Graphs` on dynamic-VRAM DiTs (upstream already wraps steps in `malloc_graph` with about 1% host gap, while private graph pools clash with `comfy-aimdo` on 16 GB), and sub-4MP two-node sequence parallelism (4 to 6 GB all-to-all per forward loses to zero-communication data parallelism).
 
 Install tiers during inventory: project-local and reversible installs go ahead and get reported;
 global packages get the exact command and a stop; anything with credentials gets the variable name
@@ -228,6 +230,7 @@ acceptance number uses.
 - 2026-10-08: three of four Haiku research lanes went off task. Rule 7.
 - 2026-10-15: a workflow's agents inherited the strongest model and burned quota. Rule 9.
 - 2026-10-19: a Haiku worker truncated a base64 payload three times. Rule 5.
+- 2026-11-25: bounded cross-model Gate-1 review falsified three speculative CUDA items before any kernel code was written. Rule 32.
 - Tests-only lane (date not recorded): two same-family reviewers passed six weak assertions. Rule 23.
 
 ## Tried and dropped
@@ -244,4 +247,4 @@ acceptance number uses.
 - [12-continuity.md](12-continuity.md): handoffs, memory, the shared task tracker.
 - [06-render-discipline.md](06-render-discipline.md): smoke before batch, for runner lanes.
 - [11-safety-and-privacy.md](11-safety-and-privacy.md): gates a worker must not route around.
-- [`templates/task-packet.md`](../../templates/task-packet.md), [`templates/agents/`](../../templates/agents/).
+- [`templates/task-packet.md`](../../templates/task-packet.md), [`templates/cross-model-review.md`](../../templates/cross-model-review.md), [`templates/agents/`](../../templates/agents/).

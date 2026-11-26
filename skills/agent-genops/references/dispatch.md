@@ -93,8 +93,9 @@ Also:
 4. Check every acceptance item has real output.
 5. Haiku result failed the check: re-dispatch to sonnet-worker.
 6. Test PRs: one reviewer must ask, per assertion, "would this fail if the code broke?"
-7. Before commit or summary: run fact-checker over claims.
-8. List unverified items as unverified in your own report.
+7. Multi-file or kernel/runtime work: run bounded cross-model Gate-1 (`Subtract-Before-Add` + statechart falsification before code) and Gate-2 (`Spec compliance` + `Anti-Gaslighting` test audit before closeout) from `templates/cross-model-review.md`.
+8. Before commit or summary: run fact-checker over claims.
+9. List unverified items as unverified in your own report.
 
 Status words: `done` is settled. `unknown` is not finished.
 

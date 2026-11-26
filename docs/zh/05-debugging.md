@@ -15,7 +15,7 @@
 
 ## 症状表
 
-版本要紧：标着 0.27.1 或 0.33.1 的结论没在 0.42.1 上复核过，两台出图机 2026-10-20 起都是 0.42.1。
+版本要紧：标着 0.27.1 或 0.33.1 的结论没在 0.42.1（两台出图机 2026-10-20 起启用）上复核过；标着 0.46.0 的条目来自 2026-11-25 实测（`torch 2.10.0+cu130`、`comfy-kitchen 0.2.41`、`comfy-aimdo 0.6.0`）。
 
 | 症状 | 可能原因 | 先查什么 |
 |---|---|---|
@@ -26,7 +26,7 @@
 | 回滚后旧运行时起不来 | 0.42.1 迁移了界面数据库 | 恢复升级前备份的数据库 |
 | 只有量化模型在 VAE 解码时 OOM | 量化后的 DiT 没法部分卸载 | 解码前显式卸模型、清缓存 |
 | 服务死掉，没有 traceback，事件日志有驱动重置 | 桌面程序吃穿了 `--reserve-vram 1.0` | 调高 `--reserve-vram`：Box A 的前台程序约占 2.4 GB，所以设 2.5；你的按自己的前台占用来定 |
-| `/free` 后显存不降；报 "Cannot set version_counter for inference tensor" | 部分加载的 INT8 ConvRot 挂了 LoRA（漏约 11 GB） | 停服务再起；`/free` 救不回来 |
+| `/free` 后显存不降；报 "Cannot set version_counter for inference tensor" | 0.33.1 上部分加载的 INT8 ConvRot 挂了 LoRA（漏约 11 GB；0.46.0 已修好，GPU 重量化 `+0.50 s`） | 0.33.1 停服务再起；升级到 0.46.0 |
 | 没有作业却占着显存或提交内存；WinError 1455 | 崩掉的作业留下孤儿或僵尸 Python | 按命令行列进程；按监听端口或命令行杀 |
 | 服务说显存够，作业照样 OOM | 服务报的空闲数不算别的进程；Box A 前台程序常驻约 2.4 GB | 厂商工具的总量减去服务自己的占用 |
 | 作业「成功」但输出为空，或者重跑轮询到超时 | 整张图命中执行缓存（0.27.1 不带 client id 时历史里不列输出） | 按 prompt 查历史；换 seed |
@@ -43,6 +43,13 @@
 | system-stats 返回 500 | 只有它挂，queue、prompt、object-info 都是 200 | 判活用队列接口 |
 | PCIe 读到 Gen3、BAR 256 MiB | 休眠或驱动更新后链路协商掉档卡住 | 先重启复测，再怀疑 BIOS |
 | SSH 退出码 255 | 传输层失败；别的非零码说明命令已经在远端跑了 | 只有 255 才换路线重试 |
+| 内存还空着 `20+ GiB`，每次切工作流照样花 `14.13 s` 从磁盘重载模型（0.46.0） | 裸传 `--cache-ram` 默认把不活跃模型水位设成物理内存的 `100%`（Box A 上 `47.2 GiB`），一换图就把旧 `ModelPatcher` 标成 `1e30` 逐出 | 显式传上下界 `--cache-ram 4.0 8.0` 并配 `--reserve-vram 2.5` |
+| `malloc_graph_scope` 内报 `RuntimeError: aimdo memory compile error`（0.46.0） | 采样捕获步跟复用步之间的张量分配形状变了，`comfy-aimdo` 重放 `graph.push()` 失败 | 模式或形状切换处先调 `comfy.model_prefetch.cleanup_malloc_graph()` |
+| 内置 `LoraLoaderBypassModelOnly` 挂在融合 `qkv` DiT 上几乎不生效（0.46.0） | 拆开的 `proj.q/k/v` 映射成元组键 `(weight_key, (0, start, dim))`，过不了 `key in model_sd_keys`（42 块共静默丢掉 `126` 个切片）；外加 `dtype=None` 不转 FP32、`linear_input_act("situ")` 绕过模块钩子 | 核对实际挂载切片数；按偏移元组解包并转 BF16、拦截 `linear_input_act`，或直接用原生 `LoraLoaderModelOnly`（`+0.50 s` 重量化） |
+| 看不到 `CUDAExecutionProvider`，或 `isnet-anime.onnx` 在 `Conv_83` 报 OOM（申请 `134 MiB`） | 同一个 venv 同时装了 CPU 版 `onnxruntime` 把 `onnxruntime-gpu` 盖掉了；`512 MiB` BFC 内存池装不下 `176 MB` 权重 + `256 MB` 特征图 + `134 MB` cuDNN 工作区 | 独立 venv 只装 `onnxruntime-gpu`；`gpu_mem_limit` 设到 `1536 MiB`，并在 `sess.run()` OOM 时回退 CPU |
+| 常驻计划任务中途退出，上次运行结果 `3221225786`（`0xC000013A`） | `powershell.exe` 没带 `-WindowStyle Hidden`，桌面上露出控制台窗口被人顺手关掉 | 用 `Set-ScheduledTask` 原地补上 `-WindowStyle Hidden`（别注销正在跑的服务任务） |
+| `UMA Box` 每向 CUDA 拷 `4 GiB` 就涨 `+4 GiB RssAnon`，或原地改权重触发 `SIGSEGV` / 写坏磁盘 `.safetensors` | `MAP_PRIVATE`（`ACCESS_COPY`）触发写时复制；可写 `MAP_SHARED` 会把改动刷回磁盘文件；裸 `PROT_READ` 缓冲碰到 `add_()` 直接段错误 | 固定用 `MAP_SHARED \| PROT_READ`（`/proc/self/maps` 为 `r--s`）并套 `ReadOnlyMmapTensor`（[`tools/safetensors_prot_read.py`](../../tools/safetensors_prot_read.py)） |
+| `A-B-A` 第二组对照 `ctl_2` 只要 `0.07 s` 就跑完，或 `ctl_1` 比 `cand` 慢约 `1.4 s` | `ctl_2` 重复了 `ctl_1` 的图谱和 seed 命中采样器缓存；或 `ctl_1` 冷跑 `CLIPTextEncode` 而 `cand` 读了条件缓存 | 用 [`tools/comfy_ab_harness.py`](../../tools/comfy_ab_harness.py) 开 `--strict-cache --a2-seed-offset 100000`（或改走 `abba` 顺序） |
 
 ## 静默出错的规则
 
@@ -64,6 +71,9 @@
 5. **不要为了拿回缓存输出给提交加 client id。**
    理由：加了会把进度广播变成单播，进度条就哑了。0.27.1 上同图重跑会轮询满 1800 秒超时，看着像挂死；
    正确修法是回查最近 200 条历史里同一个 prompt 的输出，查不到就立刻报错提示换 seed。
+
+6. **跑 `A-B-A` 测速必须开 `--strict-cache` 核执行缓存，在 `UMA Box` 上只用 `PROT_READ` 映射权重。**
+   理由：2026-11-25 在 `0.46.0` 上实测，`ctl_2` 跟 `ctl_1` 用同一组 seed 时直接命中采样器缓存，只要 `0.07 s` 就返回，而 `ctl_1` 冷跑 `CLIPTextEncode` 多花 `1.4 s`，直接把中位数带偏；[`tools/comfy_ab_harness.py`](../../tools/comfy_ab_harness.py) 遇到这两类缓存立刻报错退出。`UMA Box` 上用 `MAP_SHARED | PROT_READ` 加 `ReadOnlyMmapTensor`（[`tools/safetensors_prot_read.py`](../../tools/safetensors_prot_read.py)）既省掉 `+4.0 GiB RssAnon` 写时复制开销，又挡住原地改权重把磁盘 `.safetensors` 改坏。
 
 ## 远程 Windows 机的规则
 
@@ -96,10 +106,10 @@
    连日志目录都不建。「改文件、停、起」拆成几个小脚本，合在一起容易挂。
 
 7. **计划任务要想清楚再建。**
-   理由：经 SSH 建的任务只在用户登录时运行；走 XML 要写 S4U 登录、UTF-16 带 BOM（2026-10-13）。
+   理由：远程建的任务只在用户登录时运行；走 XML 要写 S4U 登录、UTF-16 带 BOM（2026-10-13）。
    一次性任务确认拉起后立刻删定义：2026-07-20 九个任务一起重新触发，训练卡在第 3 步。
    服务类任务正好相反，删定义会杀掉正在跑的实例，所以保留定义、把开始时间设成已过去的时刻。
-   交互式任务弹出的窗口，有人会顺手关掉。
+   交互式任务弹出的窗口，有人会顺手关掉（Box A 上会留下退出码 `3221225786` / `0xC000013A`，2026-11-25 核出）：给 `powershell.exe` 加上 `-WindowStyle Hidden`，并用 `Set-ScheduledTask -TaskName ... -Action $newAct` 原地更新定义。
 
 8. **加载 CIM 模块会挂的机器上，只用纯 cmd 或一句 WMI 调用，别加长超时。**
    理由：Box B 三周里超时 14 次，卡住的进程最后连 SSH banner 都堵住了（2026-10-13）。

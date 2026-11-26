@@ -6,6 +6,8 @@ English | [中文](#中文)
 - [`secret_scan.sh`](secret_scan.sh): second scan for secrets, a wrapper around the Betterleaks command line, called by the same three hooks. Setup and false positives: [PRIVACY.md](../PRIVACY.md#second-scan-betterleaks).
 - [`kernel_classes.py`](kernel_classes.py): splits a profiled render's GPU kernels by tensor-core accumulator type and bounds what a GeForce FP32-accumulate unlock could gain. Standard library only.
 - [`gemm_probe.py`](gemm_probe.py): times a model's linear-layer GEMMs per kernel and accumulator under sustained load, with the GPU clock and power. Needs CUDA and torch.
+- [`safetensors_prot_read.py`](safetensors_prot_read.py): maps `.safetensors` checkpoints with `MAP_SHARED | PROT_READ` (`ACCESS_READ` on Windows), checks Linux `/proc/self/maps` (`r--s`) and `RssAnon` to prevent copy-on-write RSS bloat and on-disk corruption on unified-memory boxes, and guards PyTorch tensors against in-place writes when `torch` is installed.
+- [`comfy_ab_harness.py`](comfy_ab_harness.py): runs interleaved `A-B-A` or `ABBA` ComfyUI benchmarks with warm-up discard, `nvidia-smi` clock/power/throttle sampling, median/IQR summaries, JSONL output, and a fail-closed `--strict-cache` check against cached samplers or asymmetric encoder caching. Standard library only.
 
 ## Privacy guard
 
@@ -177,12 +179,42 @@ python3 tools/gemm_probe.py --shape qkv=3072,9216 --m 4352 --m 4160 --out gemm.j
 - Run it with the GPU otherwise idle: another process on the card changes the clock and the result.
 - Run on Box B (RTX 4060 Ti, Windows, torch 2.10.0+cu130, Triton 3.8.0) on 2026-10-29; not run on other cards.
 
+## Read-only safetensors mmap
+
+`safetensors_prot_read.py` maps `.safetensors` and `.sft` checkpoints with `MAP_SHARED | PROT_READ` on POSIX (`ACCESS_READ` on Windows). On unified-memory Linux boxes (`UMA Box`), default `MAP_PRIVATE` (`ACCESS_COPY`) mappings duplicate pages into anonymous memory during CUDA host-to-device copies (`+4.0 GiB RssAnon` measured on a 4 GiB copy vs `+0.02 GiB RssAnon` under `PROT_READ`), while writable `MAP_SHARED` risks silent on-disk checkpoint corruption if a node patches weights in place.
+
+```sh
+python3 tools/safetensors_prot_read.py model.safetensors --touch --json
+python3 tools/safetensors_prot_read.py model.safetensors --verify-maps --load-torch
+```
+
+- Works with the Python standard library alone for header validation, read-only `memoryview` slicing, and Linux `/proc/self/maps` (`r--s`) plus `/proc/self/status` (`RssAnon`, `RssFile`) checks.
+- When `torch` is installed, `load_safetensors_prot_read()` wraps CPU tensors in `ReadOnlyMmapTensor` (`__torch_dispatch__`), raising `ProtReadWriteError` on any mutating op (`add_`, `zero_`, `copy_`, `out=`, and views) instead of crashing the process with `SIGSEGV`. Call `copy_on_patch(t)` or `.clone()` before an intentional weight mutation.
+- Exit status: `0` clean, `1` `/proc/self/maps` permission or write-guard failure, `2` usage or corrupt header error.
+
+## ComfyUI A/B harness
+
+`comfy_ab_harness.py` runs interleaved `A-B-A` or `ABBA` benchmarks against a ComfyUI HTTP endpoint using the standard library alone. It submits graphs without a `client_id` (see [05-debugging.md](../docs/en/05-debugging.md#rules-for-silent-failures)), discards `--warmup` runs per arm, polls `nvidia-smi` in the background when available, prints median and IQR execution times, and writes JSONL records.
+
+```sh
+python3 tools/comfy_ab_harness.py --control ctl.json --candidate cand.json \
+  --order aba --a2-seed-offset 100000 --strict-cache --out ab.jsonl
+python3 tools/comfy_ab_harness.py --control ctl.json --candidate cand.json --off off.json \
+  --order abba --seed 1001 --seed 1002 --seed 1003 --strict-cache
+```
+
+- `--strict-cache` fails closed (exit `1`) if ComfyUI's `/history` messages show a cached sampler node (catching the `0.07 s` full-graph cache hit when `A_2` repeats `A_1` with the same seed) or asymmetric text-encoder caching across arms (`~1.4 s` uncached `CLIPTextEncode` on one arm against a cached encoder on the other).
+- In `aba` mode, `--a2-seed-offset 100000` keeps `A_1` and `B` on identical seeds for pixel/latent gates while giving `A_2` distinct seeds so the sampler always executes. `abba` alternates arm order across seeds without repeating `(arm, seed)`.
+- Exit status: `0` clean, `1` `--strict-cache` integrity failure, `2` usage or HTTP/runtime error.
+
 ## 中文
 
 - [`privacy_scan.py`](privacy_scan.py)：不让个人信息进这个公开仓库。只用标准库。
 - [`secret_scan.sh`](secret_scan.sh)：第二道密钥扫描，包装了 Betterleaks 命令行，由同样三个 hook 调用。安装和误报放行见 [PRIVACY.md](../PRIVACY.md#second-scan-betterleaks)。
 - [`kernel_classes.py`](kernel_classes.py)：把一张图剖析出的 GPU 内核按张量核累加类型分类，估出 GeForce 的 FP32 累加解锁最多能快多少。只用标准库。
 - [`gemm_probe.py`](gemm_probe.py)：持续满载下，按内核和累加类型给模型线性层的矩阵乘计时，同时记下 GPU 频率和功耗。要 CUDA 和 torch。
+- [`safetensors_prot_read.py`](safetensors_prot_read.py)：用 `MAP_SHARED | PROT_READ`（Windows 上用 `ACCESS_READ`）映射 `.safetensors` 权重，核验 Linux `/proc/self/maps`（`r--s`）与 `RssAnon`，在统一内存机器上消除写时复制内存膨胀，并挡住磁盘静默写坏；装了 `torch` 时启用 `ReadOnlyMmapTensor` 原地写入拦截。
+- [`comfy_ab_harness.py`](comfy_ab_harness.py)：用标准库驱动 ComfyUI `A-B-A` / `ABBA` 交替测速，支持丢弃预热轮、后台采样 `nvidia-smi` 频率与功耗墙占比、输出中位数与 IQR 及 JSONL，并通过 `--strict-cache` 拦截采样器命中缓存或文本编码器非对称缓存。
 
 ### 隐私防护
 
@@ -342,3 +374,31 @@ python3 tools/gemm_probe.py --shape qkv=3072,9216 --m 4352 --m 4160 --out gemm.j
 - `--smi-index` 选 nvidia-smi 里的哪块卡；多卡机器上要和 torch 用的那块对上。
 - 跑的时候卡上别有别的活：别的进程会改变频率，也改变结果。
 - 2026-10-29 在 Box B（RTX 4060 Ti，Windows，torch 2.10.0+cu130，Triton 3.8.0）上跑过；别的卡没跑过。
+
+### 只读共享权重映射
+
+`safetensors_prot_read.py` 在 POSIX 上固定以 `MAP_SHARED | PROT_READ` 映射 `.safetensors` 与 `.sft` 文件（Windows 上走 `ACCESS_READ`）。在统一内存 Linux 机器（`UMA Box`）上，默认的 `MAP_PRIVATE`（`ACCESS_COPY`）在向 CUDA 拷贝 4 GiB 权重时会触发写时复制，额外多出 `+4.0 GiB RssAnon`（换成 `PROT_READ` 后只有 `+0.02 GiB RssAnon`）；而带写权限的 `MAP_SHARED` 一旦碰到节点原地改权重，就会把磁盘上的 `.safetensors` 原文件静默改坏。
+
+```sh
+python3 tools/safetensors_prot_read.py model.safetensors --touch --json
+python3 tools/safetensors_prot_read.py model.safetensors --verify-maps --load-torch
+```
+
+- 不装 `torch` 也能独立运行，用标准库校验文件头、返回只读 `memoryview` 切片，并在 Linux 上核对 `/proc/self/maps`（严格要求 `r--s`）与 `/proc/self/status`（`RssAnon`、`RssFile`）。
+- 环境里有 `torch` 时，`load_safetensors_prot_read()` 把 CPU 张量包进 `ReadOnlyMmapTensor`，拦截所有原地写算子（`add_`、`zero_`、`copy_`、`out=` 以及视图与转置别名）并抛出 `ProtReadWriteError`，避免触发不可恢复的 `SIGSEGV`。确实需要打补丁时先调 `copy_on_patch(t)` 或 `.clone()`。
+- 退出码：`0` 正常，`1` 映射权限或写保护校验失败，`2` 参数错误或文件头损坏。
+
+### ComfyUI 交替基准测试器
+
+`comfy_ab_harness.py` 只依赖标准库，向 ComfyUI HTTP 接口提交配对的 API 图谱（`--control`、`--candidate` 及可选 `--off`），不带 `client_id`（见 [05-debugging.md](../docs/zh/05-debugging.md#静默出错的规则)），自动丢弃各臂预热轮，按 `aba` 或 `abba` 交替执行，在后台采样 `nvidia-smi` 频率、功耗与功耗墙占比，汇总中位数与四分位距（IQR），并写出 JSONL。
+
+```sh
+python3 tools/comfy_ab_harness.py --control ctl.json --candidate cand.json \
+  --order aba --a2-seed-offset 100000 --strict-cache --out ab.jsonl
+python3 tools/comfy_ab_harness.py --control ctl.json --candidate cand.json --off off.json \
+  --order abba --seed 1001 --seed 1002 --seed 1003 --strict-cache
+```
+
+- `--strict-cache` 遇到两类失真直接报错退出（退出码 `1`）：采样器命中执行缓存（例如 `A_2` 跟 `A_1` 用同一组 seed，直接走缓存返回 `0.07 s`），或文本编码器在各臂之间非对称命中缓存（一侧冷跑 `CLIPTextEncode` 多花约 `1.4 s`，另一侧直接读缓存）。
+- `aba` 模式下加 `--a2-seed-offset 100000`，既能让 `A_1` 跟 `B` 保持同种子做画质与潜变量比对，又能保证 `A_2` 真跑采样器；`abba` 模式跨种子正反交替各臂顺序，不重复提交同一对 `(arm, seed)`。
+- 退出码：`0` 正常，`1` 触发 `--strict-cache` 缓存失真拦截，`2` 参数或接口运行报错。

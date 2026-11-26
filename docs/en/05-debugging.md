@@ -15,8 +15,9 @@ two-failures rule, and the shape of the command an agent hands me when it is blo
 
 ## Symptom table
 
-Versions matter: findings marked 0.27.1 or 0.33.1 were not re-checked on 0.42.1, which both
-render boxes run since 2026-10-20.
+Versions matter: findings marked 0.27.1 or 0.33.1 were not re-checked on 0.42.1 (which both
+render boxes ran from 2026-10-20); rows marked 0.46.0 come from the 2026-11-25 re-measurements
+(`torch 2.10.0+cu130`, `comfy-kitchen 0.2.41`, `comfy-aimdo 0.6.0`).
 
 | Symptom | Likely cause | First check |
 |---|---|---|
@@ -27,7 +28,7 @@ render boxes run since 2026-10-20.
 | Old runtime will not start after rollback | 0.42.1 migrated the UI database | Restore the database backup taken before the upgrade |
 | OOM at VAE decode only on a quantized model | Quantized DiT not partially offloadable | Explicit unload and cache empty before decode |
 | Server dies, no traceback, event log shows a driver reset | Desktop apps ate through `--reserve-vram 1.0` | Raise `--reserve-vram`: 2.5 on Box A, whose desktop apps hold about 2.4 GB; size yours from your own apps |
-| VRAM stays high after `/free`; "Cannot set version_counter for inference tensor" | LoRA on a partially loaded INT8 ConvRot checkpoint (about 11 GB leaked) | Service stop and start; `/free` cannot recover it |
+| VRAM stays high after `/free`; "Cannot set version_counter for inference tensor" | LoRA on a partially loaded INT8 ConvRot checkpoint on 0.33.1 (about 11 GB leaked; fixed on 0.46.0, `+0.50 s` GPU requant) | Service stop and start on 0.33.1; upgrade to 0.46.0 |
 | VRAM or commit memory held with no job; WinError 1455 | Orphan or zombie Python from a crashed run | Processes by command line; kill by listening port or command line |
 | Server reports free VRAM, jobs still OOM | Server's number ignores other processes; Box A's foreground apps hold about 2.4 GB | Vendor tool total minus the server's own use |
 | Job "succeeds" with empty outputs, or polls until timeout on a rerun | Whole graph hit the execution cache (0.27.1 lists no outputs without a client id) | Look up history by prompt; change the seed |
@@ -44,6 +45,13 @@ render boxes run since 2026-10-20.
 | system-stats returns 500 | That endpoint failed while queue, prompt and object-info returned 200 | Use the queue endpoint as the health check |
 | PCIe reads Gen3, BAR 256 MiB | Link negotiation stuck after sleep or a driver update | Reboot and re-measure before suspecting BIOS |
 | SSH exit 255 | Transport failure; any other non-zero code means the command ran remotely | Retry another route only on 255 |
+| Model reloads from disk (`14.13 s`) on every workflow switch despite `20+ GiB` free RAM (0.46.0) | Bare `--cache-ram` defaults `ram_inactive_headroom` to `100%` of RAM (`47.2 GiB` on Box A) and evicts inactive `ModelPatcher`s (`oom_ram_usage = 1e30`) | Pass explicit bounds `--cache-ram 4.0 8.0` alongside `--reserve-vram 2.5` |
+| `RuntimeError: aimdo memory compile error` inside `malloc_graph_scope` (0.46.0) | Per-step allocation shapes changed between capture and reuse steps while `comfy-aimdo` replayed `graph.push()` | Call `comfy.model_prefetch.cleanup_malloc_graph()` on mode or shape transitions |
+| Built-in `LoraLoaderBypassModelOnly` weak or missing effect on fused-`qkv` DiT (0.46.0) | Tuple-keyed `(weight_key, (0, start, dim))` adapters fail `key in model_sd_keys` (dropping `126` Q/K/V slices across `42` blocks); `dtype=None` leaves FP32 LoRAs uncast and `linear_input_act("situ")` skips module hooks | Check applied slice count; unpack offset tuples in BF16 and intercept `linear_input_act`, or use `LoraLoaderModelOnly` (`+0.50 s` GPU requant) |
+| `CUDAExecutionProvider` missing, or `isnet-anime.onnx` OOMs at `Conv_83` (`134 MiB` requested) | CPU `onnxruntime` wheel overwrote `onnxruntime-gpu` in the same venv; `512 MiB` BFC arena cap cannot fit `176 MB` weights + `256 MB` activations + `134 MB` cuDNN workspace | Keep only `onnxruntime-gpu` in a dedicated venv; raise `gpu_mem_limit` to `1536 MiB` and fall back to CPU on `sess.run()` OOM |
+| Service Scheduled Task dies with Last Run Result `3221225786` (`0xC000013A`) | `powershell.exe` launched without `-WindowStyle Hidden`; closing the desktop console window sent `CTRL_CLOSE_EVENT` | Prepend `-WindowStyle Hidden` in place with `Set-ScheduledTask` (do not unregister a running server task) |
+| `UMA Box` load adds `+4 GiB RssAnon` per `4 GiB` CUDA copy, or in-place patch `SIGSEGV`s / corrupts `.safetensors` | `MAP_PRIVATE` (`ACCESS_COPY`) triggers CoW page copies on H2D reads; writable `MAP_SHARED` writes mutations to disk; raw `PROT_READ` buffers `SIGSEGV` on `add_()` | Map with `MAP_SHARED \| PROT_READ` (`r--s` in `/proc/self/maps`) and wrap in `ReadOnlyMmapTensor` ([`tools/safetensors_prot_read.py`](../../tools/safetensors_prot_read.py)) |
+| Second control bracket `ctl_2` in `A-B-A` finishes in `0.07 s`, or `ctl_1` trails `cand` by `~1.4 s` | `ctl_2` repeated `ctl_1`'s graph and seed (`execution_cached` on sampler); `ctl_1` paid cold `CLIPTextEncode` while `cand` hit conditioning cache | Run [`tools/comfy_ab_harness.py`](../../tools/comfy_ab_harness.py) with `--strict-cache --a2-seed-offset 100000` (or `abba` order) |
 
 ## Rules for silent failures
 
@@ -70,6 +78,14 @@ render boxes run since 2026-10-20.
    Why: it turns progress broadcast into unicast and silences the progress bar. On 0.27.1 an
    identical rerun polled until the 1800 s timeout and looked like a hang; the fix looks up the
    last 200 history entries for the same prompt and fails fast with "change seed" otherwise.
+
+6. **Audit execution-cache messages in `A-B-A` benchmarks (`--strict-cache`), and guard shared mmaps on `UMA Box` (`PROT_READ`).**
+   Why: on 2026-11-25 (`0.46.0`), repeating `ctl_1`'s seed in `ctl_2` returned in `0.07 s` from
+   ComfyUI's sampler cache while `ctl_1` paid `1.4 s` uncached `CLIPTextEncode`, skewing naive arm
+   medians; [`tools/comfy_ab_harness.py`](../../tools/comfy_ab_harness.py) rejects both fail-closed.
+   On `UMA Box`, mapping `.safetensors` with `MAP_SHARED | PROT_READ` plus `ReadOnlyMmapTensor`
+   ([`tools/safetensors_prot_read.py`](../../tools/safetensors_prot_read.py)) avoids `+4.0 GiB RssAnon`
+   CoW duplication without exposing `.safetensors` files on disk to silent in-place mutation.
 
 ## Rules for remote Windows boxes
 
@@ -106,11 +122,13 @@ render boxes run since 2026-10-20.
    directory. Split "edit, stop, start" into small separate scripts; combined ones hang.
 
 7. **Handle scheduled tasks deliberately.**
-   Why: tasks created over SSH run only during an interactive logon; the XML route needs S4U
+   Why: tasks created over a remote shell run only during an interactive logon; the XML route needs S4U
    logon and UTF-16 with BOM (2026-10-13). One-shot definitions must be deleted right after a
    confirmed launch: on 2026-07-20 nine re-fired at once and froze training at step 3. For a
    server task the opposite holds: deleting the definition kills the running instance, so keep
-   it with a start time in the past. Interactive task windows get closed by a person.
+   it with a start time in the past. Interactive task windows get closed by a person (`3221225786` /
+   `0xC000013A` on Box A, audited 2026-11-25): pass `-WindowStyle Hidden` on `powershell.exe` and
+   update a live server task in place via `Set-ScheduledTask -TaskName ... -Action $newAct`.
 
 8. **On a box where CIM-loading PowerShell hangs, use plain cmd or one WMI call; do not raise the timeout.**
    Why: 14 timeouts in three weeks on Box B; the stuck processes eventually blocked even the
