@@ -73,6 +73,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     build.add_argument("--all-enabled", action="store_true", help="also write <name>.full.api.json")
     build.add_argument("--allow-unknown", action="store_true", help="accept node types with no definition")
+    build.add_argument(
+        "--portable",
+        action="store_true",
+        help="suppress file-picker dropdown warnings when compiling portable workflows against a live server's /object_info",
+    )
     build.add_argument("--json", action="store_true", help="print a JSON summary")
     build.set_defaults(run=_compile)
 
@@ -94,6 +99,7 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument("graph", metavar="GRAPH.ui.json", help="canvas workflow (UI JSON, or a PNG carrying one)")
     render.add_argument("-o", "--output", required=True, metavar="OUT.svg", help="SVG file to write")
     render.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    render.add_argument("--values", action="store_true", help="draw concise literal widget values inside nodes")
     render.add_argument("--skin", choices=SKINS, default=SKINS[0], help="debug: boxes, slots and splines as the frontend draws them; diagram: a figure with the notes in extra.cwc")
     render.add_argument("--theme", choices=[theme.value for theme in Theme], help="colours of the diagram skin (default light)")
     render.add_argument("--json", action="store_true", help="print the summary as JSON")
@@ -269,6 +275,7 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
             defs,
             allow_unknown=args.allow_unknown,
             preset=args.preset,
+            portable=args.portable,
             hide_links=HideLinks(args.hide_links) if args.hide_links else None,
         )
         report = compiled.report

@@ -15,7 +15,7 @@ from cwc.annotate.types import PlanCounts
 from cwc.canvas.model import Canvas, id_order
 from cwc.effects import authoring_effects, overridden_keys
 from cwc.instantiate import instantiate
-from cwc.layout import layout
+from cwc.layout import GUIDE_HEIGHT, layout
 from cwc.canvas.geometry import snap_up
 from cwc.layout.presets import DEFAULT, load_presets
 from cwc.layout.section import BAND_GAP, SCREEN_W
@@ -23,6 +23,7 @@ from cwc.layout.types import HideLinks, LayoutResult
 from cwc.nodedefs.registry import NodeDefs
 from cwc.normalize import normalize
 from cwc.normalize.types import Authoring
+from cwc.notes import has_guide_content, measure_guide_bottom, place_guide
 from cwc.render.notes import collect_notes, write_notes
 from cwc.report import Code, CwcError, ExitCode, Finding, Mode, Report, Severity
 from cwc.route import RouteResult, route
@@ -96,6 +97,25 @@ def preset_guide() -> dict[str, tuple[str, str]]:
             "module is one box.",
             "a staged graph read top to bottom like an architecture diagram, with a preview per stage",
         ),
+        "gallery": (
+            f"Controls stays paired with the top pipeline row (separated by {BAND_GAP} px; tall "
+            "cockpits of 5+ controls split side by side) with the final output flush on the right; "
+            "intermediate step previews, control branches and optional comparisons dock below the "
+            f"stages that feed them with enlarged preview viewports (at least "
+            f"{snap_up(round(presets['gallery'].preview.share * SCREEN_W, 6))} px wide and "
+            f"{presets['gallery'].preview.min_height} px high).",
+            "multi-step workflows with intermediate step previews or side-by-side comparisons",
+        ),
+        "square": (
+            f"2D minimal-area compact dashboard layout: searches balanced stacked rows (wrapping past "
+            f"{presets['square'].wrap_ratio:g}x height), vertical column bin-packing of short stages, "
+            "skyline lower-band tucking, and sidebar nesting under the measured Quick Guide card to "
+            "minimize total bounding-box area and maximize node area utilization; docks step previews "
+            "and optional comparisons inside each row's width with enlarged viewports (at least "
+            f"{snap_up(round(presets['square'].preview.share * SCREEN_W, 6))} px wide and "
+            f"{presets['square'].preview.min_height} px high).",
+            "minimal-area 4:3/square showcase screenshots, laptops, or dense multi-stage graphs without wide scrolling",
+        ),
         AUTO: (
             f"Picks a preset from the graph's counts, the first rule that holds: at most {AUTO_SMALL_NODES} "
             f"nodes and no optional module: tower-preview; {AUTO_PARALLEL_BRANCHES} or more control or mask "
@@ -128,6 +148,7 @@ def compile_document(
     *,
     allow_unknown: bool = False,
     preset: str | None = None,
+    portable: bool = False,
     hide_links: HideLinks | None = None,
 ) -> Compiled:
     """Compile a parsed authoring document.
@@ -142,7 +163,7 @@ def compile_document(
     and geometry failures do not raise: they are errors in the returned report, and
     ``report.ok`` is false.
     """
-    authoring, warnings = normalize(doc, defs, allow_unknown=allow_unknown)
+    authoring, warnings = normalize(doc, defs, allow_unknown=allow_unknown, portable=portable)
     name = _choose(preset, authoring.workflow.preset)
     canvas = instantiate(authoring)
     plan = annotate(canvas, defs, authoring)
@@ -150,7 +171,19 @@ def compile_document(
     auto = choose_auto(plan.counts) if name == AUTO else None
     chosen = load_presets()[auto.preset if auto is not None else name]
     try:
-        laid = layout(canvas, plan, chosen, defs)
+        if chosen.compact and plan.reserve_guide:
+            if not has_guide_content(authoring):
+                if chosen.compact_under_guide:
+                    laid = layout(canvas, plan, chosen, defs, guide_height=0.0)
+                else:
+                    laid = layout(canvas, plan, chosen, defs)
+            else:
+                laid = layout(canvas, plan, chosen, defs)
+                real_guide_h = measure_guide_bottom(canvas, authoring, plan, laid, chosen, defs)
+                if real_guide_h != float(GUIDE_HEIGHT):
+                    laid = layout(canvas, plan, chosen, defs, guide_height=real_guide_h)
+        else:
+            laid = layout(canvas, plan, chosen, defs)
     except NotImplementedError as exc:
         if auto is None:
             message = f"preset {chosen.name!r} is not available yet: {exc}"
@@ -160,6 +193,7 @@ def compile_document(
                 f"({auto.rule}; {_counts_text(plan.counts)}), and {exc}"
             )
         raise CwcError(ExitCode.INPUT_ERROR, [_preset_error(message)]) from None
+    _, laid = place_guide(canvas, authoring, plan, laid, chosen, defs)
     routes = route(canvas, laid, defs)
     mark_hidden(canvas, laid.forced, chosen.hide_links if hide_links is None else hide_links, defs)
     write_notes(canvas, collect_notes(authoring, plan, laid, canvas))

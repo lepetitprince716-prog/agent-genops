@@ -73,6 +73,7 @@ class Code(str, Enum):
     G8 = "G8"
     G9 = "G9"
     G10 = "G10"
+    G11 = "G11"
     # Readability.
     C1 = "C1"
     C2 = "C2"
@@ -135,6 +136,7 @@ TITLES: dict[Code, str] = {
     Code.G8: "guide or first interactive group is outside the first screen",
     Code.G9: "canvas aspect ratio is outside 1:1 to 2.8:1",
     Code.G10: "average link length",
+    Code.G11: "canvas area utilization is low",
     Code.C1: "group has more than 12 expanded nodes",
     Code.C2: "more than 12 top-level groups",
     Code.C3: "main-line groups do not advance along the preset axis in topological order",

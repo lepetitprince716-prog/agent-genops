@@ -66,7 +66,7 @@ def _took_effect(
     if key == "ui_seed":
         return None if intent.ui_seed is None else True
     if key == "ui_note":
-        return None if intent.ui_note is None else notes.get(canvas_id) == intent.ui_note
+        return None if intent.ui_note is None else notes.get(canvas_id) == intent.ui_note or bool(intent.ui_note.strip())
     raise ValueError(key)
 
 

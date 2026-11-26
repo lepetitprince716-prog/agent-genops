@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>零第三方依赖</strong> · <strong>内置 702 个核心节点定义</strong> · <strong>377 KB 免安装单文件 <code>cwc.pyz</code></strong> · <strong>6 套专业布局预设</strong>
+  <strong>零第三方依赖</strong> · <strong>内置 702 个核心节点定义</strong> · <strong>免安装单文件 <code>cwc.pyz</code></strong> · <strong>8 套专业布局预设</strong> · <strong>画布内嵌使用指南卡</strong>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   </picture>
 </p>
 
-上图是 `cwc compile` 将 9 节点高清放大工作流 [`docs/images/src/hires.json`](docs/images/src/hires.json) 编译为 `.ui.json` 后，直接拖入真实 ComfyUI 前端（1.59.1，仅隐藏顶部菜单栏）截取的左半侧画布。完整全画布效果见下方[六套布局预设](#六套布局预设)，开箱即用的示例画布见 [`showcase/`](showcase/README.zh-CN.md)。
+上图是 `cwc compile` 将 9 节点高清放大工作流 [`docs/images/src/hires.json`](docs/images/src/hires.json) 编译为 `.ui.json` 后，直接拖入真实 ComfyUI 前端（1.59.1，仅隐藏顶部菜单栏）截取的左半侧画布。完整全画布效果见下方[八套布局预设](#八套布局预设)，开箱即用的示例画布见 [`showcase/`](showcase/README.zh-CN.md)。
 
 ---
 
@@ -36,7 +36,7 @@ ComfyUI 存在两套截然不同、默认互不相通的 JSON 格式：
 需要 **Python 3.10+**；核心编译器**只使用 Python 标准库，零第三方依赖**。
 
 ### 方式一：免安装单文件 (`cwc.pyz`) 或 Windows/Mac 拖拽懒人包（推荐普通玩家）
-从 Releases 下载 `cwc.pyz`（仅 `377 KB`）或 `cwc-portable.zip`（也可以在本地用 `python3 tools/build_pyz.py --portable -o dist` 一秒生成）：
+从 Releases 下载 `cwc.pyz`（仅 `~395 KB`）或 `cwc-portable.zip`（也可以在本地用 `python3 tools/build_pyz.py --portable -o dist` 一秒生成）：
 
 - **Windows 鼠标拖拽一键编译**：解压 `cwc-portable.zip`，直接把任意 ComfyUI API `.json` 文件拖到 **`compile-drop-here.bat`** 图标上松手。同目录下会立刻生成 `out/` 文件夹，里面包含可直接拖进 ComfyUI 网页的 `<名称>.ui.json` 和无需开 ComfyUI 就能预览的 `<名称>.svg` 矢量图！
 - **单文件命令行（Windows / macOS / Linux 免 `pip install`）**：
@@ -69,11 +69,60 @@ wrote out/hires.report.json
 
 直接把生成的 `out/hires.ui.json` 拖进 ComfyUI 画布即可打开。`hires.api.json` 是该画布导出的等价 API Prompt（可选模块默认旁路），`hires.report.json` 记录了所有几何测量值与检查结论。
 
-> **想看手把手图文教程？** 请打开 **[3 分钟手把手教程与工作流样板间 (`showcase/README.zh-CN.md`)](showcase/README.zh-CN.md)**。
+> **想看手把手图文教程？** 请打开 **[3 分钟手把手教程与工作流样板间 (`showcase/README.zh-CN.md`)](showcase/README.zh-CN.md)**；如果你平时用 Claude Code / Cursor / Codex / Antigravity 写工作流，直接看下方 **[1 分钟防呆快速配置（Agent 一键上手）](#1-分钟防呆快速配置agent-一键上手)**。
 
 ---
 
 ## 给 AI 编程助手（Coding Agents）使用
+
+### 1 分钟防呆快速配置（Agent 一键上手）
+
+#### 方式 A：全自动复制粘贴提示词（最省心，零手动配置）
+直接把下面这段话原样发给 **Claude Code、Antigravity、Codex、Cursor 或 Gemini CLI**，让 Agent 自己把工具和 Skill 一次配齐：
+
+```text
+请帮我配置 comfyui-workflow-compiler (cwc) 并接入你的技能库：
+1. 安装 `cwc` 命令：优先运行 `uv tool install git+https://github.com/lepetitprince716-prog/comfyui-workflow-compiler`（没有 uv 可改用 `pip install --user git+https://github.com/lepetitprince716-prog/comfyui-workflow-compiler`，或免安装使用 `uvx --from git+https://github.com/lepetitprince716-prog/comfyui-workflow-compiler cwc`）。
+2. 从 https://github.com/lepetitprince716-prog/comfyui-workflow-compiler 把 `skills/comfyui-workflow-compiler/SKILL.md` 安装到你当前生效的 skills / rules 目录。
+3. 运行 `cwc presets` 验证环境可用，并读一遍 `cwc guide`。
+以后凡是我让你写 ComfyUI 工作流，一律先写声明式 API JSON，再用 `cwc compile --preset square --portable`（需要宽屏多步对比时用 `--preset gallery`）编译并修到 `ok`，最后用 `cwc render ... --values` 输出预览图给我确认。
+```
+
+#### 方式 B：一行命令永久安装 CLI + Skill（macOS / Linux）
+全局安装一次 `cwc` 命令行，再按你使用的 Agent 把内置 Skill 文件夹复制过去即可：
+
+```bash
+# 1. 全局安装 cwc（二选一：推荐 uv tool，或直接用 pip）
+uv tool install git+https://github.com/lepetitprince716-prog/comfyui-workflow-compiler
+# 若未安装 uv：pip install --user git+https://github.com/lepetitprince716-prog/comfyui-workflow-compiler
+
+# 2. 自检（能打印出全部 8 套布局预设即说明配置成功）
+cwc presets
+
+# 3. 拉取仓库中的 Skill 目录并复制到对应 Agent
+git clone --depth 1 https://github.com/lepetitprince716-prog/comfyui-workflow-compiler /tmp/cwc-skill
+```
+
+| 你使用的 Coding Agent | 复制 Skill 的一条命令 |
+|---|---|
+| **Claude Code** | `mkdir -p ~/.claude/skills && cp -R /tmp/cwc-skill/skills/comfyui-workflow-compiler ~/.claude/skills/` |
+| **Codex CLI** | `mkdir -p ~/.codex/skills && cp -R /tmp/cwc-skill/skills/comfyui-workflow-compiler ~/.codex/skills/` |
+| **Antigravity (AGY)** | `mkdir -p ~/.gemini/config/skills && cp -R /tmp/cwc-skill/skills/comfyui-workflow-compiler ~/.gemini/config/skills/` |
+| **OpenCode / Pi / 通用 Agent** | `mkdir -p ~/.agents/skills && cp -R /tmp/cwc-skill/skills/comfyui-workflow-compiler ~/.agents/skills/` |
+| **Cursor** | 将 `skills/comfyui-workflow-compiler/SKILL.md` 复制到项目的 `.cursor/rules/cwc.mdc`（或对话时直接 `@SKILL.md`） |
+
+> **Windows / 懒得装环境提示**：甚至不需要 `git` 或 `pip`——从 Releases 下载单文件 `cwc.pyz` 放进目录，直接让 Agent 调 `python dist/cwc.pyz guide` 和 `python dist/cwc.pyz compile ...` 即可开箱即用。
+
+#### 方式 C：配好后怎么使唤 Agent（日常开箱模板）
+配置完成后，以后做任何 ComfyUI 工作流，直接说人话就行：
+
+```text
+帮我做一个 <你的模型/任务> 的两阶段 ComfyUI 工作流，带可选 LoRA 开关、阶段预览和画布内使用指南卡。
+用 cwc 编译（`--preset square --portable`），把所有报错和警告修到 `ok`，并用 `--values` 渲染预览图给我看。
+（如果用到第三方自定义节点，补一句：节点定义取自 `--nodedefs http://127.0.0.1:8188` 或导出的 `object_info.json`。）
+```
+
+### 四步极速离线闭环
 
 本仓库自带即插即用的 Agent 技能包 [`skills/comfyui-workflow-compiler/SKILL.md`](skills/comfyui-workflow-compiler/SKILL.md)。Agent 只需跑通四步极速离线闭环：
 
@@ -160,9 +209,9 @@ wrote out/steps.report.json
 
 ---
 
-## 六套布局预设
+## 八套布局预设
 
-通过 `--preset <名称>`（或 JSON 顶层的 `_workflow.layout.preset`）即可切换排版架构；运行 `cwc presets` 可查看每种预设的适用场景。下面是同一个 12 节点工作流 `landscape.json` 在六套预设下的实机编译效果：
+通过 `--preset <名称>`（或 JSON 顶层的 `_workflow.layout.preset`）即可切换排版架构；运行 `cwc presets` 可查看每种预设的适用场景。下面是同一个 12 节点工作流 `landscape.json` 在六套预设下的实机编译效果，以及新增的 **`gallery`**（宽屏多步预览画廊）与 **`square`**（最小面积 2D 紧凑仪表盘）两套预设：
 
 ### `bento`（默认便当盒网格）
 
@@ -218,7 +267,20 @@ wrote out/steps.report.json
 
 像架构图一样自上而下阅读：每个组是一个框，`Controls` 排最前；框内主链竖着走在中间，喂它的节点在左侧，每个阶段的预览在右侧。框按列堆叠，一列高过画布宽度就折到右边的新列。可选模块整块一个框。
 
-`stack` 默认把跨列的 MODEL、CLIP、VAE、CONDITIONING 连线写成隐藏线（ComfyUI 前端自带的 `extra.linkPresentation`）：线的两端各画一个小标签，同一输出口不带 label 的标签叠成一个（如 `VAE ×2`），不再有一条条曲线横穿各列。这些线仍在工作流里，照常走线并写 reroute，排队的 prompt 不变。某个类型的隐藏线来自两个及以上输出口时，每条线带 `label` 写明来源，写法和前端给这个节点起的标题一致：节点标题，没有就用显示名（节点包没起显示名时就是类名），连定义都没有时用类名；同一个节点在该类型里接出两个及以上输出口时再加上 `: <输出口名>`。两个来源会写出同样的 label 时（比如两个都没起标题的提示词节点），这两个来源都不写，因为这样的 label 分不出谁是谁。带 label 的线在两端各有自己的小标签，不会叠在一起。LATENT、IMAGE 连线和列内的连线照常画出。`--hide-links none` 把所有线都画出来；`--hide-links resources` 给默认不隐藏的预设打开隐藏（另外五个预设不列跨列连线，打开也没有变化）。不认识这个键的前端会把这些线照常画成走好的线。
+`stack` 默认把跨列的 MODEL、CLIP、VAE、CONDITIONING 连线写成隐藏线（ComfyUI 前端自带的 `extra.linkPresentation`）：线的两端各画一个小标签，同一输出口不带 label 的标签叠成一个（如 `VAE ×2`），不再有一条条曲线横穿各列。这些线仍在工作流里，照常走线并写 reroute，排队的 prompt 不变。某个类型的隐藏线来自两个及以上输出口时，每条线带 `label` 写明来源，写法和前端给这个节点起的标题一致：节点标题，没有就用显示名（节点包没起显示名时就是类名），连定义都没有时用类名；同一个节点在该类型里接出两个及以上输出口时再加上 `: <输出口名>`。两个来源会写出同样的 label 时（比如两个都没起标题的提示词节点），这两个来源都不写，因为这样的 label 分不出谁是谁。带 label 的线在两端各有自己的小标签，不会叠在一起。LATENT、IMAGE 连线和列内的连线照常画出。`--hide-links none` 把所有线都画出来；`--hide-links resources` 给默认不隐藏的预设打开隐藏（其他横向预设不列跨列连线，打开也没有变化）。不认识这个键的前端会把这些线照常画成走好的线。
+
+### `gallery`（多步预览与对照画廊）
+
+专为**带中间步骤预览或可选 A/B 对比分支的多阶段工作流**打造：
+- 左侧固定 `Controls` 驾驶舱（超过 5 个控件时自动拆为紧凑的左右双列，不再把整张画布拉出纵向大空洞），经 80 px 竖向中轴通道与右侧主干流水线齐平展开，最终成品预览紧贴右上角。
+- 自动识别并把中间阶段的预览组（如一阶段构图预览、ROI 裁剪框预览）及可选对照模块紧贴停靠在对应主干步骤正下方（`dock_steps` + 中轴右侧紧凑吸顶），彻底消除传统排版中主干下方的大片死空间。
+- 统一放大输出、中间预览与可选对照区的预览窗口（至少 `560 × 540` 像素）；配合节点级 `_meta.ui_collapsed: true`，可在保留阶段分组的前提下折叠纯连线节点（如 `VAEDecode`、`BasicGuider`、`DisableNoise`），让整张画布紧凑且条理清晰。
+
+### `square`（最小面积 2D 紧凑仪表盘）
+
+专为**最小外接画布面积、最高面积利用率与一屏全览（`1.2–1.8:1`）**的多阶段工作流与截图展示打造：
+- 内置确定性 2D 紧凑装箱求解器（`compact: true`）：联合搜索多档折行行宽、同列纵向短组堆叠、下带 2D 天际线空隙嵌入、60 px 紧致组内层距，并按导览卡实际测量高度布局（`compact_under_guide: true`：在满足首屏 G8 约束时将 `Controls` 紧贴指南卡下方形成左侧边栏，无标题工作流直接回收左上角空列）。
+- 在严格保证零节点/分组重叠、零穿模与清晰流向（`G1–G8 = 0`、`G9` 全绿、`G11` 节点面积利用率典型可达 `40%–50%+`、`C3 = 0`）的前提下消除整行空白带，同时保留 `>= 560 × 540` 像素的大预览框，最适合展示截图、笔记本屏幕与复杂多步工作流。
 
 ### `auto`（根据图规模自动选型）
 
@@ -238,21 +300,22 @@ wrote out/steps.report.json
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
 cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
-             [--all-enabled] [--allow-unknown] [--json]
+             [--all-enabled] [--portable] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]
-cwc render   GRAPH.ui.json -o OUT.svg [--skin debug|diagram] [--theme light|dark] [--nodedefs FILE|URL] [--json]
+cwc render   GRAPH.ui.json -o OUT.svg [--skin debug|diagram] [--theme light|dark]
+             [--nodedefs FILE|URL] [--values] [--json]
 ```
 
 | 命令 | 功能说明 |
 |---|---|
 | `node` | 查看单个节点定义（输入、控件与默认值、下拉框可选枚举、输出），或按类名/显示名/分类搜索。未知 `TYPE` 退出码为 `3` 并在 stderr 提示最接近的类型；搜索无结果退出码为 `1`（`--json` 下输出 `[]`）。 |
-| `compile` | 将 API 图编译为 `<name>.ui.json` 画布与 `<name>.api.json`。加 `--all-enabled` 会额外写出所有可选模块开启时的 `<name>.full.api.json`。 |
-| `presets` | 列出六套预设的结构特点、适用场景以及 `auto` 的选型规则。 |
+| `compile` | 将 API 图编译为 `<name>.ui.json` 画布与 `<name>.api.json`。加 `--all-enabled` 会额外写出所有可选模块开启时的 `<name>.full.api.json`；加 `--portable` 可在编译公开/可移植工作流时跳过本机模型文件名下拉框的缺失警告，同时保留枚举值与数值范围的严格校验。 |
+| `presets` | 列出八套预设的结构特点、适用场景以及 `auto` 的选型规则。 |
 | `guide` | 打印单页编写指南。 |
 | `learn` | 从成对的 `.ui.json` 画布与 API prompt 中自动学习自定义节点的控件排列模板。 |
-| `render` | 无需启动浏览器或 ComfyUI，直接把 `.ui.json` 画布渲染成 `.svg` 矢量图。 |
+| `render` | 无需启动浏览器或 ComfyUI，直接把 `.ui.json` 画布渲染成 `.svg` 矢量图；加 `--values` 可在节点内直出关键参数值、导览说明卡排版与 `IMAGE PREVIEW` / `INPUT IMAGE` 预览框占位。 |
 
 ComfyUI 的 **702 个核心节点定义**已直接打包在 `cwc` 内部。若工作流包含第三方自定义节点（Custom Nodes），只需用 `--nodedefs` 传入导出的 `/object_info` JSON 文件，或正在运行的 ComfyUI 服务器地址（自动读取 `<URL>/api/object_info`，最多跟随 3 次 `http`/`https` 重定向且绝不从 `https` 降级到 `http`；请仅填入你信任的服务器地址）。
 
@@ -274,7 +337,7 @@ ComfyUI 的 **702 个核心节点定义**已直接打包在 `cwc` 内部。若�
 
 E7 也涵盖 `cwc` 不认识的 `_meta` 键：以 `ui_` 开头的是错误并提示最接近的键；其他的是警告。同一个节点上一个 `_meta` 键被另一个键覆盖时，会给出一条 E7 警告，点出两个键并提示该删哪个（退出码和 `ok` 不变）。优先级顺序：`ui_role: cockpit` 高于 `ui_group`，`ui_group` 高于 `ui_role: plumbing`，`ui_optional` 高于 `ui_role` 的 `cockpit` 和 `plumbing`。
 
-`ui_note`、`_workflow.title`、`_workflow.groups.<id>.note` 写进画布的 `extra.cwc`，由 `cwc render --skin diagram` 画成模块注释、图头标题和面板右上的元信息。`cwc` 已接受但当前暂不生效的预留键（`ui_locked`、`ui_expose`、`_workflow.locale`）每次编译汇总为一条 `E8` info 结论（退出码和 `ok` 不变）。
+`ui_note`、`_workflow.title`、`_workflow.groups.<id>.note` 会同时写入画布左上角的 `MarkdownNote` 快速使用指南卡与 `extra.cwc`（供 `cwc render --skin diagram` 画成模块注释、图头标题和面板右上的元信息）。`cwc` 已接受但当前暂不生效的预留键（`ui_locked`、`ui_expose`、`_workflow.locale`）每次编译汇总为一条 `E8` info 结论（退出码和 `ok` 不变）。
 
 </details>
 
@@ -316,8 +379,8 @@ E7 也涵盖 `cwc` 不认识的 `_meta` 键：以 `ui_` 开头的是错误并提
 
 ## 架构文档与项目状态
 
-- **当前已就绪**：完整编译管线（`normalize` → `instantiate` → `annotate` → `layout` → `route` → `verify`）、六套布局预设、六个核心命令、单文件免安装包构建器（`tools/build_pyz.py`）、Agent 技能包（[`skills/`](skills/comfyui-workflow-compiler/SKILL.md)）以及 [`showcase/`](showcase/README.zh-CN.md) 教程样板间。
-- **下一阶段计划（M3）**：保持拓扑不变的无损画布整理（`cwc beautify`）、画布内嵌注释与导览卡、以及 PNG 工作流元数据嵌入与提取（`cwc embed` / `cwc extract`）。
+- **当前已就绪**：完整编译管线（`normalize` → `instantiate` → `annotate` → `layout` → `route` → `notes` → `verify`）、八套布局预设（含竖排架构图 `stack`、宽屏多步预览 `gallery` 与最小面积 2D 紧凑仪表盘 `square`）、画布内嵌 `MarkdownNote` 使用指南卡（通过 `C5`/`G8` 校验）、`--skin diagram` 架构图皮肤、`--portable` 可移植编译、`_meta.ui_collapsed` 组内管道节点折叠、`render --values` 参数与预览框可视化、六个核心命令、单文件免安装包构建器（`tools/build_pyz.py`）、Agent 技能包（[`skills/`](skills/comfyui-workflow-compiler/SKILL.md)）以及 [`showcase/`](showcase/README.zh-CN.md) 教程样板间。
+- **下一阶段计划（M3）**：保持拓扑不变的无损画布整理（`cwc beautify`）、二阶段通道加宽路由、以及 PNG 工作流元数据嵌入与提取（`cwc embed` / `cwc extract`）。
 
 深度工程与前端实测文档（英文）：
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 模块边界、排版算法与校验规则。
@@ -334,8 +397,8 @@ E7 也涵盖 `cwc` 不认识的 `_meta` 键：以 `ui_` 开头的是错误并提
 |---|---|---|
 | M0 | 真实前端浏览器校验台；测量布局算法依赖的底层常数（`tools/oracle/`、`docs/m0-findings.md`） | 已完成 |
 | M1 | 节点实例化与等价性证明；将 API 图编译为导出相同 Prompt 的画布（`docs/m1-templates.md`） | 已完成 |
-| M2 | 五套布局预设、双渲染器排版与原生连线路由检查（`docs/ARCHITECTURE.md`、`docs/m2-frontend-facts.md`） | 已完成 |
-| M3 | 二阶段拐点走线优化、画布内嵌导览说明、已有画布无损整理（`beautify`）、PNG 嵌入与提取 | 计划中 |
+| M2 | 八套布局预设（含 `stack`、`gallery` 与 `square`）、双渲染器排版与原生连线路由检查（`docs/ARCHITECTURE.md`、`docs/m2-frontend-facts.md`） | 已完成 |
+| M3 | 画布内嵌 `MarkdownNote` 导览指南卡（已完成）；二阶段拐点走线优化、已有画布无损整理（`beautify`）、PNG 嵌入与提取 | 进行中 |
 | M4 | 编程 Agent 技能包（[`skills/`](skills/comfyui-workflow-compiler/SKILL.md)）、`cwc.pyz` 免安装懒人打包（`tools/build_pyz.py`）与 [`showcase/`](showcase/README.zh-CN.md) 样板间 | 已完成 |
 | M5 | 首个正式版之后的可选扩展 | 计划中 |
 

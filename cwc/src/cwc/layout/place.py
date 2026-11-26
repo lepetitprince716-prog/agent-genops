@@ -24,12 +24,13 @@ from __future__ import annotations
 
 from typing import Callable, Mapping
 
-from cwc.annotate.types import GroupPlan
+from cwc.annotate.types import GroupPlan, Zone
 from cwc.canvas.geometry import Rect
+from cwc.layout.compact import G8Check, place_compact
 from cwc.layout.inner import Part
 from cwc.layout.items import Item, _downstream, _slot_items
-from cwc.layout.section import Links, Placed, _at_spine, _Done, _finish, _lay, _settle
-from cwc.layout.types import CorridorKind, Preset
+from cwc.layout.section import BAND_GAP, Links, Placed, _at_spine, _Done, _finish, _lay, _settle, _union
+from cwc.layout.types import Axis, CorridorKind, Preset
 
 WRAP_MIN_MOVED = 0.25  # a cut must move at least this share of the section's width
 
@@ -95,7 +96,13 @@ def _assign(sections: list[list[Item]], lower: list[Item], links: Links) -> dict
     return {item: out.get(item, 0) for item in lower}
 
 
-def _slots(preset: Preset, groups: list[GroupPlan], edges: Mapping[str, set[str]], exempt: frozenset[str]) -> dict[str, tuple[int, int]]:
+def _slots(
+    preset: Preset,
+    groups: list[GroupPlan],
+    edges: Mapping[str, set[str]],
+    exempt: frozenset[str],
+    preview_groups: frozenset[str] = frozenset(),
+) -> dict[str, tuple[int, int]]:
     """The ``(band, slot)`` each of ``groups`` is placed in.
 
     A group goes to its zone's slot (``Preset.home``), with one exception. A main-row group
@@ -137,6 +144,32 @@ def _slots(preset: Preset, groups: list[GroupPlan], edges: Mapping[str, set[str]
         latest = max(upstream, default=slot)
         if latest > slot:
             out[g.key] = (0, latest)
+    if preset.preview is not None and preset.preview.dock_steps and len(preset.bands) >= 2:
+        candidates = [
+            g
+            for g in groups
+            if out[g.key][0] == 0
+            and g.key in preview_groups
+            and g.zone is not Zone.COCKPIT
+            and not edges.get(g.key)
+        ]
+        if len(candidates) >= 2:
+            cand_keys = {c.key for c in candidates}
+            stage_of = {
+                g.key: max(
+                    (
+                        p.stage
+                        for p in groups
+                        if out[p.key][0] == 0 and p.key not in cand_keys and g.key in reach[p.key]
+                    ),
+                    default=-1,
+                )
+                for g in candidates
+            }
+            max_stage = max(stage_of.values(), default=-1)
+            for g in candidates:
+                if 0 <= stage_of[g.key] < max_stage:
+                    out[g.key] = (1, 0)
     return out
 
 
@@ -169,6 +202,8 @@ def place(
     exempt: frozenset[str],
     fits: Callable[[Placed], bool],
     guide: float = 0.0,
+    preview_groups: frozenset[str] = frozenset(),
+    g8_ok: G8Check | None = None,
 ) -> Placed:
     """Place the top-level ``groups`` (plan order), each a row of parts (``units``), by
     ``preset``, each in the slot :func:`_slots` gives it. ``links``: link counts between top-level groups. ``x0``: where every section
@@ -179,53 +214,94 @@ def place(
     edges: dict[str, set[str]] = {}
     for a, b in links:
         edges.setdefault(a, set()).add(b)
-    slots = _slots(preset, groups, edges, exempt)
+    slots = _slots(preset, groups, edges, exempt, preview_groups)
     by_slot: dict[tuple[int, int], list[GroupPlan]] = {}
     for group in groups:
         by_slot.setdefault(slots[group.key], []).append(group)
+    tier_axis = preset.cockpit_split.axis if preset.cockpit_split is not None else Axis.Y
     preset_bands: list[list[Item]] = []
     for b, band in enumerate(preset.bands):
-        items = [item for s, slot in enumerate(band.slots) for item in _slot_items(b, s, slot, by_slot.get((b, s), []), units, edges, exempt)]
+        items = [
+            item
+            for s, slot in enumerate(band.slots)
+            for item in _slot_items(b, s, slot, by_slot.get((b, s), []), units, edges, exempt, tier_axis)
+        ]
         if items:
             preset_bands.append(items)
     if not preset_bands:
         return Placed(parts=[], bands=[], items=[], band_of=[])
     main, lower = preset_bands[0], preset_bands[1:]
     flat = [item for band in lower for item in band]
-    # The wrap works on the open last section ``rest``; the sections before it (``closed``) are
-    # laid out once, in ``done``. Splitting ``rest`` leaves them and their lower items as they
-    # were: ``_assign`` builds each lower item's section from main-row sections by max and min
-    # alone, the order fixed by the links, and ``rest`` and its halves come after every closed
-    # section. So a lower item in a closed section stays there and no other item enters one, and
-    # a trial lays out its two sections only.
-    closed: list[list[Item]] = []
-    done = _Done(
-        skybridge=any(rule.kind is CorridorKind.SKYBRIDGE for rule in preset.corridors),
-        spine=next((rule.after_slot for rule in preset.corridors if rule.kind is CorridorKind.SPINE), None),
-    )
-    rest = main
-    while True:
-        s = len(closed)
-        current = _lay(done, rest, _mine(lower, _assign(closed + [rest], flat, links), s), links, exempt, x0, guide)
-        if len(rest) <= 1 or not _too_wide(current.sections[-1], preset.wrap_ratio):
-            return _finish(current)
-        before = current.sections[-1].w
-        candidates = []
-        for k in range(1, len(rest)):
-            if _at_spine(rest[k - 1], rest[k], done.spine):
-                continue  # the cockpit and the stages it steers stay in one section
-            trial = closed + [rest[:k], rest[k:]]
-            assign = _assign(trial, flat, links)
-            head = _lay(done, rest[:k], _mine(lower, assign, s), links, exempt, x0, guide)
-            arranged = _lay(head, rest[k:], _mine(lower, assign, s + 1), links, exempt, x0, guide)
-            if arranged.sections[-1].w < WRAP_MIN_MOVED * before:
-                continue
-            candidates.append((_too_wide(arranged.sections[-2], preset.wrap_ratio), _crossing(trial, flat, assign, links, exempt), -k, k, arranged))
-        candidates.sort(key=lambda c: c[:3])
-        chosen = next((k for *_, k, arranged in candidates if fits(_finish(arranged))), None)
-        if chosen is None:
-            # The trials moved the items ``rest`` shares with them: lay it out again.
-            return _finish(_lay(done, rest, _mine(lower, _assign(closed + [rest], flat, links), s), links, exempt, x0, guide))
-        assign = _assign(closed + [rest[:chosen], rest[chosen:]], flat, links)
-        done = _settle(_lay(done, rest[:chosen], _mine(lower, assign, s), links, exempt, x0, guide))
-        closed, rest = closed + [rest[:chosen]], rest[chosen:]
+
+    def _baseline() -> tuple[Placed, list[list[Item]]]:
+        closed: list[list[Item]] = []
+        done = _Done(
+            skybridge=any(rule.kind is CorridorKind.SKYBRIDGE for rule in preset.corridors),
+            spine=next((rule.after_slot for rule in preset.corridors if rule.kind is CorridorKind.SPINE), None),
+            wrap_rows=preset.wrap_rows,
+        )
+        rest = main
+
+        def row_x0(state: _Done) -> float:
+            if preset.wrap_rows and state.bands and state.bands[-1].bottom + BAND_GAP >= guide:
+                return 0.0
+            return x0
+
+        while True:
+            s = len(closed)
+            sx0 = row_x0(done)
+            current = _lay(done, rest, _mine(lower, _assign(closed + [rest], flat, links), s), links, exempt, sx0, guide)
+            target_box = _union(current.sections) if preset.wrap_rows else current.sections[-1]
+            if len(rest) <= 1 or not _too_wide(target_box, preset.wrap_ratio):
+                return _finish(current), closed + [rest]
+            if preset.wrap_rows and done.sections and current.sections[-1].right <= max(sec.right for sec in done.sections):
+                return _finish(current), closed + [rest]
+            before = current.sections[-1].w
+            candidates = []
+            for k in range(1, len(rest)):
+                if _at_spine(rest[k - 1], rest[k], done.spine):
+                    continue
+                trial = closed + [rest[:k], rest[k:]]
+                assign = _assign(trial, flat, links)
+                head = _lay(done, rest[:k], _mine(lower, assign, s), links, exempt, sx0, guide)
+                arranged = _lay(head, rest[k:], _mine(lower, assign, s + 1), links, exempt, row_x0(head), guide)
+                if arranged.sections[-1].w < WRAP_MIN_MOVED * before:
+                    continue
+                head_sec, tail_sec = arranged.sections[-2], arranged.sections[-1]
+                if preset.wrap_rows:
+                    key = (
+                        _too_wide(head_sec, preset.wrap_ratio),
+                        max(head_sec.right, tail_sec.right),
+                        _crossing(trial, flat, assign, links, exempt),
+                    )
+                else:
+                    key = (
+                        _too_wide(head_sec, preset.wrap_ratio),
+                        _crossing(trial, flat, assign, links, exempt),
+                        -k,
+                    )
+                candidates.append((*key, k, arranged))
+            candidates.sort(key=lambda c: c[:3])
+            chosen = next((k for *_, k, arranged in candidates if fits(_finish(arranged))), None)
+            if chosen is None:
+                return _finish(_lay(done, rest, _mine(lower, _assign(closed + [rest], flat, links), s), links, exempt, sx0, guide)), closed + [rest]
+            assign = _assign(closed + [rest[:chosen], rest[chosen:]], flat, links)
+            done = _settle(_lay(done, rest[:chosen], _mine(lower, assign, s), links, exempt, sx0, guide))
+            closed, rest = closed + [rest[:chosen]], rest[chosen:]
+
+    if preset.compact:
+        return place_compact(
+            preset,
+            main,
+            lower,
+            links,
+            x0=x0,
+            exempt=exempt,
+            fits=fits,
+            guide=guide,
+            guide_w=float(preset.guide_width) if guide > 0 else 0.0,
+            g8_ok=g8_ok,
+            assign_fn=_assign,
+            baseline_fn=_baseline,
+        )
+    return _baseline()[0]

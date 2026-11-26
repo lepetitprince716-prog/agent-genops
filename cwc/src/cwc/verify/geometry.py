@@ -1,4 +1,4 @@
-"""Geometry and readability checks G1-G10 and C1-C6 on a written canvas.
+"""Geometry and readability checks G1-G11 and C1-C6 on a written canvas.
 
 They read the canvas only (node boxes through :func:`cwc.canvas.envelope.envelope`, links
 through :mod:`cwc.canvas.links`), never layout internals. Severities follow the mode
@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping
 
 from cwc.canvas.geometry import GRID, Rect, bounding
 from cwc.canvas.model import Canvas
-from cwc.layout.types import Preset
+from cwc.layout.types import Axis, Preset
 from cwc.prompt.slots import DefLookup
 from cwc.report import Code, Finding, Mode, Report, Severity
 from cwc.verify.geometry_clarity import (
@@ -20,8 +20,9 @@ from cwc.verify.geometry_clarity import (
     check_colours,
     check_crowded,
     check_top_level_count,
+    top_level,
 )
-from cwc.verify.geometry_groups import check_ancestry, check_group_overlap, check_membership, links_into
+from cwc.verify.geometry_groups import ancestor_sets, check_ancestry, check_group_overlap, check_membership, links_into
 from cwc.verify.geometry_links import check_crossings, check_direction, mean_length
 from cwc.verify.geometry_screen import check_first_screen, check_guide_height, check_readable_width, guide_nodes
 from cwc.verify.geometry_view import GeometryView
@@ -29,6 +30,8 @@ from cwc.verify.policy import Policy
 
 ASPECT_MIN = 1.0
 ASPECT_MAX = 2.8
+AREA_UTIL_MIN_NODES = 10
+AREA_UTIL_MIN = 0.30
 
 __all__ = ["check_geometry"]
 
@@ -44,7 +47,7 @@ def check_geometry(
     preset: Preset | None = None,
     cockpit: Iterable[int] = (),
 ) -> Report:
-    """G1-G10 and C1-C6 for ``canvas`` under ``mode``.
+    """G1-G11 and C1-C6 for ``canvas`` under ``mode``.
 
     Boxes: G1 tests the envelope (union of both renderers' boxes). G2 runs once per renderer,
     each link's curve from that renderer's anchors against that renderer's boxes of the
@@ -105,10 +108,12 @@ def check_geometry(
         skipped.append({"code": Code.G3.value, "reason": "no membership or before canvas given"})
     record(Code.G4, check_group_overlap(canvas, policy))
     into_cockpit = links_into(view, cockpit_groups)
-    record(Code.G5, check_direction(view, policy, into_cockpit, preset.axis if preset else "x"))
+    row_wraps = _row_wrap_links(view, preset) - into_cockpit if preset is not None and preset.wrap_rows else frozenset()
+    record(Code.G5, check_direction(view, policy, into_cockpit, preset.axis if preset else "x", row_wraps=row_wraps))
     record(Code.G6, check_grid(view, policy))
     record(Code.G9, check_aspect(view))
     report.metrics[Code.G10.value] = _link_length(view, defs, policy, before)
+    record(Code.G11, check_area_utilization(view))
     regrouped = policy.strict or regroup
     record(Code.G7, check_readable_width(view))
     record(Code.G8, check_first_screen(view, preset, interactive=regrouped))
@@ -132,6 +137,30 @@ def check_geometry(
         skipped.append({"code": Code.C6.value, "reason": "colours are kept in beautify without regroup"})
     report.metrics["skipped"] = skipped
     return report
+
+
+def _row_wrap_links(view: GeometryView, preset: Preset) -> frozenset[int]:
+    """Links descending from one top-level group strictly into a lower band (``down.y >= up.bottom``
+    for ``Axis.X``): carriage-return links in a ``wrap_rows`` preset, exempt from G5's intra-row
+    left-to-right check just as C3 treats them as forward reading order."""
+    tops = set(top_level(view))
+    ancestors = ancestor_sets(view)
+    home = {key: min(held & tops) for key, held in ancestors.items() if held & tops}
+    boundings = [group.bounding for group in view.canvas.groups]
+    out: set[int] = set()
+    for link in view.canvas.links:
+        origin, target = str(link.origin_id), str(link.target_id)
+        if origin not in home or target not in home:
+            continue
+        up, down = home[origin], home[target]
+        if up == down:
+            continue
+        if preset.axis is Axis.X:
+            if boundings[down].y >= boundings[up].bottom:
+                out.add(link.id)
+        elif boundings[down].x >= boundings[up].right:
+            out.add(link.id)
+    return frozenset(out)
 
 
 def _link_length(view: GeometryView, defs: DefLookup, policy: Policy, before: Canvas | None) -> dict[str, Any]:
@@ -194,9 +223,13 @@ def check_grid(view: GeometryView, policy: Policy) -> tuple[list[Finding], dict[
     return findings, {"off_grid": len(findings), "pinned_exempt": exempt}
 
 
+def _canvas_rects(view: GeometryView) -> list[Rect]:
+    return list(view.envelopes.values()) + [group.bounding for group in view.canvas.groups]
+
+
 def check_aspect(view: GeometryView) -> tuple[list[Finding], dict[str, Any]]:
     """G9: width over height of the union of node envelopes and group boundings must lie in 1 to 2.8."""
-    rects: list[Rect] = list(view.envelopes.values()) + [group.bounding for group in view.canvas.groups]
+    rects = _canvas_rects(view)
     if not rects:
         return [], {"extent": None, "ratio": None}
     extent = bounding(rects)
@@ -212,3 +245,38 @@ def check_aspect(view: GeometryView) -> tuple[list[Finding], dict[str, Any]]:
         data={"extent": extent.as_list()},
     )
     return [finding], metrics
+
+
+def check_area_utilization(view: GeometryView) -> tuple[list[Finding], dict[str, Any]]:
+    """G11: packing density = sum(node envelope areas) / union bounding box area."""
+    rects = _canvas_rects(view)
+    if not rects:
+        return [], {
+            "bbox_area": 0.0,
+            "node_area_sum": 0.0,
+            "area_utilization": None,
+            "nodes": 0,
+            "min_utilization": AREA_UTIL_MIN,
+        }
+    extent = bounding(rects)
+    bbox_area = round(extent.w * extent.h, 2)
+    node_area_sum = round(sum(box.w * box.h for box in view.envelopes.values()), 2)
+    util = round(node_area_sum / bbox_area, 4) if bbox_area > 0 else None
+    node_count = len(view.nodes)
+    metrics = {
+        "bbox_area": bbox_area,
+        "node_area_sum": node_area_sum,
+        "area_utilization": util,
+        "nodes": node_count,
+        "min_utilization": AREA_UTIL_MIN,
+    }
+    if node_count >= AREA_UTIL_MIN_NODES and util is not None and util < AREA_UTIL_MIN:
+        finding = Finding(
+            Code.G11,
+            Severity.WARNING,
+            f"canvas area utilization is {util:.1%} ({node_area_sum:g} / {bbox_area:g} px^2 across {node_count} nodes); target is at least {AREA_UTIL_MIN:.0%}",
+            hint="try --preset square for 2D minimal-area compact packing",
+            data=metrics,
+        )
+        return [finding], metrics
+    return [], metrics

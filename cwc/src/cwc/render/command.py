@@ -28,7 +28,7 @@ def command(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     if args.skin == "diagram":
         rendering = render_diagram(canvas, defs, Theme(args.theme or Theme.LIGHT.value))
     else:
-        rendering = render(canvas, defs)
+        rendering = render(canvas, defs, show_values=bool(getattr(args, "values", False)))
     target = Path(args.output)
     try:
         write_atomic(target, rendering.svg.encode("utf-8"))

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 NODE_GAP = 40  # between envelopes in a layer
 LAYER_GAP = 80  # between layers, plus TRACK per link through the gap
+COMPACT_LAYER_GAP = 60
 TRACK = 20
 DUMMY = 40  # reserved slot height for a link spanning a layer
 PAD = 20  # group box margin on every side
@@ -470,7 +471,9 @@ def _arrange(
     return layers, segments, chains, back
 
 
-def place_part(graph: Graph, plan: GroupPlan, key: str, letter: str, keys: list[str], fill: Fill | None = None) -> Part:
+def place_part(
+    graph: Graph, plan: GroupPlan, key: str, letter: str, keys: list[str], fill: Fill | None = None, *, compact: bool = False
+) -> Part:
     """Lay out ``keys`` as one box: widen expanded nodes per layer, stack each layer, and
     space the layers by the links through each gap. Writes node sizes (width up only; height
     up only for the preview nodes of ``fill``)."""
@@ -481,8 +484,8 @@ def place_part(graph: Graph, plan: GroupPlan, key: str, letter: str, keys: list[
         through[layer_of[a]] += 1
     widths = _widths(graph, layers)
     if fill is not None:
-        _fill(graph, layers, widths, through, fill)
-    nodes, dummy_at, rects, _ = _stack(graph, layers, widths, through)
+        _fill(graph, layers, widths, through, fill, compact=compact)
+    nodes, dummy_at, rects, _ = _stack(graph, layers, widths, through, compact=compact)
     box = _box(rects)
     shift = (-box.x, -box.y)
     return Part(
@@ -521,7 +524,7 @@ def _widths(graph: Graph, layers: list[list[Item]]) -> list[float]:
 
 
 def _stack(
-    graph: Graph, layers: list[list[Item]], widths: list[float], through: list[int]
+    graph: Graph, layers: list[list[Item]], widths: list[float], through: list[int], *, compact: bool = False
 ) -> tuple[dict[str, Point], dict[Item, Point], list[Rect], list[float]]:
     """Node positions, dummy points, the rects the box must hold, and each layer's bottom."""
     nodes: dict[str, Point] = {}
@@ -546,13 +549,16 @@ def _stack(
                 rects.append(Rect(px + cx, py + cy, 0, 0))
             cursor = py + rel.y + rel.h + NODE_GAP
         bottoms.append(cursor - NODE_GAP)
-        x = float(snap_up(x + widths[at] + LAYER_GAP + TRACK * through[at]))
+        layer_gap = COMPACT_LAYER_GAP + TRACK * max(0, through[at] - 1) if compact else LAYER_GAP + TRACK * through[at]
+        x = float(snap_up(x + widths[at] + layer_gap))
     for dx, dy in dummy_at.values():
         rects.append(Rect(dx, dy - DUMMY / 2, 0, DUMMY))
     return nodes, dummy_at, rects, bottoms
 
 
-def _fill(graph: Graph, layers: list[list[Item]], widths: list[float], through: list[int], fill: Fill) -> None:
+def _fill(
+    graph: Graph, layers: list[list[Item]], widths: list[float], through: list[int], fill: Fill, *, compact: bool = False
+) -> None:
     """Grow the preview nodes of ``fill`` so the part is at least ``fill.width`` by
     ``fill.height`` and they fill it: the missing width is shared by the layers holding preview
     nodes, each of which then takes its layer's full width; in each such layer the preview
@@ -563,34 +569,33 @@ def _fill(graph: Graph, layers: list[list[Item]], widths: list[float], through: 
     held = [at for at, row in enumerate(shows) if row]
     if not held:
         return
-    box = _box(_stack(graph, layers, widths, through)[2])
+    box = _box(_stack(graph, layers, widths, through, compact=compact)[2])
     extra = snap_up(max(0.0, fill.width - box.w) / len(held))
     for at in held:
         widths[at] = float(snap_up(widths[at] + extra))
         for item in shows[at]:
             node = graph.nodes[item[1]]
             node.set_size(max(node.size[0], widths[at]), node.size[1])
-    _, _, rects, bottoms = _stack(graph, layers, widths, through)
+    _, _, rects, bottoms = _stack(graph, layers, widths, through, compact=compact)
     box = _box(rects)
     inner_bottom = box.y + max(snap_up(fill.height), box.h) - PAD
     for at in held:
         spare = inner_bottom - bottoms[at]
-        if spare <= 0:
-            continue
         count = len(shows[at])
-        steps = int(spare // GRID)
+        steps = max(0, int(spare // GRID))
         for i, item in enumerate(shows[at]):
             # whole steps dealt out evenly, the earlier nodes taking the odd ones
-            grow: float = GRID * (steps // count + (1 if i < steps % count else 0))
-            if i == count - 1 and item == layers[at][-1]:
+            grow: float = GRID * (steps // count + (1 if i < steps % count else 0)) if spare > 0 else 0.0
+            if spare > 0 and i == count - 1 and item == layers[at][-1]:
                 grow += spare - steps * GRID
-            if grow <= 0:
-                continue
             node = graph.nodes[item[1]]
             rel = _rel_envelope(node, graph.facts[item[1]])
             # the envelope's height below pos is the live or the Vue body, whichever is taller;
-            # sizing from it makes the envelope grow by exactly ``grow``
-            node.set_size(node.size[0], rel.y + rel.h + grow)
+            # sizing from it makes the envelope grow by exactly ``grow`` and lifts classic previews
+            # up to match Vue's viewport even when stacked previews already fill ``fill.height``
+            target = rel.y + rel.h + grow
+            if target > node.size[1]:
+                node.set_size(node.size[0], target)
 
 
 def _rel_envelope(node: Node, facts: BoxFacts) -> Rect:
@@ -622,6 +627,8 @@ def group_parts(
     core: Collection[CockpitSlot] | None = None,
     fill: Fill | None = None,
     fill_of: Callable[[Zone], Fill | None] | None = None,
+    *,
+    compact: bool = False,
 ) -> list[Part]:
     """The parts of one plan group. A leaf group at top level is cut into :func:`segments`
     when it is not the cockpit (whose inbound links run backward by design), and into
@@ -636,7 +643,7 @@ def group_parts(
     members = list(plan.members)
     if not children:
         if not members:
-            return [place_part(graph, plan, plan.key, "", members, fill)]
+            return [place_part(graph, plan, plan.key, "", members, fill, compact=compact)]
         if plan.parent is None and plan.zone is Zone.COCKPIT:
             runs = [(0, t, run, fill) for t, run in enumerate(tiers(graph, members, core))]
         elif plan.parent is None:
@@ -649,14 +656,14 @@ def group_parts(
             runs = [(0, 0, members, fill)]
         pieces = [(s, t, piece, f) for s, t, run, f in runs for piece in split(graph, run)]
         if len(pieces) <= 1:
-            return [place_part(graph, plan, plan.key, "", members, fill)]
+            return [place_part(graph, plan, plan.key, "", members, fill, compact=compact)]
         out = []
         for i, (s, t, piece, f) in enumerate(pieces):
-            part = place_part(graph, plan, f"{plan.key}/{_letter(i)}", _letter(i), piece, f)
+            part = place_part(graph, plan, f"{plan.key}/{_letter(i)}", _letter(i), piece, f, compact=compact)
             part.segment, part.tier = s, t
             out.append(part)
         return out
-    own = place_part(graph, plan, plan.key, "", members, fill) if members else None
+    own = place_part(graph, plan, plan.key, "", members, fill, compact=compact) if members else None
     rects: list[Rect] = []
     nodes: dict[str, Point] = {}
     waypoints: dict[int, tuple[Point, ...]] = {}

@@ -16,15 +16,15 @@ from cwc.annotate.graph import GraphView, group_ranks
 from cwc.annotate.palette import group_colour, zone_class
 from cwc.annotate.types import COCKPIT_KEY, Annotations, CockpitSlot, GroupPlan, Source, Zone
 from cwc.canvas.direction import Direction, direction, runs_back
-from cwc.canvas.envelope import Renderer, shows_preview
+from cwc.canvas.envelope import Renderer, envelope, shows_preview
 from cwc.canvas.geometry import Rect, snap_up
 from cwc.canvas.links import canvas_splines
-from cwc.canvas.model import Canvas
+from cwc.canvas.model import Canvas, id_order
 from cwc.layout import stack
 from cwc.layout.inner import Fill, Graph, Part, group_parts, segment_zone
 from cwc.layout.items import Item
 from cwc.layout.place import place
-from cwc.layout.section import SCREEN_W, Placed
+from cwc.layout.section import SCREEN_W, TITLE_REACH, Placed
 from cwc.layout.types import Axis, Column, Corridor, CorridorKind, LayoutResult, Numbering, Point, Preset, Widening
 from cwc.prompt.slots import DefLookup
 
@@ -34,10 +34,19 @@ GUIDE_HEIGHT = 900
 GUIDE_GAP = 40
 FONT_SIZE = 24  # the frontend's default group title size
 TRACK = 20
+_FIRST_SCREEN = Rect(0, 0, SCREEN_W, GUIDE_HEIGHT)
+_TITLE_BAND = 30
+_UNSET = object()
 
 
 def layout(
-    canvas: Canvas, annotations: Annotations, preset: Preset, defs: DefLookup, *, widen: Widening | None = None
+    canvas: Canvas,
+    annotations: Annotations,
+    preset: Preset,
+    defs: DefLookup,
+    *,
+    widen: Widening | None = None,
+    guide_height: float | None = _UNSET,  # type: ignore[assignment]
 ) -> LayoutResult:
     """Place ``canvas`` by ``annotations`` and ``preset``. ``defs`` are the node definitions the
     checks get (``check_geometry(canvas, defs, ...)``): node boxes come from
@@ -55,19 +64,50 @@ def layout(
     graph = Graph.of(canvas, annotations.nodes, defs)
     if preset.axis is Axis.Y:
         return _layout_stack(canvas, annotations, preset, defs, graph)
-    units = _units(graph, annotations, preset.cockpit_split.core if preset.cockpit_split is not None else None, _fill_of(preset, defs, graph))
+    cockpit_core = None
+    if preset.cockpit_split is not None:
+        cockpit_plan = next((g for g in annotations.groups if g.key == COCKPIT_KEY), None)
+        if cockpit_plan is not None and len(cockpit_plan.members) >= preset.cockpit_split.min_nodes:
+            cockpit_core = preset.cockpit_split.core
+    units = _units(graph, annotations, cockpit_core, _fill_of(preset, defs, graph), compact=preset.compact)
     tops, top_of, cut = _segments(list(annotations.children(None)), units, _top_of(annotations), graph)
     tops = _frames_after_cockpit(_ranked(tops, top_of, GraphView(canvas, defs)))
     cockpit = frozenset(g.key for g in tops if g.zone is Zone.COCKPIT)
+    preview_groups = frozenset(
+        top_of[key]
+        for key, node in graph.nodes.items()
+        if key in top_of
+        and not node.collapsed
+        and (nodedef := defs.get(node.type)) is not None
+        and nodedef.output_node
+        and shows_preview(nodedef)
+    )
     links: dict[tuple[str, str], int] = {}
     for _, origin, target in graph.edges:
         a, b = top_of.get(origin), top_of.get(target)
         if a is not None and b is not None and a != b:
             links[(a, b)] = links.get((a, b), 0) + 1
-    x0 = float(preset.guide_width + GUIDE_GAP) if annotations.reserve_guide else 0.0
-    guide = float(GUIDE_HEIGHT) if annotations.reserve_guide else 0.0
-    placed = place(preset, tops, units, links, x0=x0, exempt=cockpit, fits=_fits(canvas, graph, top_of, cockpit), guide=guide)
-    return _write(canvas, annotations, preset, placed, x0, cockpit, cut)
+    if guide_height is _UNSET:
+        effective_guide = float(GUIDE_HEIGHT) if annotations.reserve_guide else 0.0
+    elif guide_height is None:
+        effective_guide = 0.0
+    else:
+        effective_guide = float(guide_height) if annotations.reserve_guide else 0.0
+    x0 = float(preset.guide_width + GUIDE_GAP) if effective_guide > 0.0 else 0.0
+    g8_ok = _g8_checker(graph)
+    placed = place(
+        preset,
+        tops,
+        units,
+        links,
+        x0=x0,
+        exempt=cockpit,
+        fits=_fits(canvas, graph, top_of, cockpit, preset.axis, wrap_rows=preset.wrap_rows),
+        guide=effective_guide,
+        preview_groups=preview_groups,
+        g8_ok=g8_ok,
+    )
+    return _write(canvas, annotations, preset, placed, x0, cockpit, cut, effective_guide)
 
 
 def _layout_stack(canvas: Canvas, annotations: Annotations, preset: Preset, defs: DefLookup, graph: Graph) -> LayoutResult:
@@ -96,7 +136,8 @@ def _layout_stack(canvas: Canvas, annotations: Annotations, preset: Preset, defs
     tops = _frames_after_cockpit(_ranked(tops, top_of, GraphView(canvas, defs)))
     tops = [g for g in tops if g.zone is Zone.COCKPIT] + [g for g in tops if g.zone is not Zone.COCKPIT]
     cockpit = frozenset(g.key for g in tops if g.zone is Zone.COCKPIT)
-    x0 = float(preset.guide_width + GUIDE_GAP) if annotations.reserve_guide else 0.0
+    effective_guide = float(GUIDE_HEIGHT) if annotations.reserve_guide else 0.0
+    x0 = float(preset.guide_width + GUIDE_GAP) if effective_guide > 0.0 else 0.0
     stacked = stack.place_stack(
         graph,
         [boxes[part.key] for g in tops for part in units[g.key]],
@@ -106,7 +147,7 @@ def _layout_stack(canvas: Canvas, annotations: Annotations, preset: Preset, defs
         drawn=drawn,
         sources={link.id: (str(link.origin_id), link.origin_slot) for link in canvas.links},
     )
-    result = _write(canvas, annotations, preset, stacked.placed, x0, cockpit, cut)
+    result = _write(canvas, annotations, preset, stacked.placed, x0, cockpit, cut, effective_guide)
     return stack.finish(canvas, graph, result, stacked, drawn)
 
 
@@ -136,14 +177,22 @@ def _unimplemented(preset: Preset) -> list[str]:
 
 
 def _fits(
-    canvas: Canvas, graph: Graph, top: Mapping[str, str], cockpit: frozenset[str], axis: str = "x"
+    canvas: Canvas,
+    graph: Graph,
+    top: Mapping[str, str],
+    cockpit: frozenset[str],
+    axis: str = "x",
+    *,
+    wrap_rows: bool = False,
 ) -> Callable[[Placed], bool]:
     """Whether a placement keeps G5 within its limit, counted as G5 counts it
     (:mod:`cwc.canvas.direction`, along ``axis``), the links into the cockpit frames left out:
     into their own members and into the members of groups nested in them, as
     ``check_geometry`` leaves out the links into every group in ``LayoutResult.cockpit`` and the
     groups nested in them. ``top``: each grouped node's placed group (a segment's key for a
-    member of a cut group), which ``cockpit`` names.
+    member of a cut group), which ``cockpit`` names. When ``wrap_rows`` is true, links descending
+    strictly from an upper top-level group to a lower one (``target.y >= origin.bottom``) are also
+    left out as carriage-return row wraps, matching G5.
 
     An anchor is the node's position plus an offset fixed by the node's size and slots. The
     offsets and the counted links are read once from the canvas as it stands; each placement
@@ -164,15 +213,34 @@ def _fits(
 
     def fits(placed: Placed) -> bool:
         pos = {key: (node.pos[0], node.pos[1]) for key, node in nodes.items()}
+        span_y: dict[str, tuple[float, float]] = {}
 
-        def walk(part: Part, at_x: float, at_y: float) -> None:
+        def walk(part: Part, at_x: float, at_y: float, band_y: tuple[float, float]) -> None:
             for key, (px, py) in part.nodes.items():
                 pos[key] = (at_x + px, at_y + py)
+                span_y[key] = band_y
             for child, (cx, cy) in part.children:
-                walk(child, at_x + cx, at_y + cy)
+                walk(child, at_x + cx, at_y + cy, band_y)
 
         for part, at_x, at_y in placed.parts:
-            walk(part, at_x, at_y)
+            walk(part, at_x, at_y, (at_y, at_y + part.box.h))
+        if wrap_rows:
+            active = [
+                row
+                for row in counted
+                if not (
+                    row[1] in span_y
+                    and row[3] in span_y
+                    and span_y[row[3]][0] >= span_y[row[1]][1]
+                )
+            ]
+            considered = tuple(row[0] for row in active)
+            backward = tuple(
+                i
+                for i, a, (odx, ody), b, (idx, idy) in active
+                if runs_back((pos[a][0] + odx, pos[a][1] + ody), (pos[b][0] + idx, pos[b][1] + idy), axis)
+            )
+            return not Direction(considered=considered, backward=backward, feedback=base.feedback).over
         backward = tuple(
             i
             for i, a, (odx, ody), b, (idx, idy) in counted
@@ -281,11 +349,60 @@ def _fill_of(preset: Preset, defs: DefLookup, graph: Graph) -> Callable[[Zone], 
     # rounded first: 0.55 * 1600 is 880.0000000000001 in floating point, which would snap to 900
     fill = Fill(snap_up(round(preview.share * SCREEN_W, 6)), preview.min_height, nodes)
     home = preset.home(preview.zone)
-    return lambda zone: fill if preset.home(zone) == home else None
+    allowed = {z for z in Zone if preset.home(z) == home} | set(preview.extra_zones)
+    return lambda zone: fill if zone in allowed else None
+
+
+def _g8_checker(graph: Graph) -> Callable[[Part, float, float], bool]:
+    """Exact G8 first-screen check when placing the first interactive group ``part`` at ``(x, y)``."""
+    cache: dict[int, tuple[float, tuple[float, float, Rect] | None]] = {}
+
+    def _top_member(part: Part) -> tuple[float, tuple[float, float, Rect] | None]:
+        pid = id(part)
+        if pid in cache:
+            return cache[pid]
+        members: list[tuple[str, float, float, Rect]] = []
+
+        def collect(p: Part, ox: float, oy: float) -> None:
+            for key, (px, py) in p.nodes.items():
+                node = graph.nodes[key]
+                nx, ny = node.pos
+                env = envelope(node, graph.facts[key])
+                rel = Rect(env.x - nx, env.y - ny, env.w, env.h)
+                members.append((key, ox + px, oy + py, rel))
+            for child, (cx, cy) in p.children:
+                collect(child, ox + cx, oy + cy)
+
+        collect(part, 0.0, 0.0)
+        if members:
+            _, rx, ry, rel = min(members, key=lambda m: (m[2], m[1], id_order(m[0])))
+            entry = (part.box.w, (rx, ry, rel))
+        else:
+            entry = (part.box.w, None)
+        cache[pid] = entry
+        return entry
+
+    def ok(part: Part, x: float, y: float) -> bool:
+        width, top = _top_member(part)
+        band = Rect(x, y, min(width, TITLE_REACH), _TITLE_BAND)
+        if not _FIRST_SCREEN.contains_rect(band):
+            return False
+        if top is None:
+            return True
+        rx, ry, rel = top
+        env = Rect(x + rx + rel.x, y + ry + rel.y, rel.w, rel.h)
+        return _FIRST_SCREEN.contains_rect(env)
+
+    return ok
 
 
 def _units(
-    graph: Graph, annotations: Annotations, core: tuple[CockpitSlot, ...] | None, fill_of: Callable[[Zone], Fill | None]
+    graph: Graph,
+    annotations: Annotations,
+    core: tuple[CockpitSlot, ...] | None,
+    fill_of: Callable[[Zone], Fill | None],
+    *,
+    compact: bool = False,
 ) -> dict[str, list[Part]]:
     """Every group's parts, children before parents; ``core`` tiers the cockpit group
     (``Preset.cockpit_split``) and no other cockpit frame; ``fill_of`` gives the preview area by
@@ -296,7 +413,9 @@ def _units(
     def build(group: GroupPlan, fill: Fill | None) -> list[Part]:
         children = [build(child, fill) for child in annotations.children(group.key)]
         core_of = core if group.key == COCKPIT_KEY else None
-        out[group.key] = group_parts(graph, group, children, core_of, fill, fill_of if group.parent is None else None)
+        out[group.key] = group_parts(
+            graph, group, children, core_of, fill, fill_of if group.parent is None else None, compact=compact
+        )
         return out[group.key]
 
     for top in annotations.children(None):
@@ -318,6 +437,7 @@ def _write(
     x0: float,
     cockpit: frozenset[str],
     cut: frozenset[str],
+    guide_height: float,
 ) -> LayoutResult:
     """Write the groups and positions. ``cockpit``: the placed keys of the cockpit frames, a
     segment's for a frame that is a segment of a group in ``cut``."""
@@ -380,7 +500,7 @@ def _write(
         Corridor(id=f"skybridge:{i}", kind=CorridorKind.SKYBRIDGE, rect=strip, tracks=int(strip.h // TRACK))
         for i, strip in enumerate(placed.skybridges)
     ) + tuple(Corridor(id=f"spine:{s}", kind=CorridorKind.SPINE, rect=gap, tracks=int(gap.w // TRACK)) for s, gap in placed.spines)
-    guide = Rect(0, 0, preset.guide_width, GUIDE_HEIGHT) if annotations.reserve_guide else None
+    guide = Rect(0, 0, preset.guide_width, guide_height) if guide_height > 0.0 else None
     return LayoutResult(
         preset=preset.name,
         bands=tuple(placed.bands),
