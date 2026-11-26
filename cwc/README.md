@@ -300,7 +300,7 @@ Designed for **minimal-area 2D compact dashboards (`~1.2–1.8:1`)** with maxima
 ```text
 cwc node     [TYPE | --search KW] [--nodedefs FILE|URL] [--json]
 cwc compile  GRAPH.json -o DIR [--nodedefs FILE|URL] [--preset NAME] [--hide-links none|resources]
-             [--all-enabled] [--portable] [--allow-unknown] [--json]
+             [--guide-note | --no-guide-note] [--all-enabled] [--portable] [--allow-unknown] [--json]
 cwc presets  [--json]
 cwc guide
 cwc learn    FILE [FILE ...] -o FILE [--nodedefs FILE|URL] [--json]

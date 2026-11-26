@@ -17,6 +17,7 @@ from tests.layout_cases import (
     with_lora,
     controlnet,
 )
+from tests.test_layout_bento import REFERENCE_SECONDS, reference_seconds
 
 from cwc.canvas.model import Canvas
 from cwc.layout.presets import get_preset, parse_presets
@@ -130,25 +131,25 @@ class AreaUtilizationCheckTest(unittest.TestCase):
 class CompactPresetSchemaTest(unittest.TestCase):
     def test_golden_preset_flag_matrix(self):
         expected = {
-            "bento": (2.4, False, False, False),
-            "swimlanes": (2.4, False, False, False),
-            "cockpit-split": (2.4, False, False, False),
-            "tower-preview": (2.4, False, False, False),
-            "stepped": (2.4, False, False, False),
-            "stack": (1.0, False, False, False),
-            "gallery": (2.6, False, False, False),
-            "square": (1.85, True, True, True),
+            "bento": (2.4, False, False, False, False),
+            "swimlanes": (2.4, False, False, False, False),
+            "cockpit-split": (2.4, False, False, False, False),
+            "tower-preview": (2.4, False, False, False, False),
+            "stepped": (2.4, False, False, False, False),
+            "stack": (1.0, False, False, False, False),
+            "gallery": (2.6, False, False, False, True),
+            "square": (1.85, True, True, True, True),
         }
         for name, flags in expected.items():
             preset = get_preset(name)
             self.assertEqual(
-                (preset.wrap_ratio, preset.wrap_rows, preset.compact, preset.compact_under_guide),
+                (preset.wrap_ratio, preset.wrap_rows, preset.compact, preset.compact_under_guide, preset.guide_note),
                 flags,
                 name,
             )
 
     def test_non_bool_compact_flags_rejected(self):
-        for key in ("compact", "compact_under_guide"):
+        for key in ("compact", "compact_under_guide", "guide_note"):
             for bad in (1, "true", None):
                 doc = copy.deepcopy(read_json("presets.json"))
                 doc["presets"]["square"][key] = bad
@@ -238,11 +239,13 @@ class CompactLayoutEngineTest(unittest.TestCase):
 
     def test_large_199_node_graph_compiles_fast_and_clean_under_square(self):
         doc = long_chain(48)
+        reference = reference_seconds()
+        limit = 1.5 * max(1.0, reference / REFERENCE_SECONDS)
         t0 = time.perf_counter()
         res = compile_document(doc, DEFS, preset="square")
         elapsed = time.perf_counter() - t0
         self.assertTrue(res.report.ok, [f.message for f in res.report.findings])
-        self.assertLess(elapsed, 1.5)
+        self.assertLess(elapsed, limit, f"elapsed {elapsed:.3f}s >= limit {limit:.3f}s (ref {reference:.3f}s)")
         gm = res.report.metrics["geometry"]
         self.assertGreaterEqual(gm["G11"]["area_utilization"], AREA_UTIL_MIN)
 

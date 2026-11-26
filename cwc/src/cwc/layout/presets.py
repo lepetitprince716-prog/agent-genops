@@ -60,7 +60,7 @@ FORMAT = 1
 DEFAULT = "bento"
 
 _PRESET_KEYS = {"axis", "wrap_ratio", "guide_width", "numbering", "hide_links", "palette", "bands", "corridors"}
-_OPTIONAL_KEYS = {"cockpit_split", "preview", "tray", "wrap_rows", "compact", "compact_under_guide"}
+_OPTIONAL_KEYS = {"cockpit_split", "preview", "tray", "wrap_rows", "compact", "compact_under_guide", "guide_note"}
 
 
 def load_presets() -> dict[str, Preset]:
@@ -115,6 +115,9 @@ def _preset(name: str, entry: Any) -> Preset:
     compact_under_guide = entry.get("compact_under_guide", False)
     if not isinstance(compact_under_guide, bool):
         raise ValueError(f"{where}: compact_under_guide must be true or false")
+    guide_note = entry.get("guide_note", False)
+    if not isinstance(guide_note, bool):
+        raise ValueError(f"{where}: guide_note must be true or false")
     axis = _enum(Axis, entry["axis"], f"{where} axis")
     # along y a column may be as high as the canvas is wide: the canvas then stays at least square
     least = 1.0 if axis is Axis.Y else None
@@ -133,6 +136,7 @@ def _preset(name: str, entry: Any) -> Preset:
         wrap_rows=wrap_rows,
         compact=compact,
         compact_under_guide=compact_under_guide,
+        guide_note=guide_note,
         hide_links=_enum(HideLinks, entry["hide_links"], f"{where} hide_links"),
     )
 

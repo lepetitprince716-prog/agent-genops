@@ -262,7 +262,7 @@ def check_area_utilization(view: GeometryView) -> tuple[list[Finding], dict[str,
     bbox_area = round(extent.w * extent.h, 2)
     node_area_sum = round(sum(box.w * box.h for box in view.envelopes.values()), 2)
     util = round(node_area_sum / bbox_area, 4) if bbox_area > 0 else None
-    node_count = len(view.nodes)
+    node_count = len(view.nodes) - len(guide_nodes(view))
     metrics = {
         "bbox_area": bbox_area,
         "node_area_sum": node_area_sum,

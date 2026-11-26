@@ -134,6 +134,7 @@ class Preset:
     wrap_rows: bool = False
     compact: bool = False
     compact_under_guide: bool = False
+    guide_note: bool = False
     hide_links: HideLinks = HideLinks.NONE
 
     def home(self, zone: Zone) -> tuple[int, int]:

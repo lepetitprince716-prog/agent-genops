@@ -208,7 +208,7 @@ class NoEffectKeyTest(Folder):
         for text in ("ui_note", "_workflow.title"):
             self.assertNotIn(text, info["message"])
         self.assertEqual(sorted(info["nodes"]), ["neg", "pos", "sampler"])
-        self.assertEqual(info["title"], "authoring key is accepted but has no effect yet")
+        self.assertEqual(report["findings"][-1]["title"], "authoring key is accepted but has no effect yet")
         self.assertNotIn("E7", [f["code"] for f in report["findings"]])
 
     def test_json_lists_the_info_and_keeps_ok(self):

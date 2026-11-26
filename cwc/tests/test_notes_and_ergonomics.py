@@ -53,7 +53,7 @@ class GuideNotesTest(unittest.TestCase):
         }
         doc["decode"]["_meta"] = {"ui_group": "finish"}
         doc["sampler"]["_meta"] = {"ui_note": "Keep cfg near 2.5 for clean colors."}
-        compiled = compile_document(doc, NodeDefs.load())
+        compiled = compile_document(doc, NodeDefs.load(), preset="square")
         self.assertTrue(compiled.report.ok, compiled.report.findings)
         guides = [n for n in compiled.canvas.nodes if n.properties.get("cwc_role") == "guide"]
         self.assertEqual(len(guides), 1)
@@ -68,8 +68,26 @@ class GuideNotesTest(unittest.TestCase):
         self.assertEqual(geom["C5"]["too_tall"], 0)
         self.assertEqual(geom["G8"]["guides"], 1)
 
+    def test_classic_preset_keeps_extra_cwc_by_default_and_supports_guide_note_override(self) -> None:
+        doc = copy.deepcopy(PLAIN)
+        doc["_workflow"] = {"format": 1, "title": "Classic Demo"}
+        defs = NodeDefs.load()
+        plain_bento = compile_document(copy.deepcopy(doc), defs, preset="bento")
+        self.assertTrue(plain_bento.report.ok, plain_bento.report.findings)
+        self.assertEqual([n for n in plain_bento.canvas.nodes if n.properties.get("cwc_role") == "guide"], [])
+        self.assertEqual(plain_bento.canvas.extra["cwc"]["title"], "Classic Demo")
+
+        with_card = compile_document(copy.deepcopy(doc), defs, preset="bento", guide_note=True)
+        self.assertTrue(with_card.report.ok, with_card.report.findings)
+        self.assertEqual(len([n for n in with_card.canvas.nodes if n.properties.get("cwc_role") == "guide"]), 1)
+
+        no_card_sq = compile_document(copy.deepcopy(doc), defs, preset="square", guide_note=False)
+        self.assertTrue(no_card_sq.report.ok, no_card_sq.report.findings)
+        self.assertEqual([n for n in no_card_sq.canvas.nodes if n.properties.get("cwc_role") == "guide"], [])
+        self.assertIsNone(no_card_sq.layout.guide)
+
     def test_plain_graph_without_title_or_notes_adds_no_guide(self) -> None:
-        compiled = compile_document(copy.deepcopy(PLAIN), NodeDefs.load())
+        compiled = compile_document(copy.deepcopy(PLAIN), NodeDefs.load(), preset="square")
         self.assertTrue(compiled.report.ok)
         guides = [n for n in compiled.canvas.nodes if n.properties.get("cwc_role") == "guide"]
         self.assertEqual(guides, [])
@@ -78,7 +96,7 @@ class GuideNotesTest(unittest.TestCase):
         doc = copy.deepcopy(PLAIN)
         doc["_workflow"] = {"format": 1, "title": "A" * 120}
         doc["sampler"]["_meta"] = {"ui_note": " ".join(f"tip{i}" for i in range(200))}
-        compiled = compile_document(doc, NodeDefs.load())
+        compiled = compile_document(doc, NodeDefs.load(), preset="square")
         self.assertTrue(compiled.report.ok, compiled.report.findings)
         self.assertEqual(compiled.report.metrics["geometry"]["C5"]["too_tall"], 0)
 
@@ -129,7 +147,7 @@ class RenderValuesAndNoteTest(unittest.TestCase):
         doc = copy.deepcopy(PLAIN)
         doc["_workflow"] = {"format": 1, "title": "Render Value Check"}
         defs = NodeDefs.load()
-        compiled = compile_document(doc, defs)
+        compiled = compile_document(doc, defs, guide_note=True)
         svg_plain = render_svg(compiled.canvas, defs, show_values=False)
         svg_vals = render_svg(compiled.canvas, defs, show_values=True)
         self.assertIn("Render Value Check", svg_plain)
@@ -147,7 +165,7 @@ class RenderValuesAndNoteTest(unittest.TestCase):
             g = p / "demo.json"
             g.write_text(json.dumps(doc), encoding="utf-8")
             out, err = io.StringIO(), io.StringIO()
-            rc = main(["compile", str(g), "-o", str(p / "out"), "--portable"], out, err)
+            rc = main(["compile", str(g), "-o", str(p / "out"), "--portable", "--guide-note"], out, err)
             self.assertEqual(rc, ExitCode.OK, err.getvalue())
             out2, err2 = io.StringIO(), io.StringIO()
             rc2 = main(["render", str(p / "out" / "demo.ui.json"), "-o", str(p / "demo.svg"), "--values"], out2, err2)

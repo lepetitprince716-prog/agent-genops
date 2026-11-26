@@ -150,6 +150,7 @@ def compile_document(
     preset: str | None = None,
     portable: bool = False,
     hide_links: HideLinks | None = None,
+    guide_note: bool | None = None,
 ) -> Compiled:
     """Compile a parsed authoring document.
 
@@ -170,9 +171,10 @@ def compile_document(
     apply_notes(canvas, plan)
     auto = choose_auto(plan.counts) if name == AUTO else None
     chosen = load_presets()[auto.preset if auto is not None else name]
+    emit_guide = chosen.guide_note if guide_note is None else guide_note
     try:
         if chosen.compact and plan.reserve_guide:
-            if not has_guide_content(authoring):
+            if not (emit_guide and has_guide_content(authoring)):
                 if chosen.compact_under_guide:
                     laid = layout(canvas, plan, chosen, defs, guide_height=0.0)
                 else:
@@ -193,7 +195,8 @@ def compile_document(
                 f"({auto.rule}; {_counts_text(plan.counts)}), and {exc}"
             )
         raise CwcError(ExitCode.INPUT_ERROR, [_preset_error(message)]) from None
-    _, laid = place_guide(canvas, authoring, plan, laid, chosen, defs)
+    if emit_guide:
+        _, laid = place_guide(canvas, authoring, plan, laid, chosen, defs)
     routes = route(canvas, laid, defs)
     mark_hidden(canvas, laid.forced, chosen.hide_links if hide_links is None else hide_links, defs)
     write_notes(canvas, collect_notes(authoring, plan, laid, canvas))

@@ -149,6 +149,7 @@
     "gallery": {
       "axis": "x",
       "wrap_ratio": 2.6,
+      "guide_note": true,
       "guide_width": 460,
       "numbering": "number",
       "hide_links": "none",
@@ -189,6 +190,7 @@
       "wrap_rows": true,
       "compact": true,
       "compact_under_guide": true,
+      "guide_note": true,
       "guide_width": 460,
       "numbering": "number",
       "hide_links": "none",

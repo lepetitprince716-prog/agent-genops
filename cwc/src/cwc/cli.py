@@ -78,6 +78,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="suppress file-picker dropdown warnings when compiling portable workflows against a live server's /object_info",
     )
+    build.add_argument(
+        "--guide-note",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="place an in-canvas MarkdownNote Quick Guide card when title/notes exist (default: on for gallery and square, off for classic presets)",
+    )
     build.add_argument("--json", action="store_true", help="print a JSON summary")
     build.set_defaults(run=_compile)
 
@@ -277,6 +283,7 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
             preset=args.preset,
             portable=args.portable,
             hide_links=HideLinks(args.hide_links) if args.hide_links else None,
+            guide_note=args.guide_note,
         )
         report = compiled.report
         exit_code = ExitCode.OK if report.ok else ExitCode.CHECK_FAILED
