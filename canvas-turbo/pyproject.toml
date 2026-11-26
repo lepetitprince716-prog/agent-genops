@@ -1,0 +1,11 @@
+[project]
+name = "comfyui-canvas-turbo"
+description = "Frontend anti-lag extension (Zoom LOD, offscreen Vue Nodes 2.0 DOM freeze, preview texture capping, live workflow lag auditor) + lazy/VRAM companion nodes for huge ComfyUI workflows."
+version = "1.0.0"
+license = { text = "MIT" }
+dependencies = []
+
+[tool.comfy]
+PublisherId = "omnistudio"
+DisplayName = "ComfyUI Canvas Turbo (Anti-Lag)"
+Icon = ""

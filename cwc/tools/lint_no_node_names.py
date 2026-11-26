@@ -20,12 +20,10 @@ DATA = ROOT / "src" / "cwc" / "data"
 
 def known_node_types() -> set[str]:
     names: set[str] = set()
-    core = DATA / "core_nodedefs.json"
-    if core.is_file():
-        names |= set(json.loads(core.read_text(encoding="utf-8"))["nodes"])
-    builtins = DATA / "frontend_builtins.json"
-    if builtins.is_file():
-        names |= set(json.loads(builtins.read_text(encoding="utf-8"))["nodes"])
+    for fname in ("core_nodedefs.json", "custom_nodedefs.json", "frontend_builtins.json"):
+        path = DATA / fname
+        if path.is_file():
+            names |= set(json.loads(path.read_text(encoding="utf-8"))["nodes"])
     return names
 
 

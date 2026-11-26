@@ -1,0 +1,616 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -130 5780 1950" width="2022" height="682" font-family="Inter, system-ui, -apple-system, sans-serif">
+<defs>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#17202b" stroke-width="1"/></pattern>
+</defs>
+<rect x="-60" y="-130" width="5780" height="1950" fill="#0f141c"/>
+<rect x="-60" y="-130" width="5780" height="1950" fill="url(#grid)"/>
+<rect x="-40" y="-112" width="5740" height="82" rx="10" fill="#161f2c" stroke="#2d4a6b" stroke-width="2"/>
+<text x="-12" y="-72" fill="#ffffff" font-size="30" font-weight="700">OMNISTUDIO UBISOFT ALL-IN-ONE SUPER WORKBENCH (v1.0 · ComfyUI 0.4 Native Flat Subgraphs)</text>
+<text x="-12" y="-44" fill="#7ee787" font-size="18" font-weight="600">Total Real Nodes: 342  |  Root Canvas Nodes: 48 (86.0% DOM Reduction)  |  18 Model Engines (1-Click Radio)  |  6 Post-FX Stations  |  0 Use-Everywhere  |  1 Centralized Comparer</text>
+<g id="groups">
+<rect x="0" y="0" width="580" height="1740" rx="10" fill="#1e3246" fill-opacity="0.22" stroke="#1e3246" stroke-width="2.5"/>
+<text x="14" y="28" fill="#e6edf3" font-size="22" font-weight="700">00 · COMMAND COCKPIT (1-Click Controls &amp; Anti-Lag HUD)</text>
+<rect x="660" y="120" width="440" height="280" rx="10" fill="#1f4e46" fill-opacity="0.22" stroke="#1f4e46" stroke-width="2.5"/>
+<text x="674" y="148" fill="#e6edf3" font-size="20" font-weight="700">🛠 S01 · Prompt, Wildcards &amp; VLM Lab</text>
+<rect x="660" y="460" width="440" height="280" rx="10" fill="#2b3d63" fill-opacity="0.22" stroke="#2b3d63" stroke-width="2.5"/>
+<text x="674" y="488" fill="#e6edf3" font-size="20" font-weight="700">🛠 S02 · ControlNet &amp; IPAdapter Armory</text>
+<rect x="1220" y="60" width="350" height="340" rx="10" fill="#254b6e" fill-opacity="0.22" stroke="#254b6e" stroke-width="2.5"/>
+<text x="1234" y="88" fill="#e6edf3" font-size="18" font-weight="700">⚡ E01 · SDXL / Illustrious</text>
+<rect x="1600" y="60" width="350" height="340" rx="10" fill="#254b6e" fill-opacity="0.22" stroke="#254b6e" stroke-width="2.5"/>
+<text x="1614" y="88" fill="#e6edf3" font-size="18" font-weight="700">⚡ E02 · NoobAI V-Pred</text>
+<rect x="1980" y="60" width="350" height="340" rx="10" fill="#254b6e" fill-opacity="0.22" stroke="#254b6e" stroke-width="2.5"/>
+<text x="1994" y="88" fill="#e6edf3" font-size="18" font-weight="700">⚡ E03 · Pony V6 XL</text>
+<rect x="2360" y="60" width="350" height="340" rx="10" fill="#254b6e" fill-opacity="0.22" stroke="#254b6e" stroke-width="2.5"/>
+<text x="2374" y="88" fill="#e6edf3" font-size="18" font-weight="700">⚡ E04 · Anima 2.9B / 3.8B</text>
+<rect x="2740" y="60" width="350" height="340" rx="10" fill="#254b6e" fill-opacity="0.22" stroke="#254b6e" stroke-width="2.5"/>
+<text x="2754" y="88" fill="#e6edf3" font-size="18" font-weight="700">⚡ E05 · SD 1.5 / LCM</text>
+<rect x="1220" y="490" width="350" height="340" rx="10" fill="#4d3069" fill-opacity="0.22" stroke="#4d3069" stroke-width="2.5"/>
+<text x="1234" y="518" fill="#e6edf3" font-size="18" font-weight="700">⚡ E06 · Flux.1 Dev / Schnell</text>
+<rect x="1600" y="490" width="350" height="340" rx="10" fill="#4d3069" fill-opacity="0.22" stroke="#4d3069" stroke-width="2.5"/>
+<text x="1614" y="518" fill="#e6edf3" font-size="18" font-weight="700">⚡ E07 · Flux.1 Kontext Edit</text>
+<rect x="1980" y="490" width="350" height="340" rx="10" fill="#4d3069" fill-opacity="0.22" stroke="#4d3069" stroke-width="2.5"/>
+<text x="1994" y="518" fill="#e6edf3" font-size="18" font-weight="700">⚡ E08 · Flux.2 Klein / Dev</text>
+<rect x="2360" y="490" width="350" height="340" rx="10" fill="#4d3069" fill-opacity="0.22" stroke="#4d3069" stroke-width="2.5"/>
+<text x="2374" y="518" fill="#e6edf3" font-size="18" font-weight="700">⚡ E09 · Flux.3 Layout + KV</text>
+<rect x="2740" y="490" width="350" height="340" rx="10" fill="#4d3069" fill-opacity="0.22" stroke="#4d3069" stroke-width="2.5"/>
+<text x="2754" y="518" fill="#e6edf3" font-size="18" font-weight="700">⚡ E10 · Chroma Uncensored</text>
+<rect x="1220" y="920" width="350" height="340" rx="10" fill="#1d5c48" fill-opacity="0.22" stroke="#1d5c48" stroke-width="2.5"/>
+<text x="1234" y="948" fill="#e6edf3" font-size="18" font-weight="700">⚡ E11 · MOSS-Image INT8/DMD8</text>
+<rect x="1600" y="920" width="350" height="340" rx="10" fill="#1d5c48" fill-opacity="0.22" stroke="#1d5c48" stroke-width="2.5"/>
+<text x="1614" y="948" fill="#e6edf3" font-size="18" font-weight="700">⚡ E12 · Qwen-Image 2.1 CJK</text>
+<rect x="1980" y="920" width="350" height="340" rx="10" fill="#1d5c48" fill-opacity="0.22" stroke="#1d5c48" stroke-width="2.5"/>
+<text x="1994" y="948" fill="#e6edf3" font-size="18" font-weight="700">⚡ E13 · Krea-2 Photoreal</text>
+<rect x="2360" y="920" width="350" height="340" rx="10" fill="#1d5c48" fill-opacity="0.22" stroke="#1d5c48" stroke-width="2.5"/>
+<text x="2374" y="948" fill="#e6edf3" font-size="18" font-weight="700">⚡ E14 · MiniMax-H3 SplitSigma</text>
+<rect x="2740" y="920" width="350" height="340" rx="10" fill="#1d5c48" fill-opacity="0.22" stroke="#1d5c48" stroke-width="2.5"/>
+<text x="2754" y="948" fill="#e6edf3" font-size="18" font-weight="700">⚡ E15 · SD 3.5 Large / Med</text>
+<rect x="1220" y="1350" width="350" height="340" rx="10" fill="#6e4720" fill-opacity="0.22" stroke="#6e4720" stroke-width="2.5"/>
+<text x="1234" y="1378" fill="#e6edf3" font-size="18" font-weight="700">⚡ E16 · HiDream-I1 / O1</text>
+<rect x="1600" y="1350" width="350" height="340" rx="10" fill="#6e4720" fill-opacity="0.22" stroke="#6e4720" stroke-width="2.5"/>
+<text x="1614" y="1378" fill="#e6edf3" font-size="18" font-weight="700">⚡ E17 · Lumina-2 / Z-Image</text>
+<rect x="1980" y="1350" width="350" height="340" rx="10" fill="#6e4720" fill-opacity="0.22" stroke="#6e4720" stroke-width="2.5"/>
+<text x="1994" y="1378" fill="#e6edf3" font-size="18" font-weight="700">⚡ E18 · Niche 14-Arch Vault</text>
+<rect x="3200" y="40" width="740" height="1680" rx="10" fill="#2f3e4e" fill-opacity="0.22" stroke="#2f3e4e" stroke-width="2.5"/>
+<text x="3214" y="68" fill="#e6edf3" font-size="22" font-weight="700">03 · PIXEL BRIDGE (4-Bank Lazy Any Switch Bus)</text>
+<rect x="4000" y="840" width="340" height="260" rx="10" fill="#703030" fill-opacity="0.22" stroke="#703030" stroke-width="2.5"/>
+<text x="4014" y="868" fill="#e6edf3" font-size="17" font-weight="700">🛠 S07 · Low-VRAM Auto-Flush Gate (Post-Detail -&gt; FX/Video)</text>
+<rect x="4420" y="120" width="400" height="300" rx="10" fill="#692d44" fill-opacity="0.22" stroke="#692d44" stroke-width="2.5"/>
+<text x="4434" y="148" fill="#e6edf3" font-size="19" font-weight="700">🛠 S03 · Anatomy SEGS Surgical Lab</text>
+<rect x="4420" y="480" width="400" height="300" rx="10" fill="#46386e" fill-opacity="0.22" stroke="#46386e" stroke-width="2.5"/>
+<text x="4434" y="508" fill="#e6edf3" font-size="19" font-weight="700">🛠 S04 · 4x GAN &amp; Tiled HiRes Forge</text>
+<rect x="4420" y="840" width="400" height="300" rx="10" fill="#634824" fill-opacity="0.22" stroke="#634824" stroke-width="2.5"/>
+<text x="4434" y="868" fill="#e6edf3" font-size="19" font-weight="700">🛠 S05 · Film, Relight &amp; De-AI Darkroom</text>
+<rect x="4420" y="1200" width="400" height="480" rx="10" fill="#452957" fill-opacity="0.22" stroke="#452957" stroke-width="2.5"/>
+<text x="4434" y="1228" fill="#e6edf3" font-size="19" font-weight="700">🛠 S06 · Motion &amp; Video Tail (Wan 2.2 / LTX-2)</text>
+<rect x="4920" y="120" width="740" height="1380" rx="10" fill="#1c4a38" fill-opacity="0.22" stroke="#1c4a38" stroke-width="2.5"/>
+<text x="4934" y="148" fill="#e6edf3" font-size="22" font-weight="700">05 · GALLERY, BEFORE/AFTER COMPARE &amp; EXPORT VAULT</text>
+</g>
+<g id="links" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M 550.0,854.0 L 610.0,890.0 L 610.0,240.0 L 690.0,214.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1324.0 L 625.0,1340.0 L 625.0,270.0 L 690.0,236.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 275.0,1204.0 L 615.0,1220.0 L 615.0,580.0 L 690.0,554.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1204.0 L 630.0,1220.0 L 630.0,610.0 L 690.0,576.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,44.0 L 1230.0,44.0 L 1240.0,148.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,48.0 L 1230.0,48.0 L 1240.0,170.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,52.0 L 1230.0,52.0 L 1240.0,192.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,56.0 L 1230.0,56.0 L 1240.0,214.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,60.0 L 1230.0,60.0 L 1240.0,236.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,554.0 L 1145.0,580.0 L 1145.0,290.0 L 1240.0,258.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,576.0 L 1150.0,610.0 L 1150.0,315.0 L 1240.0,280.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,598.0 L 1155.0,640.0 L 1155.0,340.0 L 1240.0,302.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,44.0 L 1610.0,44.0 L 1620.0,148.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,48.0 L 1610.0,48.0 L 1620.0,170.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,52.0 L 1610.0,52.0 L 1620.0,192.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,56.0 L 1610.0,56.0 L 1620.0,214.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,60.0 L 1610.0,60.0 L 1620.0,236.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,44.0 L 1990.0,44.0 L 2000.0,148.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,48.0 L 1990.0,48.0 L 2000.0,170.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,52.0 L 1990.0,52.0 L 2000.0,192.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,56.0 L 1990.0,56.0 L 2000.0,214.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,60.0 L 1990.0,60.0 L 2000.0,236.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,44.0 L 2370.0,44.0 L 2380.0,148.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,48.0 L 2370.0,48.0 L 2380.0,170.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,52.0 L 2370.0,52.0 L 2380.0,192.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,56.0 L 2370.0,56.0 L 2380.0,214.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,60.0 L 2370.0,60.0 L 2380.0,236.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,44.0 L 2750.0,44.0 L 2760.0,148.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,48.0 L 2750.0,48.0 L 2760.0,170.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,52.0 L 2750.0,52.0 L 2760.0,192.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,56.0 L 2750.0,56.0 L 2760.0,214.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,60.0 L 2750.0,60.0 L 2760.0,236.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,474.0 L 1230.0,474.0 L 1240.0,578.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,478.0 L 1230.0,478.0 L 1240.0,600.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,482.0 L 1230.0,482.0 L 1240.0,622.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,486.0 L 1230.0,486.0 L 1240.0,644.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,490.0 L 1230.0,490.0 L 1240.0,666.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,474.0 L 1610.0,474.0 L 1620.0,578.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,478.0 L 1610.0,478.0 L 1620.0,600.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,482.0 L 1610.0,482.0 L 1620.0,622.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,486.0 L 1610.0,486.0 L 1620.0,644.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,490.0 L 1610.0,490.0 L 1620.0,666.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,554.0 L 1145.0,580.0 L 1145.0,720.0 L 1620.0,688.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,576.0 L 1150.0,610.0 L 1150.0,745.0 L 1620.0,710.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,598.0 L 1155.0,640.0 L 1155.0,770.0 L 1620.0,732.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,474.0 L 1990.0,474.0 L 2000.0,578.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,478.0 L 1990.0,478.0 L 2000.0,600.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,482.0 L 1990.0,482.0 L 2000.0,622.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,486.0 L 1990.0,486.0 L 2000.0,644.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,490.0 L 1990.0,490.0 L 2000.0,666.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,474.0 L 2370.0,474.0 L 2380.0,578.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,478.0 L 2370.0,478.0 L 2380.0,600.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,482.0 L 2370.0,482.0 L 2380.0,622.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,486.0 L 2370.0,486.0 L 2380.0,644.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,490.0 L 2370.0,490.0 L 2380.0,666.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,474.0 L 2750.0,474.0 L 2760.0,578.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,478.0 L 2750.0,478.0 L 2760.0,600.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,482.0 L 2750.0,482.0 L 2760.0,622.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,486.0 L 2750.0,486.0 L 2760.0,644.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,490.0 L 2750.0,490.0 L 2760.0,666.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,904.0 L 1230.0,904.0 L 1240.0,1008.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,908.0 L 1230.0,908.0 L 1240.0,1030.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,912.0 L 1230.0,912.0 L 1240.0,1052.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,916.0 L 1230.0,916.0 L 1240.0,1074.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,920.0 L 1230.0,920.0 L 1240.0,1096.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,904.0 L 1610.0,904.0 L 1620.0,1008.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,908.0 L 1610.0,908.0 L 1620.0,1030.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,912.0 L 1610.0,912.0 L 1620.0,1052.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,916.0 L 1610.0,916.0 L 1620.0,1074.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,920.0 L 1610.0,920.0 L 1620.0,1096.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,904.0 L 1990.0,904.0 L 2000.0,1008.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,908.0 L 1990.0,908.0 L 2000.0,1030.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,912.0 L 1990.0,912.0 L 2000.0,1052.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,916.0 L 1990.0,916.0 L 2000.0,1074.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,920.0 L 1990.0,920.0 L 2000.0,1096.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,904.0 L 2370.0,904.0 L 2380.0,1008.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,908.0 L 2370.0,908.0 L 2380.0,1030.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,912.0 L 2370.0,912.0 L 2380.0,1052.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,916.0 L 2370.0,916.0 L 2380.0,1074.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,920.0 L 2370.0,920.0 L 2380.0,1096.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,904.0 L 2750.0,904.0 L 2760.0,1008.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,908.0 L 2750.0,908.0 L 2760.0,1030.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,912.0 L 2750.0,912.0 L 2760.0,1052.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,916.0 L 2750.0,916.0 L 2760.0,1074.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,920.0 L 2750.0,920.0 L 2760.0,1096.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,1334.0 L 1230.0,1334.0 L 1240.0,1438.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,1338.0 L 1230.0,1338.0 L 1240.0,1460.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,1342.0 L 1230.0,1342.0 L 1240.0,1482.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,1346.0 L 1230.0,1346.0 L 1240.0,1504.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,1350.0 L 1230.0,1350.0 L 1240.0,1526.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,1334.0 L 1610.0,1334.0 L 1620.0,1438.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,1338.0 L 1610.0,1338.0 L 1620.0,1460.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,1342.0 L 1610.0,1342.0 L 1620.0,1482.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,1346.0 L 1610.0,1346.0 L 1620.0,1504.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,1350.0 L 1610.0,1350.0 L 1620.0,1526.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1070.0,214.0 L 1160.0,240.0 L 1160.0,1334.0 L 1990.0,1334.0 L 2000.0,1438.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1054.0 L 1170.0,1085.0 L 1170.0,1338.0 L 1990.0,1338.0 L 2000.0,1460.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 275.0,1204.0 L 1180.0,1220.0 L 1180.0,1342.0 L 1990.0,1342.0 L 2000.0,1482.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1204.0 L 1190.0,1220.0 L 1190.0,1346.0 L 1990.0,1346.0 L 2000.0,1504.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 550.0,1324.0 L 1200.0,1340.0 L 1200.0,1350.0 L 1990.0,1350.0 L 2000.0,1526.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,148.0 L 3240.0,124.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1550.0,170.0 L 3240.0,304.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1930.0,148.0 L 3240.0,146.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,170.0 L 3240.0,326.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,148.0 L 3240.0,168.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,170.0 L 3240.0,348.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,148.0 L 3240.0,190.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,170.0 L 3240.0,370.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,148.0 L 3240.0,212.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,170.0 L 3240.0,392.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,578.0 L 3240.0,554.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,600.0 L 3240.0,734.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,578.0 L 3240.0,576.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,600.0 L 3240.0,756.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,578.0 L 3240.0,598.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,600.0 L 3240.0,778.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,578.0 L 3240.0,620.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,600.0 L 3240.0,800.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,578.0 L 3240.0,642.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,600.0 L 3240.0,822.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,1008.0 L 3240.0,984.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,1030.0 L 3240.0,1164.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,1008.0 L 3240.0,1006.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,1030.0 L 3240.0,1186.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,1008.0 L 3240.0,1028.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,1030.0 L 3240.0,1208.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,1008.0 L 3240.0,1050.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2690.0,1030.0 L 3240.0,1230.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,1008.0 L 3240.0,1072.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3070.0,1030.0 L 3240.0,1252.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,1438.0 L 3240.0,1414.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1550.0,1460.0 L 3240.0,1594.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,1438.0 L 3240.0,1436.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 1930.0,1460.0 L 3240.0,1616.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,1438.0 L 3240.0,1458.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 2310.0,1460.0 L 3240.0,1638.0" stroke="#3a4654" stroke-opacity="0.28" stroke-width="1.6"/>
+<path d="M 3520.0,124.0 L 3600.0,544.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,304.0 L 3600.0,784.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,554.0 L 3600.0,566.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,734.0 L 3600.0,806.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,984.0 L 3600.0,588.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,1164.0 L 3600.0,828.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,1414.0 L 3600.0,610.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3520.0,1594.0 L 3600.0,850.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3910.0,544.0 L 4450.0,214.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3910.0,784.0 L 4450.0,236.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1324.0 L 4380.0,1340.0 L 4380.0,310.0 L 4450.0,258.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,214.0 L 4450.0,574.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,236.0 L 4450.0,596.0" stroke="#c77dff" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1324.0 L 4390.0,1340.0 L 4390.0,670.0 L 4450.0,618.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,574.0 L 4365.0,620.0 L 4365.0,975.0 L 4030.0,939.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4310.0,939.0 L 4450.0,934.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,934.0 L 4450.0,1294.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 1070.0,214.0 L 4370.0,240.0 L 4370.0,1350.0 L 4450.0,1316.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 550.0,1324.0 L 4385.0,1340.0 L 4385.0,1380.0 L 4450.0,1338.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,1294.0 L 4450.0,1524.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 3910.0,544.0 L 4880.0,595.0 L 4880.0,260.0 L 4960.0,214.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,934.0 L 4895.0,960.0 L 4895.0,290.0 L 4960.0,236.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,934.0 L 4960.0,814.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+<path d="M 4790.0,934.0 L 5380.0,960.0 L 5380.0,845.0 L 5400.0,814.0" stroke="#4cc9f0" stroke-opacity="0.82" stroke-width="2.6"/>
+</g>
+<g id="nodes">
+<g opacity="1.0">
+<rect x="30" y="30" width="520" height="470" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,30 H 542 Q 550,30 550,38 V 60 H 30 V 38 Q 30,30 38,30 Z" fill="#1b3a57"/>
+<text x="42" y="50" fill="#ffffff" font-size="13" font-weight="700">⚡ ENGINE RADIO SWITCH (Click 1 of 18)</text>
+<text x="44" y="84" fill="#8b949e" font-size="12">Fast Groups Muter (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="510" width="520" height="280" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,510 H 542 Q 550,510 550,518 V 540 H 30 V 518 Q 30,510 38,510 Z" fill="#1d4d44"/>
+<text x="42" y="530" fill="#ffffff" font-size="13" font-weight="700">🛠 UBISOFT STATION MATRIX (Toggle Mod...</text>
+<text x="44" y="564" fill="#8b949e" font-size="12">Fast Groups Bypasser (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="800" width="520" height="190" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,800 H 542 Q 550,800 550,808 V 830 H 30 V 808 Q 30,800 38,800 Z" fill="#234f3c"/>
+<text x="42" y="820" fill="#ffffff" font-size="13" font-weight="700">Positive Prompt (Global)</text>
+<text x="44" y="854" fill="#8b949e" font-size="12">PrimitiveStringMultiline</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="1000" width="520" height="140" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,1000 H 542 Q 550,1000 550,1008 V 1030 H 30 V 1008 Q 30,1000 38,1000 Z" fill="#5c2828"/>
+<text x="42" y="1020" fill="#ffffff" font-size="13" font-weight="700">Negative Prompt (Global)</text>
+<text x="44" y="1054" fill="#8b949e" font-size="12">PrimitiveStringMultiline</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="1150" width="245" height="112" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,1150 H 267 Q 275,1150 275,1158 V 1180 H 30 V 1158 Q 30,1150 38,1150 Z" fill="#2c445c"/>
+<text x="42" y="1170" fill="#ffffff" font-size="13" font-weight="700">Canvas Width</text>
+<text x="44" y="1204" fill="#8b949e" font-size="12">PrimitiveInt</text>
+</g>
+<g opacity="1.0">
+<rect x="305" y="1150" width="245" height="112" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 313,1150 H 542 Q 550,1150 550,1158 V 1180 H 305 V 1158 Q 305,1150 313,1150 Z" fill="#2c445c"/>
+<text x="317" y="1170" fill="#ffffff" font-size="13" font-weight="700">Canvas Height</text>
+<text x="319" y="1204" fill="#8b949e" font-size="12">PrimitiveInt</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="1270" width="520" height="112" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,1270 H 542 Q 550,1270 550,1278 V 1300 H 30 V 1278 Q 30,1270 38,1270 Z" fill="#3b3663"/>
+<text x="42" y="1290" fill="#ffffff" font-size="13" font-weight="700">Global Master Seed</text>
+<text x="44" y="1324" fill="#8b949e" font-size="12">PrimitiveInt</text>
+</g>
+<g opacity="1.0">
+<rect x="30" y="1390" width="520" height="320" rx="8" fill="#1b2028" stroke="#4c6278" stroke-width="2"/>
+<path d="M 38,1390 H 542 Q 550,1390 550,1398 V 1420 H 30 V 1398 Q 30,1390 38,1390 Z" fill="#303846"/>
+<text x="42" y="1410" fill="#ffffff" font-size="13" font-weight="700">📖 Quick Start &amp; Anti-Lag Guide (Read...</text>
+<text x="44" y="1444" fill="#8b949e" font-size="12">MarkdownNote</text>
+</g>
+<g opacity="0.68">
+<rect x="690" y="160" width="380" height="210" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 698,160 H 1062 Q 1070,160 1070,168 V 190 H 690 V 168 Q 690,160 698,160 Z" fill="#2c4a43"/>
+<text x="702" y="180" fill="#ffffff" font-size="13" font-weight="700">S01 · Prompt &amp; VLM Lab [11 nodes]</text>
+<rect x="704" y="208" width="352" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="714" y="229" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="704" y="252" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="716" y="268" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="704" y="302" fill="#8b949e" font-size="12">App Controls: Select to add Wildcard, task</text>
+</g>
+<g opacity="0.68">
+<rect x="690" y="500" width="380" height="210" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 698,500 H 1062 Q 1070,500 1070,508 V 530 H 690 V 508 Q 690,500 698,500 Z" fill="#2a3e66"/>
+<text x="702" y="520" fill="#ffffff" font-size="13" font-weight="700">S02 · ControlNet &amp; Ref Armory [7 nod...</text>
+<rect x="704" y="548" width="352" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="714" y="569" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 7 nodes</text>
+<rect x="704" y="592" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="716" y="608" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="704" y="642" fill="#8b949e" font-size="12">App Controls: image, index, preprocessor</text>
+</g>
+<g opacity="1.0">
+<rect x="1240" y="94" width="310" height="280" rx="8" fill="#232830" stroke="#58a6ff" stroke-width="2"/>
+<path d="M 1248,94 H 1542 Q 1550,94 1550,102 V 124 H 1240 V 102 Q 1240,94 1248,94 Z" fill="#244866"/>
+<text x="1252" y="114" fill="#ffffff" font-size="13" font-weight="700">E01 · SDXL / Illustrious / iLustMix ...</text>
+<rect x="1254" y="142" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1264" y="163" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 19 nodes</text>
+<rect x="1254" y="186" width="138" height="24" rx="12" fill="#238636"/>
+<text x="1266" y="202" fill="#ffffff" font-size="11" font-weight="700">ACTIVE</text>
+<text x="1254" y="236" fill="#8b949e" font-size="12">App Controls: ckpt_name, steps, cfg</text>
+</g>
+<g opacity="0.46">
+<rect x="1620" y="94" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1628,94 H 1922 Q 1930,94 1930,102 V 124 H 1620 V 102 Q 1620,94 1628,94 Z" fill="#2d323b"/>
+<text x="1632" y="114" fill="#ffffff" font-size="13" font-weight="700">E02 · NoobAI / Illustrious V-Pred [1...</text>
+<rect x="1634" y="142" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1644" y="163" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 12 nodes</text>
+<rect x="1634" y="186" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1646" y="202" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1634" y="236" fill="#8b949e" font-size="12">App Controls: ckpt_name, steps, cfg</text>
+</g>
+<g opacity="0.46">
+<rect x="2000" y="94" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2008,94 H 2302 Q 2310,94 2310,102 V 124 H 2000 V 102 Q 2000,94 2008,94 Z" fill="#2d323b"/>
+<text x="2012" y="114" fill="#ffffff" font-size="13" font-weight="700">E03 · Pony V6 XL (Auto Score Prefix)...</text>
+<rect x="2014" y="142" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2024" y="163" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="2014" y="186" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2026" y="202" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2014" y="236" fill="#8b949e" font-size="12">App Controls: ckpt_name, steps, cfg</text>
+</g>
+<g opacity="0.46">
+<rect x="2380" y="94" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2388,94 H 2682 Q 2690,94 2690,102 V 124 H 2380 V 102 Q 2380,94 2388,94 Z" fill="#2d323b"/>
+<text x="2392" y="114" fill="#ffffff" font-size="13" font-weight="700">E04 · Anima 2.9B / 3.8B (Cosmos DiT)...</text>
+<rect x="2394" y="142" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2404" y="163" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 13 nodes</text>
+<rect x="2394" y="186" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2406" y="202" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2394" y="236" fill="#8b949e" font-size="12">App Controls: unet_name, shift, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2760" y="94" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2768,94 H 3062 Q 3070,94 3070,102 V 124 H 2760 V 102 Q 2760,94 2768,94 Z" fill="#2d323b"/>
+<text x="2772" y="114" fill="#ffffff" font-size="13" font-weight="700">E05 · SD 1.5 Classic / LCM Turbo [11...</text>
+<rect x="2774" y="142" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2784" y="163" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="2774" y="186" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2786" y="202" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2774" y="236" fill="#8b949e" font-size="12">App Controls: ckpt_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1240" y="524" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1248,524 H 1542 Q 1550,524 1550,532 V 554 H 1240 V 532 Q 1240,524 1248,524 Z" fill="#2d323b"/>
+<text x="1252" y="544" fill="#ffffff" font-size="13" font-weight="700">E06 · Flux.1 Dev / Schnell (GGUF + T...</text>
+<rect x="1254" y="572" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1264" y="593" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 18 nodes</text>
+<rect x="1254" y="616" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1266" y="632" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1254" y="666" fill="#8b949e" font-size="12">App Controls: unet_name, guidance, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1620" y="524" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1628,524 H 1922 Q 1930,524 1930,532 V 554 H 1620 V 532 Q 1620,524 1628,524 Z" fill="#2d323b"/>
+<text x="1632" y="544" fill="#ffffff" font-size="13" font-weight="700">E07 · Flux.1 Kontext (Reference Edit...</text>
+<rect x="1634" y="572" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1644" y="593" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 16 nodes</text>
+<rect x="1634" y="616" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1646" y="632" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1634" y="666" fill="#8b949e" font-size="12">App Controls: unet_name, image, guidance</text>
+</g>
+<g opacity="0.46">
+<rect x="2000" y="524" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2008,524 H 2302 Q 2310,524 2310,532 V 554 H 2000 V 532 Q 2000,524 2008,524 Z" fill="#2d323b"/>
+<text x="2012" y="544" fill="#ffffff" font-size="13" font-weight="700">E08 · Flux.2 Klein / Dev (GGUF) [15 ...</text>
+<rect x="2014" y="572" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2024" y="593" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 15 nodes</text>
+<rect x="2014" y="616" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2026" y="632" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2014" y="666" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2380" y="524" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2388,524 H 2682 Q 2690,524 2690,532 V 554 H 2380 V 532 Q 2380,524 2388,524 Z" fill="#2d323b"/>
+<text x="2392" y="544" fill="#ffffff" font-size="13" font-weight="700">E09 · Flux.3 (KVCache + Layout) [11 ...</text>
+<rect x="2394" y="572" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2404" y="593" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="2394" y="616" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2406" y="632" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2394" y="666" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2760" y="524" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2768,524 H 3062 Q 3070,524 3070,532 V 554 H 2760 V 532 Q 2760,524 2768,524 Z" fill="#2d323b"/>
+<text x="2772" y="544" fill="#ffffff" font-size="13" font-weight="700">E10 · Chroma (Uncensored Flow DiT) [...</text>
+<rect x="2774" y="572" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2784" y="593" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="2774" y="616" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2786" y="632" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2774" y="666" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1240" y="954" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1248,954 H 1542 Q 1550,954 1550,962 V 984 H 1240 V 962 Q 1240,954 1248,954 Z" fill="#2d323b"/>
+<text x="1252" y="974" fill="#ffffff" font-size="13" font-weight="700">E11 · MOSS-Image (INT8 / DMD8 Distil...</text>
+<rect x="1254" y="1002" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1264" y="1023" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 12 nodes</text>
+<rect x="1254" y="1046" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1266" y="1062" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1254" y="1096" fill="#8b949e" font-size="12">App Controls: unet_name, shift, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1620" y="954" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1628,954 H 1922 Q 1930,954 1930,962 V 984 H 1620 V 962 Q 1620,954 1628,954 Z" fill="#2d323b"/>
+<text x="1632" y="974" fill="#ffffff" font-size="13" font-weight="700">E12 · Qwen-Image 2.1 (CJK Typography...</text>
+<rect x="1634" y="1002" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1644" y="1023" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 10 nodes</text>
+<rect x="1634" y="1046" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1646" y="1062" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1634" y="1096" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2000" y="954" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2008,954 H 2302 Q 2310,954 2310,962 V 984 H 2000 V 962 Q 2000,954 2008,954 Z" fill="#2d323b"/>
+<text x="2012" y="974" fill="#ffffff" font-size="13" font-weight="700">E13 · Krea-2 (8-Step Photoreal) [10 ...</text>
+<rect x="2014" y="1002" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2024" y="1023" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 10 nodes</text>
+<rect x="2014" y="1046" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2026" y="1062" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2014" y="1096" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2380" y="954" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2388,954 H 2682 Q 2690,954 2690,962 V 984 H 2380 V 962 Q 2380,954 2388,954 Z" fill="#2d323b"/>
+<text x="2392" y="974" fill="#ffffff" font-size="13" font-weight="700">E14 · MiniMax-H3-Image (Split-Sigma ...</text>
+<rect x="2394" y="1002" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2404" y="1023" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 17 nodes</text>
+<rect x="2394" y="1046" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2406" y="1062" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2394" y="1096" fill="#8b949e" font-size="12">App Controls: unet_name, sigmas</text>
+</g>
+<g opacity="0.46">
+<rect x="2760" y="954" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2768,954 H 3062 Q 3070,954 3070,962 V 984 H 2760 V 962 Q 2760,954 2768,954 Z" fill="#2d323b"/>
+<text x="2772" y="974" fill="#ffffff" font-size="13" font-weight="700">E15 · SD 3.5 Large / Medium (TripleC...</text>
+<rect x="2774" y="1002" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2784" y="1023" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="2774" y="1046" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2786" y="1062" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2774" y="1096" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1240" y="1384" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1248,1384 H 1542 Q 1550,1384 1550,1392 V 1414 H 1240 V 1392 Q 1240,1384 1248,1384 Z" fill="#2d323b"/>
+<text x="1252" y="1404" fill="#ffffff" font-size="13" font-weight="700">E16 · HiDream-I1 / O1 (QuadCLIP) [12...</text>
+<rect x="1254" y="1432" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1264" y="1453" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 12 nodes</text>
+<rect x="1254" y="1476" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1266" y="1492" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1254" y="1526" fill="#8b949e" font-size="12">App Controls: unet_name, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="1620" y="1384" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 1628,1384 H 1922 Q 1930,1384 1930,1392 V 1414 H 1620 V 1392 Q 1620,1384 1628,1384 Z" fill="#2d323b"/>
+<text x="1632" y="1404" fill="#ffffff" font-size="13" font-weight="700">E17 · Lumina-2 / Z-Image / NewBie [1...</text>
+<rect x="1634" y="1432" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="1644" y="1453" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 11 nodes</text>
+<rect x="1634" y="1476" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="1646" y="1492" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="1634" y="1526" fill="#8b949e" font-size="12">App Controls: unet_name, shift, steps</text>
+</g>
+<g opacity="0.46">
+<rect x="2000" y="1384" width="310" height="280" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2"/>
+<path d="M 2008,1384 H 2302 Q 2310,1384 2310,1392 V 1414 H 2000 V 1392 Q 2000,1384 2008,1384 Z" fill="#2d323b"/>
+<text x="2012" y="1404" fill="#ffffff" font-size="13" font-weight="700">E18 · Niche Frontier Vault (OmniGen2...</text>
+<rect x="2014" y="1432" width="282" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="2024" y="1453" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 12 nodes</text>
+<rect x="2014" y="1476" width="138" height="24" rx="12" fill="#30363d"/>
+<text x="2026" y="1492" fill="#ffffff" font-size="11" font-weight="700">MUTED (0 cost)</text>
+<text x="2014" y="1526" fill="#8b949e" font-size="12">App Controls: unet_name, type, steps</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="70" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,70 H 3512 Q 3520,70 3520,78 V 100 H 3240 V 78 Q 3240,70 3248,70 Z" fill="#354454"/>
+<text x="3252" y="90" fill="#ffffff" font-size="13" font-weight="700">Bank A · Pixel Bus Switch</text>
+<text x="3254" y="124" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="250" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,250 H 3512 Q 3520,250 3520,258 V 280 H 3240 V 258 Q 3240,250 3248,250 Z" fill="#354454"/>
+<text x="3252" y="270" fill="#ffffff" font-size="13" font-weight="700">Bank A · Pipe Bus Switch</text>
+<text x="3254" y="304" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="500" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,500 H 3512 Q 3520,500 3520,508 V 530 H 3240 V 508 Q 3240,500 3248,500 Z" fill="#354454"/>
+<text x="3252" y="520" fill="#ffffff" font-size="13" font-weight="700">Bank B · Pixel Bus Switch</text>
+<text x="3254" y="554" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="680" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,680 H 3512 Q 3520,680 3520,688 V 710 H 3240 V 688 Q 3240,680 3248,680 Z" fill="#354454"/>
+<text x="3252" y="700" fill="#ffffff" font-size="13" font-weight="700">Bank B · Pipe Bus Switch</text>
+<text x="3254" y="734" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="930" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,930 H 3512 Q 3520,930 3520,938 V 960 H 3240 V 938 Q 3240,930 3248,930 Z" fill="#354454"/>
+<text x="3252" y="950" fill="#ffffff" font-size="13" font-weight="700">Bank C · Pixel Bus Switch</text>
+<text x="3254" y="984" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="1110" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,1110 H 3512 Q 3520,1110 3520,1118 V 1140 H 3240 V 1118 Q 3240,1110 3248,1110 Z" fill="#354454"/>
+<text x="3252" y="1130" fill="#ffffff" font-size="13" font-weight="700">Bank C · Pipe Bus Switch</text>
+<text x="3254" y="1164" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="1360" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,1360 H 3512 Q 3520,1360 3520,1368 V 1390 H 3240 V 1368 Q 3240,1360 3248,1360 Z" fill="#354454"/>
+<text x="3252" y="1380" fill="#ffffff" font-size="13" font-weight="700">Bank D · Pixel Bus Switch</text>
+<text x="3254" y="1414" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3240" y="1540" width="280" height="180" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3248,1540 H 3512 Q 3520,1540 3520,1548 V 1570 H 3240 V 1548 Q 3240,1540 3248,1540 Z" fill="#354454"/>
+<text x="3252" y="1560" fill="#ffffff" font-size="13" font-weight="700">Bank D · Pipe Bus Switch</text>
+<text x="3254" y="1594" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3600" y="490" width="310" height="200" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3608,490 H 3902 Q 3910,490 3910,498 V 520 H 3600 V 498 Q 3600,490 3608,490 Z" fill="#25597a"/>
+<text x="3612" y="510" fill="#ffffff" font-size="13" font-weight="700">MASTER PIXEL BRIDGE (Active Engine -...</text>
+<text x="3614" y="544" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="3600" y="730" width="310" height="200" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 3608,730 H 3902 Q 3910,730 3910,738 V 760 H 3600 V 738 Q 3600,730 3608,730 Z" fill="#25597a"/>
+<text x="3612" y="750" fill="#ffffff" font-size="13" font-weight="700">MASTER PIPE BRIDGE (Active Engine -&gt;...</text>
+<text x="3614" y="784" fill="#8b949e" font-size="12">Any Switch (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="4030" y="885" width="280" height="150" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 4038,885 H 4302 Q 4310,885 4310,893 V 915 H 4030 V 893 Q 4030,885 4038,885 Z" fill="#5e2a2a"/>
+<text x="4042" y="905" fill="#ffffff" font-size="13" font-weight="700">VRAM Flush Checkpoint (Model Stage -...</text>
+<text x="4044" y="939" fill="#8b949e" font-size="12">easy cleanGpuUsed</text>
+</g>
+<g opacity="0.68">
+<rect x="4450" y="160" width="340" height="230" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 4458,160 H 4782 Q 4790,160 4790,168 V 190 H 4450 V 168 Q 4450,160 4458,160 Z" fill="#6e2c44"/>
+<text x="4462" y="180" fill="#ffffff" font-size="13" font-weight="700">S03 · Face/Eye/Hand/Foot SEGS [12 no...</text>
+<rect x="4464" y="208" width="312" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="4474" y="229" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 12 nodes</text>
+<rect x="4464" y="252" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="4476" y="268" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="4464" y="302" fill="#8b949e" font-size="12">App Controls: denoise, model_name</text>
+</g>
+<g opacity="0.68">
+<rect x="4450" y="520" width="340" height="230" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 4458,520 H 4782 Q 4790,520 4790,528 V 550 H 4450 V 528 Q 4450,520 4458,520 Z" fill="#473873"/>
+<text x="4462" y="540" fill="#ffffff" font-size="13" font-weight="700">S04 · 4x GAN + Tiled HiRes [6 nodes]</text>
+<rect x="4464" y="568" width="312" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="4474" y="589" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 6 nodes</text>
+<rect x="4464" y="612" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="4476" y="628" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="4464" y="662" fill="#8b949e" font-size="12">App Controls: model_name, width, denoise</text>
+</g>
+<g opacity="0.68">
+<rect x="4450" y="880" width="340" height="230" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 4458,880 H 4782 Q 4790,880 4790,888 V 910 H 4450 V 888 Q 4450,880 4458,880 Z" fill="#664823"/>
+<text x="4462" y="900" fill="#ffffff" font-size="13" font-weight="700">S05 · Film Grain / Color / Cutout [7...</text>
+<rect x="4464" y="928" width="312" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="4474" y="949" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 7 nodes</text>
+<rect x="4464" y="972" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="4476" y="988" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="4464" y="1022" fill="#8b949e" font-size="12">App Controls: grain_power, sharpen_alpha</text>
+</g>
+<g opacity="0.68">
+<rect x="4450" y="1240" width="340" height="220" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 4458,1240 H 4782 Q 4790,1240 4790,1248 V 1270 H 4450 V 1248 Q 4450,1240 4458,1240 Z" fill="#4a2b61"/>
+<text x="4462" y="1260" fill="#ffffff" font-size="13" font-weight="700">S06 · Keyframe -&gt; Video [19 nodes]</text>
+<rect x="4464" y="1288" width="312" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+<text x="4474" y="1309" fill="#79c0ff" font-size="13" font-weight="600">SUBGRAPH CAPSULE · 19 nodes</text>
+<rect x="4464" y="1332" width="138" height="24" rx="12" fill="#9e6a03"/>
+<text x="4476" y="1348" fill="#ffffff" font-size="11" font-weight="700">BYPASSED</text>
+<text x="4464" y="1382" fill="#8b949e" font-size="12">App Controls: index, unet_name</text>
+</g>
+<g opacity="0.68">
+<rect x="4450" y="1470" width="340" height="175" rx="8" fill="#232830" stroke="#7d8590" stroke-width="2" stroke-dasharray="7 4"/>
+<path d="M 4458,1470 H 4782 Q 4790,1470 4790,1478 V 1500 H 4450 V 1478 Q 4450,1470 4458,1470 Z" fill="#4a2b61"/>
+<text x="4462" y="1490" fill="#ffffff" font-size="13" font-weight="700">Save Video Keyframe Sequence (Toggle...</text>
+<text x="4464" y="1524" fill="#8b949e" font-size="12">SaveImage</text>
+</g>
+<g opacity="1.0">
+<rect x="4960" y="160" width="660" height="590" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 4968,160 H 5612 Q 5620,160 5620,168 V 190 H 4960 V 168 Q 4960,160 4968,160 Z" fill="#214f3d"/>
+<text x="4972" y="180" fill="#ffffff" font-size="13" font-weight="700">SINGLE CENTRALIZED COMPARE (Raw Base...</text>
+<text x="4974" y="214" fill="#8b949e" font-size="12">Image Comparer (rgthree)</text>
+</g>
+<g opacity="1.0">
+<rect x="4960" y="760" width="400" height="290" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 4968,760 H 5352 Q 5360,760 5360,768 V 790 H 4960 V 768 Q 4960,760 4968,760 Z" fill="#214f3d"/>
+<text x="4972" y="780" fill="#ffffff" font-size="13" font-weight="700">Save Master Image (Full Civitai + Lo...</text>
+<text x="4974" y="814" fill="#8b949e" font-size="12">Save Image (LoraManager)</text>
+</g>
+<g opacity="1.0">
+<rect x="5400" y="760" width="220" height="140" rx="8" fill="#232830" stroke="#4c6278" stroke-width="2"/>
+<path d="M 5408,760 H 5612 Q 5620,760 5620,768 V 790 H 5400 V 768 Q 5400,760 5408,760 Z" fill="#2b4a5e"/>
+<text x="5412" y="780" fill="#ffffff" font-size="13" font-weight="700">Output Resolution Telemetry</text>
+<text x="5414" y="814" fill="#8b949e" font-size="12">Get resolution [Crystools]</text>
+</g>
+<g opacity="1.0">
+<rect x="4960" y="1070" width="660" height="250" rx="8" fill="#1a2229" stroke="#4c6278" stroke-width="2"/>
+<path d="M 4968,1070 H 5612 Q 5620,1070 5620,1078 V 1100 H 4960 V 1078 Q 4960,1070 4968,1070 Z" fill="#233642"/>
+<text x="4972" y="1090" fill="#ffffff" font-size="13" font-weight="700">📦 Anti-Lag Telemetry &amp; Custom Node P...</text>
+<text x="4974" y="1124" fill="#8b949e" font-size="12">MarkdownNote</text>
+</g>
+</g>
+</svg>

@@ -36,6 +36,7 @@ from cwc.report import Code, CwcError, ExitCode, Finding, Severity
 from cwc.resources import read_bytes, read_json
 
 CORE_FILE = "core_nodedefs.json"
+CUSTOM_FILE = "custom_nodedefs.json"
 TRUTH_FILE = "core_truth.json"
 TEMPLATES_FILE = "templates.json"
 BUILTINS_FILE = "frontend_builtins.json"
@@ -286,17 +287,23 @@ class NodeDefs:
         truth: Any = None,
         templates: Any = None,
         include_core: bool = True,
+        include_custom: bool = False,
     ) -> NodeDefs:
         """Build the registry.
 
         ``object_info`` is a parsed ``/object_info`` document (raw or built, see
-        :func:`read_source`); its entries replace bundled core entries of the same type.
+        :func:`read_source`); its entries replace bundled core/custom entries of the same type.
         ``truth`` and ``templates`` are parsed documents that replace the bundled snapshot
         and template table; None loads the bundled ones. ``include_core=False`` leaves the
-        bundled core ``/object_info`` out.
+        bundled core ``/object_info`` out. ``include_custom=True`` also loads the curated
+        high-frequency custom node pack registry (``custom_nodedefs.json``), never shadowing
+        bundled core nodes and always overridden by user-supplied ``object_info``.
         """
         entries: dict[str, tuple[Mapping[str, Any], set[str], str]] = {}
         core: dict[str, tuple[Mapping[str, Any], set[str]]] = {}
+        if include_custom:
+            custom_nodes, custom_held = _split(_parse_json(read_bytes(CUSTOM_FILE), CUSTOM_FILE), CUSTOM_FILE)
+            entries.update((name, (entry, custom_held.get(name, set()), CUSTOM_FILE)) for name, entry in custom_nodes.items())
         if include_core:
             nodes, held = _split(_parse_json(read_bytes(CORE_FILE), CORE_FILE), CORE_FILE)
             core = {name: (entry, held.get(name, set())) for name, entry in nodes.items()}

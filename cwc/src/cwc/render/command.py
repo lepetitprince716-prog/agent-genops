@@ -22,7 +22,10 @@ def command(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
         return _fail(args, out, err, ExitCode.USAGE, "--theme applies to --skin diagram only")
     try:
         canvas = load_canvas(read_file(args.graph, "canvas file"))
-        defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
+        defs = NodeDefs.load(
+            object_info=read_source(args.nodedefs) if args.nodedefs else None,
+            include_custom=bool(getattr(args, "custom_packs", False)),
+        )
     except CwcError as exc:
         return _fail(args, out, err, exc.exit_code, "; ".join(finding.message for finding in exc.findings))
     if args.skin == "diagram":

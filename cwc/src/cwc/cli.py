@@ -45,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     node.add_argument("type", nargs="?", metavar="TYPE", help="node type to show")
     node.add_argument("--search", metavar="KW", help="list types whose name, display name or category contains KW")
     node.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    node.add_argument("--custom-packs", action="store_true", help="include curated high-frequency custom node packs")
     node.add_argument("--json", action="store_true", help="print JSON")
     node.set_defaults(run=_node)
 
@@ -60,6 +61,8 @@ def _parser() -> argparse.ArgumentParser:
         "and names on stderr what it removed",
     )
     build.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    build.add_argument("--custom-packs", action="store_true", help="include curated high-frequency custom node packs")
+    build.add_argument("--pack-subgraphs", action="store_true", help="pack eligible multi-node groups into 1-level native v0.4 Subgraphs")
     build.add_argument(
         "--preset",
         metavar="NAME",
@@ -105,6 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument("graph", metavar="GRAPH.ui.json", help="canvas workflow (UI JSON, or a PNG carrying one)")
     render.add_argument("-o", "--output", required=True, metavar="OUT.svg", help="SVG file to write")
     render.add_argument("--nodedefs", metavar="FILE|URL", help="/object_info export or ComfyUI server URL")
+    render.add_argument("--custom-packs", action="store_true", help="include curated high-frequency custom node packs")
     render.add_argument("--values", action="store_true", help="draw concise literal widget values inside nodes")
     render.add_argument("--skin", choices=SKINS, default=SKINS[0], help="debug: boxes, slots and splines as the frontend draws them; diagram: a figure with the notes in extra.cwc")
     render.add_argument("--theme", choices=[theme.value for theme in Theme], help="colours of the diagram skin (default light)")
@@ -199,7 +203,10 @@ def _node(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     if (args.type is None) == (args.search is None):
         err.write(f"{TOOL_NAME} node: give either TYPE or --search KW\n")
         return ExitCode.USAGE
-    defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
+    defs = NodeDefs.load(
+        object_info=read_source(args.nodedefs) if args.nodedefs else None,
+        include_custom=bool(args.custom_packs),
+    )
 
     if args.search is not None:
         found = defs.search(args.search)
@@ -275,7 +282,10 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
     compiled: Compiled | None = None
     try:
         doc = load_authoring(read_file(source, "authoring file"))
-        defs = NodeDefs.load(object_info=read_source(args.nodedefs) if args.nodedefs else None)
+        defs = NodeDefs.load(
+            object_info=read_source(args.nodedefs) if args.nodedefs else None,
+            include_custom=bool(args.custom_packs),
+        )
         compiled = compile_document(
             doc,
             defs,
@@ -284,6 +294,7 @@ def _compile(args: argparse.Namespace, out: TextIO, err: TextIO) -> ExitCode:
             portable=args.portable,
             hide_links=HideLinks(args.hide_links) if args.hide_links else None,
             guide_note=args.guide_note,
+            pack_subgraphs=bool(args.pack_subgraphs),
         )
         report = compiled.report
         exit_code = ExitCode.OK if report.ok else ExitCode.CHECK_FAILED

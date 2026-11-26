@@ -63,6 +63,7 @@ def canvas_to_prompt(
     *,
     widget_layout: WidgetLayout = static_layout,
     named_restore: bool = False,
+    expand_subgraphs: bool = False,
 ) -> Prompt:
     """The API prompt the frontend would queue for ``canvas``, ordered by numeric node id.
 
@@ -73,8 +74,17 @@ def canvas_to_prompt(
     With the setting on, a node that has ``widgets_values_named`` is restored by name, and
     a widget missing from the table keeps its default (``LGraphNode.configure``,
     ``widgetValueStore``).
+
+    When ``expand_subgraphs`` is True, active 1-level native v0.4 Subgraph instances are
+    flattened via :func:`cwc.subgraph.flatten_subgraphs` before prompt export; when False
+    (the default), subgraph instances raise ``ValueError``.
     """
-    _reject_subgraphs(canvas)
+    if expand_subgraphs:
+        from cwc.subgraph import flatten_subgraphs
+
+        canvas = flatten_subgraphs(canvas)
+    else:
+        _reject_subgraphs(canvas)
     nodes = canvas.nodes
     links = canvas.link_map()
     nodedefs = {node.key: defs.get(node.type) for node in nodes}

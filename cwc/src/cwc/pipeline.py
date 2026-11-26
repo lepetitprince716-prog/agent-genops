@@ -20,15 +20,20 @@ from cwc.canvas.geometry import snap_up
 from cwc.layout.presets import DEFAULT, load_presets
 from cwc.layout.section import BAND_GAP, SCREEN_W
 from cwc.layout.types import HideLinks, LayoutResult
+from cwc.nodedefs.derive import widget_layout
 from cwc.nodedefs.registry import NodeDefs
 from cwc.normalize import normalize
 from cwc.normalize.types import Authoring
 from cwc.notes import has_guide_content, measure_guide_bottom, place_guide
+from cwc.prompt.from_canvas import canvas_to_prompt
+from cwc.prompt.model import Prompt, is_link, prompt_diff
 from cwc.render.notes import collect_notes, write_notes
 from cwc.report import Code, CwcError, ExitCode, Finding, Mode, Report, Severity
 from cwc.route import RouteResult, route
 from cwc.route.presentation import mark_hidden
+from cwc.subgraph import pack_subgraphs as pack_canvas_subgraphs
 from cwc.verify import verify_compile
+from cwc.verify.equivalence import all_enabled
 from cwc.verify.geometry import check_geometry
 
 AUTO = "auto"  # choose the preset from the plan's counts (:func:`choose_auto`)
@@ -142,6 +147,23 @@ class Compiled:
     counts: PlanCounts  # what auto read; the command line's summary reports the optional modules
 
 
+def _remap_packed_prompt(prompt: Prompt, id_map: dict[str, str]) -> Prompt:
+    """Map flattened ``<inst>:<inner>`` keys back to original flat node keys for exact diff verification."""
+    if not id_map:
+        return prompt
+    out: Prompt = {}
+    for key, entry in prompt.items():
+        mapped_key = id_map.get(key, key)
+        new_inputs = {}
+        for iname, val in entry.get("inputs", {}).items():
+            if is_link(val):
+                new_inputs[iname] = [id_map.get(val[0], val[0]), val[1]]
+            else:
+                new_inputs[iname] = val
+        out[mapped_key] = {**entry, "inputs": new_inputs}
+    return out
+
+
 def compile_document(
     doc: dict[str, Any],
     defs: NodeDefs,
@@ -151,6 +173,7 @@ def compile_document(
     portable: bool = False,
     hide_links: HideLinks | None = None,
     guide_note: bool | None = None,
+    pack_subgraphs: bool = False,
 ) -> Compiled:
     """Compile a parsed authoring document.
 
@@ -215,6 +238,35 @@ def compile_document(
     report.extend(warnings)
     report.extend(overridden_keys(authoring, effects))
     report.extend(authoring.notices)
+    if pack_subgraphs and report.ok:
+        packed = pack_canvas_subgraphs(canvas, defs, skip_group_indices=laid.cockpit)
+        # Verify exact round-trip prompt equivalence for both factory and all-enabled states
+        for state_name, code, expected, target_canvas in (
+            ("factory-state", Code.Q2, authoring.factory, packed.canvas),
+            ("all-enabled", Code.Q1, authoring.full, all_enabled(packed.canvas)),
+        ):
+            try:
+                exported = canvas_to_prompt(target_canvas, defs, widget_layout=widget_layout, expand_subgraphs=True)
+                remapped = _remap_packed_prompt(exported, packed.id_map)
+                diff = prompt_diff(expected, remapped)
+                if diff:
+                    report.findings.append(
+                        Finding(
+                            code,
+                            Severity.ERROR,
+                            f"packed subgraph {state_name} canvas differs from strict prompt in {len(diff)} place(s)",
+                            data={"diff": diff},
+                        )
+                    )
+            except ValueError as exc:
+                report.findings.append(
+                    Finding(code, Severity.ERROR, f"packed subgraph {state_name} export failed: {exc}")
+                )
+        packed_routes = route(packed.canvas, replace(laid, waypoints={}, forced=(), tracks={}), defs)
+        routes = packed_routes
+        canvas = packed.canvas
+        report.metrics["route"] = _route_metrics(packed_routes)
+        report.metrics["subgraphs"] = packed.metrics()
     return Compiled(authoring, canvas, report, laid, routes, plan.counts)
 
 
