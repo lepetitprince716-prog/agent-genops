@@ -89,7 +89,7 @@ ComfyUI 自定义节点包保留在各自独立的公开仓库里，不作为子
 | 仓库 | 做什么 | Agent / 命令行入口 |
 |---|---|---|
 | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | 面向 Anima（28-block）的本地盲盒草图模式：多提示词 `micro_batch=4` 合批、单旋钮 `0–100` 混沌度、四类 LoRA 分组合批、独立 32 格全屏渐进预览墙、严格/创意双档高清还原 | `scripts/draft_cli.py`（`deal`、`draft`、`enhance`） |
-| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 通过复用引导与线性外推跳步减少 MOSS-Image 每张图的 DiT 前向次数（含 `fast` + `refine` 预设） | 串接在 MODEL 线上的节点 + API/UI 工作流 |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 通过复用引导与线性外推跳步减少 MOSS-Image DiT 前向次数（`fast`、50 步 Base `fast_50` 2.05×、`refine` 预设），并附带零提交瘦身 Qwen3.5-9B 文本编码器加载器（`Row-W8A16` 7.94 GB / `W4A8` 4.93 GB） | MODEL 加速节点 + Slim CLIP 加载节点 + API/UI 双段工作流 |
 
 ## 护栏
 

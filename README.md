@@ -172,7 +172,7 @@ Two companion ComfyUI custom node packs live in standalone repositories so they 
 | Repository | What it is | Install / entry |
 |---|---|---|
 | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | Local Midjourney-style Blind-Box Draft Mode for Anima (28-block): true multi-prompt `micro_batch=4` sampling, one `0–100` chaos knob, 4-role LoRA co-grouping, decoupled 32-tile fullscreen preview wall, Strict/Creative HD Enhance, and headless `draft_cli.py` for agents. Apache-2.0. | `git clone` into `ComfyUI/custom_nodes/` |
-| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Zero-dependency ComfyUI node cutting MOSS-Image DiT forwards by reusing guidance and skipping scheduled steps (`fast` + `refine` presets, two-pass workflow). Apache-2.0. | `git clone` into `ComfyUI/custom_nodes/` |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Zero-dependency ComfyUI consumer suite for MOSS-Image: DiT forward-count acceleration (`fast` + `refine` 25-step and phased `fast_50` 2.05× on 50-step Base, 2 MP two-pass in ~36 s on a 16 GB 4060 Ti) plus zero-commit Slim Qwen3.5-9B Text Encoder loaders (`Row-W8A16` 7.94 GB & `W4A8/FP8` 4.93 GB). Apache-2.0. | `git clone` into `ComfyUI/custom_nodes/` |
 
 ## Use the skill
 

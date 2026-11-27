@@ -152,7 +152,7 @@ python3 comfy_sweep.py smoke workflows/compiled/01-moss-fast12-hires-20s.api.jso
 | 仓库 | 是什么 | 安装方式 |
 |---|---|---|
 | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | 面向 Anima（28-block）的本地盲盒草图模式节点包：真多提示词 `micro_batch=4` 合批、单旋钮 `0–100` 混沌度、四类 LoRA 分组合批、与参数解耦的 32 格全屏渐进预览墙、严格/创意双档高清还原，以及供 agent 调用的无头命令行 `draft_cli.py`。Apache-2.0。 | 直接克隆到 `ComfyUI/custom_nodes/` |
-| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 零依赖的 MOSS-Image 推理加速节点，通过复用引导与按计划跳步减少 DiT 前向次数（含 `fast` + `refine` 预设与双通工作流）。Apache-2.0。 | 直接克隆到 `ComfyUI/custom_nodes/` |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | 零依赖的 MOSS-Image 消费级加速套件：包含 DiT 跳步与引导复用节点（25 步 `fast` + `refine`、50 步 Base 专用 `fast_50` 2.05× 提速，4060 Ti 16 GB 约 36 秒两遍出 2MP）与零提交瘦身 Qwen3.5-9B 文本编码器加载器（`Row-W8A16` 7.94 GB / `W4A8` 4.93 GB）。Apache-2.0。 | 直接克隆到 `ComfyUI/custom_nodes/` |
 
 ## 使用 skill
 

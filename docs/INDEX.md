@@ -87,7 +87,7 @@ ComfyUI custom node packs stay in standalone repositories rather than subfolders
 | Repository | What it does | Agent / CLI hook |
 |---|---|---|
 | [comfyui-blindbox-draft](https://github.com/lepetitprince716-prog/comfyui-blindbox-draft) | Local Midjourney-style Blind-Box Draft Mode for Anima (28-block): multi-prompt `micro_batch=4`, single `0–100` chaos knob, 4-role LoRA co-grouping, decoupled 32-tile fullscreen preview wall, Strict/Creative HD Enhance | `scripts/draft_cli.py` (`deal`, `draft`, `enhance`) |
-| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Cuts MOSS-Image DiT forwards per image via guidance reuse and linear sigma extrapolation (`fast` + `refine` presets) | Drop-in MODEL node + API/UI workflows |
+| [comfyui-moss-accel](https://github.com/lepetitprince716-prog/comfyui-moss-accel) | Cuts MOSS-Image DiT forwards via guidance reuse and linear sigma extrapolation (`fast`, phased 50-step `fast_50` 2.05×, and `refine` presets) plus zero-commit Slim Qwen3.5-9B text encoder loaders (`Row-W8A16` 7.94 GB / `W4A8` 4.93 GB) | Drop-in MODEL & CLIP loader nodes + API/UI two-pass workflows |
 
 ## Guard
 
