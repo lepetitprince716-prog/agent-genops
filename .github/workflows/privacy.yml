@@ -150,10 +150,23 @@ jobs:
             }
           fi
 
-  # Repository test code runs in its own job, isolated from the trusted scan jobs above.
-  guard-tests:
+  # Repository test code runs in its own sharded jobs, isolated from the trusted scan jobs above.
+  # Public GitHub Actions runners are free, so sharding across 6 x 4-vCPU runners runs all 300+
+  # guard tests in ~1 minute instead of ~11 minutes serially, with zero skipped tests.
+  guard-tests-shard:
+    name: guard-tests (${{ matrix.shard }}/6)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
     env:
       BETTERLEAKS_VERSION: "1.10.1"
       BETTERLEAKS_ARCHIVE: betterleaks_1.10.1_linux_x64.tar.gz
@@ -171,5 +184,21 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/$BETTERLEAKS_ARCHIVE" -C "$RUNNER_TEMP/bin" betterleaks
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Run root guard and release-check tests
-        run: python3 -B -m unittest discover -s tests
+      - name: Run root guard and release-check tests (shard ${{ matrix.shard }}/6)
+        run: python3 -B tools/run_guard_tests.py --shard "${{ matrix.shard }}/6" --workers 4
+
+  # Preserves the exact required status check name ("guard-tests") enforced by protect-main.
+  guard-tests:
+    needs:
+      - guard-tests-shard
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      SHARD_RESULT: ${{ needs.guard-tests-shard.result }}
+    steps:
+      - name: Require every guard-tests shard to succeed
+        run: |
+          set -eu
+          echo "guard-tests-shard result: $SHARD_RESULT"
+          test "$SHARD_RESULT" = success
